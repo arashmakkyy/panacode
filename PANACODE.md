@@ -10,14 +10,33 @@ Panacode is a product fork of [OpenCode](https://github.com/anomalyco/opencode) 
 | Connect catalog | **PanaAI only** | `Product.connectAllowlist` |
 | Provider id | `panaai` | same |
 | Base URL | `https://panaai-psi.vercel.app/v1` (temporary) | same + `@opencode/ai/providers/panaai` |
-| Credential | paste `pana-…` key or `PANAAI_API_KEY` | `/connect` key method + env |
+| Auth URL | `https://panaai-psi.vercel.app` (site origin) | `Product.provider.authURL` |
+| Credential | Sign in with PanaAI (browser), paste `pana-…` key, or `PANAAI_API_KEY` | `/connect` oauth + key + env |
 | Models | dynamic from `GET /v1/models` | `packages/core/src/plugin/provider/panaai.ts` |
 | Streaming | forced `stream: false` | `packages/ai/src/protocols/panaai-chat.ts` |
 
+## Sign in with PanaAI (browser + loopback)
+
+Primary connect path (key paste remains as fallback):
+
+1. Desktop opens the system browser to  
+   `{authURL}/connect/panacode?state=…&redirect_uri=http://127.0.0.1:<port>/callback`
+2. After the user finishes on the site, the browser hits the ephemeral loopback listener.
+3. Desktop exchanges the one-time code (no cookie):  
+   `POST {authURL}/api/v1/connect/panacode/exchange` with `{ code, state }`  
+   → `{ secret, baseURL?, keyId?, prefix?, name?, … }`
+4. `secret` is stored as an OAuth credential `access` token and used as the Bearer API key (`pana-…`).
+
+Paste-redirect fallback (`OauthRedirect.submit`) works when the browser cannot reach loopback (SSH, remote desktop, containers).
+
+### Credits / top-up resume
+
+If the connect page sends the user to buy credits or top up, finishing that flow should return them to the same authorize URL (same `state` + `redirect_uri`) so the loopback callback and exchange still complete. Do not start a second desktop authorize attempt mid top-up; reuse the pending attempt until success, cancel, or expiry.
+
 ## Files that belong to the overlay
 
-- `packages/core/src/panacode/product.ts` — centralized name, baseURL, allowlist
-- `packages/core/src/plugin/provider/panaai.ts` — integration, discovery, provider registration
+- `packages/core/src/panacode/product.ts` — centralized name, baseURL, authURL, allowlist
+- `packages/core/src/plugin/provider/panaai.ts` — integration, browser OAuth, discovery, provider registration
 - `packages/core/src/plugin/panacode-overlay.ts` — late filter so allowlist wins over models.dev/config
 - `packages/ai/src/providers/panaai.ts` + `packages/ai/src/protocols/panaai-chat.ts` — OpenAI-compatible client with non-stream chat
 - `PANACODE.md`, light README / ACP name branding
@@ -57,12 +76,12 @@ When PanaAI supports streaming settlement:
 - Reuse standard OpenAI-compatible SSE framing (`OpenAIChat.framing`).
 - Update `Product.provider.stream` in `packages/core/src/panacode/product.ts` and tests in `packages/ai/test/provider/panaai-chat.test.ts`.
 
-### 2. Switch PanaAI baseURL from Vercel preview host to production custom domain
+### 2. Switch PanaAI baseURL / authURL from Vercel preview host to production custom domain
 
 **Title:** Switch PanaAI baseURL from Vercel preview host to production custom domain
 
-**Body:** The first Panacode overlay presets PanaAI at `https://panaai-psi.vercel.app/v1` (temporary Vercel host) in:
-- `packages/core/src/panacode/product.ts` (`Product.provider.baseURL`)
+**Body:** The first Panacode overlay presets PanaAI at `https://panaai-psi.vercel.app/v1` (temporary Vercel host) and auth at `https://panaai-psi.vercel.app` in:
+- `packages/core/src/panacode/product.ts` (`Product.provider.baseURL`, `Product.provider.authURL`)
 - `packages/ai/src/providers/panaai.ts` (`baseURL`)
 
 When the production custom domain is ready, update both defaults (and any docs in `PANACODE.md` / README) in one change. Keep the override path via provider `settings.baseURL` for local testing.

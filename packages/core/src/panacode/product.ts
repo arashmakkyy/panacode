@@ -14,6 +14,11 @@ export const Product = {
     name: "PanaAI",
     /** Temporary Vercel host; track switching to a custom domain in GitHub issues. */
     baseURL: "https://panaai-psi.vercel.app/v1",
+    /**
+     * Site origin for browser connect (`/connect/panacode`) and the one-time code exchange.
+     * Keep next to `baseURL` so a domain swap is one-file.
+     */
+    authURL: "https://panaai-psi.vercel.app",
     env: ["PANAAI_API_KEY"] as const,
     package: "@opencode/ai/providers/panaai",
     /** PanaAI settlement does not support streaming yet; force non-stream chat completions. */
