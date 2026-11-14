@@ -24,7 +24,7 @@ describe("acp session lifecycle over the wire", () => {
         sessionCapabilities: { additionalDirectories: {}, close: {}, delete: {}, fork: {}, list: {}, resume: {} },
         _meta: { "opencode/child-session-updates": true },
       },
-      agentInfo: { name: "OpenCode" },
+      agentInfo: { name: "Panacode" },
       _meta: { steering: { supported: true } },
     })
     expect(plain.authMethods).toEqual([

@@ -7,7 +7,9 @@
     </picture>
   </a>
 </p>
-<p align="center">The open source AI coding agent.</p>
+<p align="center"><strong>Panacode</strong> — an OpenCode fork focused on PanaAI.</p>
+<p align="center">The open source AI coding agent (upstream OpenCode).</p>
+<p align="center">See <a href="PANACODE.md">PANACODE.md</a> for fork deltas and how to sync upstream.</p>
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/@opencode/cli"><img alt="npm" src="https://img.shields.io/npm/v/@opencode/cli?style=flat-square" /></a>
