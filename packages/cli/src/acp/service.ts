@@ -141,7 +141,8 @@ export function make(input: {
         },
         authMethods: [authMethod],
         _meta: { steering: { supported: true } },
-        agentInfo: { name: "OpenCode", version: OPENCODE_VERSION },
+        // Keep in sync with packages/core/src/panacode/product.ts (`Product.name`).
+        agentInfo: { name: "Panacode", version: OPENCODE_VERSION },
       }
     }),
     authenticate: Effect.fnUntraced(function* (params) {
