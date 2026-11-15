@@ -231,8 +231,8 @@ permissions:
 
       const build = yield* agents.get(Agent.defaultID)
       if (!build) throw new Error("expected configured build agent")
-      const opencodeData = path.join(global.home, ".local", "share", "opencode", "*")
-      const mcpAuth = path.join(global.home, ".local", "share", "opencode", "mcp-auth.json")
+      const opencodeData = path.join(global.home, ".local", "share", "panacode", "*")
+      const mcpAuth = path.join(global.home, ".local", "share", "panacode", "mcp-auth.json")
       expect(build.permissions).toEqual([
         ...defaultPermissions,
         { action: "question", resource: "*", effect: "allow" },
@@ -442,9 +442,9 @@ permissions:
           yield* Effect.promise(async () => {
             await fs.mkdir(path.join(tmp.path, "agents", "team"), { recursive: true })
             await fs.mkdir(path.join(tmp.path, "modes"), { recursive: true })
-            await fs.mkdir(path.join(tmp.path, "agents", ".opencode", "node_modules", "probe"), { recursive: true })
+            await fs.mkdir(path.join(tmp.path, "agents", ".panacode", "node_modules", "probe"), { recursive: true })
             await fs.writeFile(
-              path.join(tmp.path, "agents", ".opencode", "node_modules", "probe", "README.md"),
+              path.join(tmp.path, "agents", ".panacode", "node_modules", "probe", "README.md"),
               "# Dependency README",
             )
             await fs.writeFile(
@@ -691,7 +691,7 @@ Mixed fields.`,
           )
 
           yield* configTest.emitChange({ type: "create", path: path.join(tmp.path, "commands", "review.md") })
-          yield* configTest.emitChange({ type: "update", path: path.join(tmp.path, "opencode.json") })
+          yield* configTest.emitChange({ type: "update", path: path.join(tmp.path, "panacode.json") })
           yield* drain
           expect(reloads).toBe(0)
 

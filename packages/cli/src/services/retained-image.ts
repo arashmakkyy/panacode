@@ -1,6 +1,7 @@
 export * as RetainedImage from "./retained-image"
 
 import { Effect, FileSystem } from "effect"
+import { ProductIdentity } from "@opencode/util/product-identity"
 import { randomBytes } from "node:crypto"
 import path from "node:path"
 
@@ -61,7 +62,7 @@ export function installed(home: string) {
   return (
     executable.split(path.sep).includes("node_modules") ||
     /[\\/]winget[\\/]packages[\\/]/i.test(executable) ||
-    executable === path.resolve(home, ".opencode", "bin", "opencode.exe")
+    executable === path.resolve(home, ProductIdentity.installDir, "bin", `${ProductIdentity.cli}.exe`)
   )
 }
 

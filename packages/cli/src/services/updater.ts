@@ -1,4 +1,5 @@
 import { Global } from "@opencode/util/global"
+import { ProductIdentity } from "@opencode/util/product-identity"
 import { AppProcess } from "@opencode/util/process"
 import { EffectFlock } from "@opencode/util/effect-flock"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_LOCAL, OPENCODE_VERSION } from "../version"
@@ -196,7 +197,7 @@ const make = Effect.gen(function* () {
   const npm = prefixNpm ?? "npm"
 
   const readPolicy = Effect.fnUntraced(function* () {
-    const values = yield* Effect.forEach(["config.json", "opencode.json", "opencode.jsonc"], (name) =>
+    const values = yield* Effect.forEach(["config.json", "panacode.json", "panacode.jsonc"], (name) =>
       fs.readFileString(path.join(global.config, name)).pipe(
         Effect.map(decodePolicy),
         Effect.orElseSucceed(() => undefined),
@@ -229,9 +230,9 @@ const make = Effect.gen(function* () {
 
   const curlPath = path.resolve(
     global.home,
-    ".opencode",
+    ProductIdentity.installDir,
     "bin",
-    process.platform === "win32" ? "opencode.exe" : "opencode",
+    process.platform === "win32" ? `${ProductIdentity.cli}.exe` : ProductIdentity.cli,
   )
   const curlBinary = yield* fs.realPath(curlPath).pipe(Effect.orElseSucceed(() => curlPath))
 

@@ -2,6 +2,7 @@ export * as App from "./app.js"
 
 import { Context, Layer } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { ProductIdentity } from "@opencode/util/product-identity"
 
 export interface Info {
   readonly name: string
@@ -13,14 +14,14 @@ export class Service extends Context.Service<Service, Info>()("@opencode/App") {
 
 export function make(input: Partial<Info> = {}): Info {
   return {
-    name: input.name ?? "opencode",
+    name: input.name ?? ProductIdentity.cli,
     version: input.version ?? "unknown",
     channel: input.channel ?? "unknown",
   }
 }
 
 export function useragent(app: Info) {
-  return `opencode/${app.channel}/${app.version}/${app.name}`
+  return `${ProductIdentity.slug}/${app.channel}/${app.version}/${app.name}`
 }
 
 export const layer = (input?: Partial<Info>) => Layer.succeed(Service, make(input))

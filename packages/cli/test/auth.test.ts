@@ -359,7 +359,7 @@ function authServer(fetch: (request: Request, url: URL) => Response | Promise<Re
 }
 
 function status() {
-  return Response.json({ version: OPENCODE_VERSION, pid: process.pid, urls: [], paths: { tmp: "/tmp/opencode" } })
+  return Response.json({ version: OPENCODE_VERSION, pid: process.pid, urls: [], paths: { tmp: "/tmp/panacode" } })
 }
 
 function located<T>(data: T) {

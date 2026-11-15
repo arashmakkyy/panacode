@@ -1,6 +1,12 @@
+import { ProductIdentity } from "@opencode/util/product-identity"
+
 /**
  * Panacode product overlay. Keep branding and connect/provider policy here so
  * renames and re-enabling upstream providers stay one-file changes.
+ *
+ * Path / env / CLI isolation lives in `@opencode/util/product-identity` so
+ * Global can use it without a Core dependency. Prefer `PANACODE_*` env vars;
+ * importing `@opencode/util/product-env` copies them onto `OPENCODE_*`.
  *
  * See `/PANACODE.md` for sync and rollback notes.
  */
@@ -9,6 +15,8 @@ export const Product = {
   name: "Panacode",
   /** Upstream project this fork tracks. */
   upstream: "OpenCode",
+  /** XDG slug, CLI binary, install dir, and env prefix (isolated from OpenCode). */
+  identity: ProductIdentity,
   provider: {
     id: "panaai",
     name: "PanaAI",

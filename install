@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-APP=opencode
-SOURCE_APP=opencode
+APP=panacode
+SOURCE_APP=panacode
 
 MUTED='\033[0;2m'
 RED='\033[0;31m'
@@ -10,20 +10,23 @@ NC='\033[0m' # No Color
 
 usage() {
     cat <<EOF
-OpenCode Installer
+Panacode Installer
 
-Usage: install.sh [options]
+Installs the \`panacode\` CLI into \$HOME/.panacode/bin (never ~/.opencode).
+OpenCode and Panacode can coexist on the same machine.
+
+Usage: install [options]
 
 Options:
     -h, --help              Display this help message
-    -v, --version <version> Install a specific version (e.g., 0.0.0-beta-17236)
+    -v, --version <version> Install a specific published version (when available)
     -b, --binary <path>     Install from a local binary instead of downloading
         --no-modify-path    Don't modify shell config files (.zshrc, .bashrc, etc.)
 
 Examples:
-    curl -fsSL https://opencode.ai/v2/install | bash
-    curl -fsSL https://opencode.ai/v2/install | bash -s -- --version 0.0.0-beta-17236
-    ./install --binary /path/to/opencode
+    ./install --binary ./packages/cli/dist/cli-linux-x64/bin/panacode
+    bun run script/install-local.ts
+    ./install --version 2.3.0
 EOF
 }
 
@@ -66,7 +69,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-INSTALL_DIR=$HOME/.opencode/bin
+INSTALL_DIR=$HOME/.panacode/bin
 mkdir -p "$INSTALL_DIR"
 
 # If --binary is provided, skip all download/detection logic
@@ -174,17 +177,19 @@ else
         exit 1
     fi
 
-    package_scope="@opencode"
+    # Prefer a published @panacode/cli-* package when one exists. Until then, use
+    # `./install --binary <path>` or `bun run script/install-local.ts`.
+    package_scope="@panacode"
     if [ -z "$requested_version" ]; then
-        metadata=$(curl -fsSL https://opencode.ai/update/api/latest/cli/npm || true)
+        metadata=$(curl -fsSL https://registry.npmjs.org/@panacode%2fcli/latest 2>/dev/null || true)
         specific_version=$(echo "$metadata" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
-        package=$(echo "$metadata" | sed -n 's/.*"package":"\([^"]*\)".*/\1/p')
-
-        if [ -z "$specific_version" ] || [ -z "$package" ]; then
-            echo -e "${RED}Failed to fetch version information${NC}"
+        if [ -z "$specific_version" ]; then
+            echo -e "${RED}No published panacode CLI found on npm.${NC}"
+            echo -e "${MUTED}Build locally and install with:${NC}"
+            echo -e "  bun run script/install-local.ts"
+            echo -e "  ./install --binary ./packages/cli/dist/cli-\$os-\$arch/bin/panacode"
             exit 1
         fi
-        package_scope="${package%/cli}"
     else
         # Strip leading 'v' if present
         requested_version="${requested_version#v}"
@@ -193,14 +198,9 @@ else
 
     package_name="$package_scope/cli-$target"
     http_status=$(curl -s -o /dev/null -w "%{http_code}" "https://registry.npmjs.org/$package_scope%2fcli-$target/$specific_version" || true)
-    # Older clients install the minimum release before they can migrate package names.
-    if [ "$http_status" = "404" ] && [ -n "$requested_version" ]; then
-        package_name="@opencode-ai/cli-$target"
-        http_status=$(curl -s -o /dev/null -w "%{http_code}" "https://registry.npmjs.org/@opencode-ai%2fcli-$target/$specific_version" || true)
-    fi
     if [ "$http_status" = "404" ]; then
         echo -e "${RED}Error: Version ${specific_version} is not available for $target${NC}"
-        echo -e "${MUTED}Available versions: https://www.npmjs.com/package/$package_name?activeTab=versions${NC}"
+        echo -e "${MUTED}Build locally: bun run script/install-local.ts${NC}"
         exit 1
     fi
     if [ "$http_status" != "200" ]; then
@@ -306,7 +306,7 @@ download_with_progress() {
 
 download_and_install() {
     print_message info "\n${MUTED}Installing ${NC}$APP ${MUTED}version: ${NC}$specific_version"
-    local tmp_dir="${TMPDIR:-/tmp}/opencode_install_$$"
+    local tmp_dir="${TMPDIR:-/tmp}/panacode_install_$$"
     mkdir -p "$tmp_dir"
 
     if [[ "$os" == "windows" ]] || ! [ -t 2 ] || ! download_with_progress "$url" "$tmp_dir/$filename"; then
@@ -342,36 +342,12 @@ install_from_binary() {
     chmod 755 "$INSTALL_DIR/$installed_binary"
 }
 
-install_legacy_shim() {
-    local shim_os="${os:-}"
-    if [[ -z "$shim_os" ]]; then
-        case "$(uname -s)" in
-            MINGW*|MSYS*|CYGWIN*) shim_os="windows" ;;
-        esac
-    fi
-    rm -f "$INSTALL_DIR/opencode2" "$INSTALL_DIR/opencode2.exe" "$INSTALL_DIR/opencode2.cmd"
-    if [[ "$shim_os" == "windows" ]]; then
-        cat > "$INSTALL_DIR/opencode2.cmd" <<'EOF'
-@echo off
-"%~dp0opencode.exe" %*
-exit /b %errorlevel%
-EOF
-        return
-    fi
-    cat > "$INSTALL_DIR/opencode2" <<'EOF'
-#!/bin/sh
-exec "$(dirname "$0")/opencode" "$@"
-EOF
-    chmod 755 "$INSTALL_DIR/opencode2"
-}
-
 if [ -n "$binary_path" ]; then
     install_from_binary
 else
     check_version
     download_and_install
 fi
-install_legacy_shim
 
 
 path_added=false
@@ -382,10 +358,10 @@ add_to_path() {
     if grep -Fxq "$command" "$config_file"; then
         print_message info "Command already exists in $config_file, skipping write."
     elif [[ -w $config_file ]]; then
-        echo -e "\n# opencode" >> "$config_file"
+        echo -e "\n# panacode" >> "$config_file"
         echo "$command" >> "$config_file"
         path_added=true
-        print_message info "${MUTED}Successfully added ${NC}opencode ${MUTED}to \$PATH in ${NC}$config_file"
+        print_message info "${MUTED}Successfully added ${NC}panacode ${MUTED}to \$PATH in ${NC}$config_file"
     else
         print_message warning "Manually add the directory to $config_file (or similar):"
         print_message info "  $command"
@@ -426,7 +402,7 @@ if [[ "$no_modify_path" != "true" ]]; then
         fi
     done
 
-    # A new Mac has no ~/.zshrc, so create the shell's main config file rather than leaving opencode off PATH.
+    # A new Mac has no ~/.zshrc, so create the shell's main config file rather than leaving panacode off PATH.
     if [[ -z $config_file ]]; then
         case $current_shell in
             zsh) new_config_file="${ZDOTDIR:-$HOME}/.zshrc" ;;
@@ -473,20 +449,15 @@ if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" == "true" ]; then
 fi
 
 echo -e ""
-echo -e "${MUTED}                    ${NC}             ▄     "
-echo -e "${MUTED}█▀▀█ █▀▀█ █▀▀█ █▀▀▄ ${NC}█▀▀▀ █▀▀█ █▀▀█ █▀▀█"
-echo -e "${MUTED}█░░█ █░░█ █▀▀▀ █░░█ ${NC}█░░░ █░░█ █░░█ █▀▀▀"
-echo -e "${MUTED}▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ${NC}▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀"
-echo -e ""
-echo -e ""
-echo -e "${MUTED}OpenCode includes free models, to start:${NC}"
+echo -e "${MUTED}Panacode installed to ${NC}$INSTALL_DIR"
+echo -e "${MUTED}User data lives under XDG */panacode and ${NC}~/.panacode"
+echo -e "${MUTED}(OpenCode keeps using ~/.opencode — they do not share state.)${NC}"
 echo -e ""
 if [[ $path_added == "true" ]]; then
     echo -e "exec \$SHELL   ${MUTED}# Reload PATH (or open a new terminal)${NC}"
 fi
 echo -e "cd <project>  ${MUTED}# Open directory${NC}"
-echo -e "opencode      ${MUTED}# Run command${NC}"
+echo -e "panacode      ${MUTED}# Run command${NC}"
 echo -e ""
-echo -e "${MUTED}For more information visit ${NC}https://opencode.ai/docs"
-echo -e ""
+echo -e "${MUTED}See ${NC}PANACODE.md ${MUTED}for paths and env vars.${NC}"
 echo -e ""

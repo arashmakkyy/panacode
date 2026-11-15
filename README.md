@@ -45,24 +45,23 @@
 
 ---
 
-### Installation
+### Installation (Panacode)
+
+Panacode installs beside OpenCode without sharing `~/.opencode` or `OPENCODE_*` state. See [PANACODE.md](PANACODE.md).
 
 ```bash
-# YOLO
-curl -fsSL https://opencode.ai/v2/install | bash
+# From this repo (recommended)
+bun install
+bun run script/install-local.ts   # → ~/.panacode/bin/panacode
 
-# Package managers
-npm i -g @opencode/cli@latest      # or bun/pnpm/yarn
-brew install anomalyco/tap/opencode-v2 # macOS and Linux (recommended, always up to date)
-brew install opencode              # macOS and Linux (official brew formula, updated less)
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-beta              # Arch Linux (Latest from AUR)
-mise use -g opencode               # Any OS
-nix run github:anomalyco/opencode  # Nix
+# Or install a built binary
+./install --binary ./packages/cli/dist/cli-$(uname -s | tr A-Z a-z)-$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')/bin/panacode
+
+# Dev without installing
+bun run --cwd packages/cli src/index.ts
 ```
 
-> [!TIP]
-> Remove versions older than 0.1.x before installing.
+Upstream OpenCode installers (`curl … opencode.ai`, `@opencode/cli`, brew `opencode`, …) remain for OpenCode itself and must not be used if you want an isolated Panacode install.
 
 ### Desktop App (BETA)
 
