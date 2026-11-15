@@ -127,7 +127,7 @@ export function make(input: {
       }
       if (params.clientCapabilities?._meta?.["terminal-auth"] === true) {
         authMethod._meta = {
-          "terminal-auth": { command: "opencode", args: ["auth", "login"], label: "OpenCode Login" },
+          "terminal-auth": { command: "panacode", args: ["auth", "login"], label: "Panacode Login" },
         }
       }
       return {

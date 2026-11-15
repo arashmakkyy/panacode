@@ -28,7 +28,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Fl
  * `all` turns every flag on unless the same list opts one out, as in `all,-media_blob`.
  */
 export const Overrides = Context.Reference<string | undefined>("@opencode/Flag/Overrides", {
-  defaultValue: () => process.env.OPENCODE_FLAGS,
+  defaultValue: () => process.env.PANACODE_FLAGS ?? process.env.OPENCODE_FLAGS,
 })
 
 // Any other channel, such as a release or a branch preview build, keeps flags off so none turns on by accident.

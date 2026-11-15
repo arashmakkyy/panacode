@@ -17,20 +17,19 @@ await mkdir(archiveDir, { recursive: true })
 
 await packDistribution({
   root,
-  name: pkg.name,
-  command: "opencode",
-  legacyCommand: "opencode2",
-  binary: "opencode",
-  packagePrefix: "@opencode/cli-",
+  name: "panacode",
+  command: "panacode",
+  binary: "panacode",
+  packagePrefix: "@panacode/cli-",
   archive: (target) => target.startsWith("linux-"),
 })
 if (existsSync(path.join(root, "node"))) {
   await packDistribution({
     root: path.join(root, "node"),
-    name: "@opencode/cli-node",
-    command: "opencode2-node",
-    binary: "opencode2-node",
-    packagePrefix: "@opencode/cli-node-",
+    name: "@panacode/cli-node",
+    command: "panacode-node",
+    binary: "panacode-node",
+    packagePrefix: "@panacode/cli-node-",
     archive: () => true,
   })
 }
@@ -81,7 +80,7 @@ async function packDistribution(input: {
         scripts: { postinstall: "node ./postinstall.mjs" },
         version,
         license: pkg.license,
-        repository: { type: "git", url: "git+https://github.com/anomalyco/opencode.git" },
+        repository: { type: "git", url: "git+https://github.com/arashmakkyy/panacode.git" },
         os: ["darwin", "linux", "win32"],
         cpu: ["arm64", "x64"],
         optionalDependencies: binaries,
@@ -91,20 +90,20 @@ async function packDistribution(input: {
     ),
   )
 
-  await Promise.all(Object.keys(binaries).map((name) => pack(`${input.root}/${name.replace("@opencode/", "")}`)))
+  await Promise.all(Object.keys(binaries).map((name) => pack(`${input.root}/${stripScope(name)}`)))
   await pack(`${input.root}/${input.name}`)
   await Promise.all(
     Object.keys(binaries)
       .map((name) => name.slice(input.packagePrefix.length))
       .filter(input.archive)
       .map((target) =>
-        archive(
-          path.join(input.root, `${input.packagePrefix.replace("@opencode/", "")}${target}`, "bin"),
-          target,
-          input.binary,
-        ),
+        archive(path.join(input.root, `${stripScope(input.packagePrefix)}${target}`, "bin"), target, input.binary),
       ),
   )
+}
+
+function stripScope(name: string) {
+  return name.replace(/^@[^/]+\//, "")
 }
 
 async function pack(directory: string) {

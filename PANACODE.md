@@ -2,11 +2,14 @@
 
 Panacode is a product fork of [OpenCode](https://github.com/anomalyco/opencode) (`dev`). The goal is a thin, reversible overlay: branding + a PanaAI-only connect catalog, without rewriting agent/tool mechanics.
 
+**Installing Panacode never overwrites OpenCode.** Paths, env vars, and the CLI binary are isolated (see below).
+
 ## Product defaults
 
 | Setting | Value | Where |
 | --- | --- | --- |
 | Product name | `Panacode` | `packages/core/src/panacode/product.ts` |
+| CLI / binary | `panacode` | `@opencode/util/product-identity` + CLI build |
 | Connect catalog | **PanaAI only** | `Product.connectAllowlist` |
 | Provider id | `panaai` | same |
 | Base URL | `https://panaai-psi.vercel.app/v1` (temporary) | same + `@opencode/ai/providers/panaai` |
@@ -14,6 +17,53 @@ Panacode is a product fork of [OpenCode](https://github.com/anomalyco/opencode) 
 | Credential | Sign in with PanaAI (browser), paste `pana-…` key, or `PANAAI_API_KEY` | `/connect` oauth + key + env |
 | Models | dynamic from `GET /v1/models` | `packages/core/src/plugin/provider/panaai.ts` |
 | Streaming | forced `stream: false` | `packages/ai/src/protocols/panaai-chat.ts` |
+
+## Path and env isolation (from OpenCode)
+
+Central identity: `packages/util/src/product-identity.ts` (also mirrored on `Product.identity`).
+
+| Kind | OpenCode | Panacode |
+| --- | --- | --- |
+| Curl install dir | `~/.opencode/bin` | `~/.panacode/bin` |
+| XDG data / config / cache / state / tmp | `…/opencode` | `…/panacode` |
+| Project config dir | `.opencode/` | `.panacode/` |
+| Config files | `opencode.json(c)` | `panacode.json(c)` |
+| System config | `/etc/opencode`, etc. | `/etc/panacode`, etc. |
+| CLI command | `opencode` | `panacode` |
+| Env prefix | `OPENCODE_*` | Prefer `PANACODE_*` (falls back to `OPENCODE_*`) |
+
+`@opencode/util/product-env` copies every set `PANACODE_*` onto the matching `OPENCODE_*` at startup so existing readers keep working while Panacode wins when both are set.
+
+Examples: `PANACODE_CONFIG_DIR`, `PANACODE_CONFIG`, `PANACODE_FLAGS`, `PANACODE_DB`, `PANACODE_PASSWORD`, `PANACODE_TEST_HOME`.
+
+## Install (Linux / macOS)
+
+**Recommended (local build, no npm publish):**
+
+```bash
+bun install
+bun run script/install-local.ts
+# installs to ~/.panacode/bin and hints PATH
+panacode --version
+```
+
+**From an already-built binary:**
+
+```bash
+./install --binary ./packages/cli/dist/cli-linux-x64/bin/panacode
+# or: ./install --binary /path/to/panacode
+```
+
+**npm pack (local tarball, not published unless you have credentials):**
+
+```bash
+cd packages/cli
+bun run build -- --single --skip-web-ui
+bun run pack
+# artifacts under dist/npm/ (package name `panacode`) and dist/archives/
+```
+
+Remote curl-from-npm install works only after `@panacode/cli-*` packages are published; until then use `install-local` or `--binary`.
 
 ## Sign in with PanaAI (browser + loopback)
 
@@ -35,17 +85,20 @@ If the connect page sends the user to buy credits or top up, finishing that flow
 
 ## Files that belong to the overlay
 
-- `packages/core/src/panacode/product.ts` — centralized name, baseURL, authURL, allowlist
+- `packages/util/src/product-identity.ts` — slug, CLI name, install dir, config file names
+- `packages/util/src/product-env.ts` — `PANACODE_*` → `OPENCODE_*` preference
+- `packages/core/src/panacode/product.ts` — centralized name, baseURL, authURL, allowlist, identity
 - `packages/core/src/plugin/provider/panaai.ts` — integration, browser OAuth, discovery, provider registration
 - `packages/core/src/plugin/panacode-overlay.ts` — late filter so allowlist wins over models.dev/config
 - `packages/ai/src/providers/panaai.ts` + `packages/ai/src/protocols/panaai-chat.ts` — OpenAI-compatible client with non-stream chat
+- `install`, `script/install-local.ts` — Panacode-only install paths
 - `PANACODE.md`, light README / ACP name branding
 
 Upstream provider packages and the models.dev snapshot stay intact.
 
 ## Rename later
 
-Change `Product.name` (and related display strings that import it). Avoid mass-rewriting the codebase for branding.
+Change `Product.name` / `ProductIdentity.slug` (and related display strings). Avoid mass-rewriting the codebase for branding.
 
 ## Re-enable other providers
 

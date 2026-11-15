@@ -2,6 +2,9 @@ import path from "path"
 import fs from "fs"
 import os from "os"
 import { Context, Effect, Layer } from "effect"
+// Prefer PANACODE_* before any OPENCODE_* reads in this module.
+import { productEnv } from "./product-env.js"
+import { ProductIdentity } from "./product-identity.js"
 // XDG on runtimes with a home directory; one tmp-rooted directory on workerd.
 // The variants resolve through the `workerd` bundle condition, like the
 // native-module stubs, so no runtime sniffing happens here.
@@ -9,12 +12,12 @@ import { roots } from "#global-roots"
 import { Flock } from "./flock.js"
 import { makeGlobalNode } from "./effect/app-node.js"
 
-const app = "opencode"
+const app = ProductIdentity.slug
 const { data, cache, config, state, tmp } = roots(app)
 
 const paths = {
   get home() {
-    return process.env.OPENCODE_TEST_HOME ?? os.homedir()
+    return productEnv("TEST_HOME") ?? os.homedir()
   },
   data,
   bin: path.join(cache, "bin"),
@@ -76,7 +79,7 @@ const acquire = (input: Partial<Interface>) =>
 
 const layer = Layer.effect(
   Service,
-  Effect.suspend(() => acquire({ config: process.env.OPENCODE_CONFIG_DIR ?? Path.config })),
+  Effect.suspend(() => acquire({ config: productEnv("CONFIG_DIR") ?? Path.config })),
 )
 
 export const node = makeGlobalNode({ service: Service, layer: layer, deps: [] })
