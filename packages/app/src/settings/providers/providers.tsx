@@ -30,6 +30,7 @@ import {
   type SettingsProvidersEvent,
 } from "./machine"
 import "@/settings/settings.css"
+import { PanaAISpotlight, PANAAI_PROVIDER_ID } from "./panacode-spotlight"
 
 type ProviderSource = "env" | "api" | "account" | "config" | "custom"
 
@@ -224,6 +225,10 @@ export const SettingsProviders: Component<{
 
     return connected().filter((item) => !grouped.has(item.id))
   })
+
+  // panacode: PanaAI is featured in its own card, so the lists below leave it out and hide when empty.
+  const panaai = createMemo(() => connected().find((item) => item.id === PANAAI_PROVIDER_ID))
+  const others = createMemo(() => displayed().filter((item) => item.id !== PANAAI_PROVIDER_ID))
 
   const popular = createMemo(() => {
     const connectedIDs = new Set(connected().map((p) => p.id))
@@ -454,14 +459,22 @@ export const SettingsProviders: Component<{
       </div>
 
       <div class="settings-tab-body settings-tab-body--sectioned settings-providers">
+        <PanaAISpotlight
+          connected={panaai() ? (source(panaai()!) ?? "config") : undefined}
+          models={panaai() ? Object.values(panaai()!.models).map((model) => model.name) : []}
+          onConnect={() => connect(PANAAI_PROVIDER_ID)}
+          onDisconnect={panaai() && canDisconnect(panaai()!) ? () => disconnect(panaai()!, panaai()!.name) : undefined}
+        />
+
+        <Show when={others().length > 0}>
         <div class="settings-section" data-component="connected-providers-section">
           <h3 class="settings-section-title">{language.t("settings.providers.section.connected")}</h3>
           <SettingsList variant="catalog">
             <Show
-              when={displayed().length > 0}
+              when={others().length > 0}
               fallback={<div class="settings-provider-empty">{language.t("settings.providers.connected.empty")}</div>}
             >
-              <For each={displayed()}>
+              <For each={others()}>
                 {(item) => {
                   const managedGroup = () => (consoleGroup()?.root.id === item.id ? consoleGroup() : undefined)
 
@@ -596,11 +609,13 @@ export const SettingsProviders: Component<{
             </Show>
           </SettingsList>
         </div>
+        </Show>
 
+        <Show when={popular().some((item) => item.id !== PANAAI_PROVIDER_ID)}>
         <div class="settings-section">
           <h3 class="settings-section-title">{language.t("settings.providers.section.popular")}</h3>
           <SettingsList variant="catalog">
-            <For each={popular()}>
+            <For each={popular().filter((item) => item.id !== PANAAI_PROVIDER_ID)}>
               {(item) => (
                 <div class="settings-provider-row">
                   <div class="settings-provider-lead">
@@ -630,6 +645,7 @@ export const SettingsProviders: Component<{
             {language.t("dialog.provider.viewAll")}
           </button>
         </div>
+        </Show>
       </div>
     </>
   )
