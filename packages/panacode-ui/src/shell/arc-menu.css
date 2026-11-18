@@ -1,0 +1,152 @@
+/* Arc dropdown and context menus over the real Kobalte menus (menu-v2 and context-menu).
+ * Panel radius, 5px inset, 36px rows, one highlight that glides between rows (motion/glide.ts, attached by
+ * WindowFrame), a grow-from-trigger entrance, and danger rows in the danger tone. */
+
+[data-brand="panacode"] [data-component="menu-v2-content"],
+[data-brand="panacode"] [data-component="menu-v2-content"][data-appearance="standard"],
+[data-brand="panacode"] [data-component="context-menu-content"],
+[data-brand="panacode"] [data-component="context-menu-sub-content"] {
+  position: relative;
+  min-width: 12rem;
+  padding: 5px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius-control) + 2px);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-floating);
+  color: var(--foreground);
+  font-family: var(--font-sans, inherit);
+  transform-origin: var(--kb-menu-content-transform-origin, top);
+  animation: pc-menu-in var(--duration-fast) var(--ease-enter) both;
+}
+
+[data-brand="panacode"] [data-component="menu-v2-item"],
+[data-brand="panacode"] [data-component="menu-v2-content"][data-appearance="standard"] [data-component="menu-v2-item"],
+[data-brand="panacode"] [data-component="context-menu-content"] [data-slot^="context-menu-"]:is([data-slot$="-item"], [data-slot$="-sub-trigger"]),
+[data-brand="panacode"] [data-component="context-menu-sub-content"] [data-slot^="context-menu-"]:is([data-slot$="-item"], [data-slot$="-sub-trigger"]) {
+  position: relative;
+  z-index: 1;
+  height: auto;
+  min-height: 36px;
+  gap: 10px;
+  padding: 0 11px;
+  border-radius: calc(var(--radius-control) - 4px);
+  background: transparent !important;
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 400;
+  line-height: 1.3;
+  letter-spacing: 0;
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+
+[data-brand="panacode"] [data-component="menu-v2-item"] [data-slot="menu-v2-item-content"] {
+  gap: 10px;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: 0;
+  color: inherit;
+}
+
+[data-brand="panacode"] [data-component="menu-v2-item"] svg,
+[data-brand="panacode"] [data-component="context-menu-content"] svg {
+  color: var(--text-secondary);
+}
+
+[data-brand="panacode"] [data-component="menu-v2-item"][data-variant="critical"],
+[data-brand="panacode"] [data-component="menu-v2-item"][data-variant="critical"] [data-slot="menu-v2-item-content"],
+[data-brand="panacode"] [data-component="menu-v2-item"][data-variant="critical"] svg {
+  color: var(--danger);
+}
+
+[data-brand="panacode"] [data-component="menu-v2-item"][data-disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+[data-brand="panacode"] [data-slot="menu-v2-item-shortcut"],
+[data-brand="panacode"] [data-slot="context-menu-item-shortcut"] {
+  margin-inline-start: auto;
+  height: auto;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+[data-brand="panacode"] [data-slot="menu-v2-item-badge"] {
+  height: 20px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+[data-brand="panacode"] [data-slot="menu-v2-group-label"],
+[data-brand="panacode"] [data-slot="context-menu-group-label"] {
+  padding: 8px 11px 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+[data-brand="panacode"] [data-slot="menu-v2-separator"],
+[data-brand="panacode"] [data-slot="context-menu-separator"] {
+  width: auto;
+  height: 1px;
+  margin: 5px -5px;
+  border: 0;
+  background: var(--border);
+}
+
+/* Without the glide (it attaches a frame later) the keyboard row still shows. */
+[data-brand="panacode"] :is([data-component="menu-v2-content"], [data-component^="context-menu-"]):not(:has(> .pc-menu-glide)) [data-highlighted] {
+  background: var(--surface-muted) !important;
+}
+
+[data-brand="panacode"] .pc-menu-glide {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  left: 0;
+  border-radius: calc(var(--radius-control) - 4px);
+  background: var(--surface-muted);
+  pointer-events: none;
+  transition:
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    width 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    height 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 120ms linear;
+}
+
+[data-brand="panacode"][data-color-scheme="dark"] .pc-menu-glide,
+[data-color-scheme="dark"] [data-brand="panacode"] .pc-menu-glide {
+  background: color-mix(in oklab, var(--foreground) 8%, transparent);
+}
+
+[data-brand="panacode"] :has(> .pc-menu-glide):has([data-variant="critical"][data-highlighted]) > .pc-menu-glide {
+  background: color-mix(in oklab, var(--danger) 10%, transparent);
+}
+
+@keyframes pc-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-brand="panacode"] :is([data-component="menu-v2-content"], [data-component^="context-menu-"]) {
+    animation: none;
+  }
+  [data-brand="panacode"] .pc-menu-glide {
+    transition: opacity 120ms linear;
+  }
+}

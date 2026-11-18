@@ -19,4 +19,4 @@ export const switchMotion = {
 } as const
 export { arcSpring, installMotionTokens, springEasing, springTo, type SpringPreset } from "./arc"
 export { Collapse } from "./presence"
-export { glideHighlight } from "./glide"
+export { glideHighlight, menuGlide } from "./glide"

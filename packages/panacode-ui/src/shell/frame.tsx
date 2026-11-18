@@ -1,4 +1,5 @@
-import { splitProps, type ComponentProps, type JSX } from "solid-js"
+import { onCleanup, onMount, splitProps, type ComponentProps, type JSX } from "solid-js"
+import { menuGlide } from "../motion/glide"
 import { Button } from "../primitives/button"
 import { Skeleton } from "../primitives/feedback"
 import "./shell.css"
@@ -14,6 +15,8 @@ function shellClass(local: { class?: string; classList?: Record<string, boolean 
 /** Window surface. Replaces the upstream root background classes at the one layout mount. */
 export function WindowFrame(props: ComponentProps<"div">) {
   const [local, rest] = splitProps(props, ["class", "classList", "children"])
+  // One gliding highlight for every dropdown and context menu the window opens.
+  onMount(() => onCleanup(menuGlide()))
 
   return (
     <div

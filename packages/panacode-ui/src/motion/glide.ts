@@ -72,3 +72,36 @@ function attach(layer: HTMLElement, options: { active: string; class?: string })
     box.remove()
   }
 }
+
+const MENU_SURFACES = '[data-component="menu-v2-content"], [data-component="context-menu-content"], [data-component="context-menu-sub-content"]'
+
+/**
+ * Gives every dropdown and context menu the gliding highlight. Menus portal into `root` (the body) when they open,
+ * so this watches for their surfaces and attaches to each one, and lets go when the menu closes.
+ */
+export function menuGlide(root: HTMLElement = document.body) {
+  const live = new Map<HTMLElement, () => void>()
+  const scan = (node: Node) => {
+    if (!(node instanceof HTMLElement)) return
+    const found = node.matches(MENU_SURFACES) ? [node] : [...node.querySelectorAll<HTMLElement>(MENU_SURFACES)]
+    for (const menu of found) {
+      if (live.has(menu)) continue
+      live.set(menu, attach(menu, { active: "data-highlighted", class: "pc-menu-glide" }))
+    }
+  }
+  const observer = new MutationObserver((records) => {
+    for (const record of records) record.addedNodes.forEach(scan)
+    for (const [menu, stop] of live) {
+      if (menu.isConnected) continue
+      stop()
+      live.delete(menu)
+    }
+  })
+  observer.observe(root, { childList: true, subtree: true })
+  scan(root)
+  return () => {
+    observer.disconnect()
+    for (const stop of live.values()) stop()
+    live.clear()
+  }
+}
