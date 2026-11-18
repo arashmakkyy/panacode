@@ -1,0 +1,349 @@
+/* Page chrome modelled on the Arc docs preview. */
+.main {
+  min-height: 100dvh;
+  padding: 40px clamp(16px, 4vw, 40px) 72px;
+}
+
+.doc {
+  max-width: 1000px;
+  min-width: 0;
+  margin: 0 auto;
+}
+
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  min-height: 24px;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.breadcrumb [aria-current] {
+  color: var(--foreground);
+}
+.crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.crumb a {
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.16s var(--ease-standard);
+}
+.crumb a:hover {
+  color: var(--foreground);
+}
+
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 28px;
+  margin-top: 14px;
+}
+.headerCopy {
+  min-width: 0;
+}
+.titleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.header h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(30px, 3vw, 40px);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+.header p {
+  max-width: 680px;
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.badge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background:
+    var(--arc-gradient-soft) padding-box,
+    var(--arc-gradient-line) border-box;
+  font-family: var(--font-body, system-ui), sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
+  user-select: none;
+}
+.badgeLabel {
+  background: var(--arc-gradient-ink);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: var(--foreground);
+  -webkit-text-fill-color: transparent;
+}
+
+.previewSection {
+  margin-top: 24px;
+}
+
+.viewBar {
+  position: sticky;
+  z-index: 6;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 12px;
+  padding: 6px 0;
+  background: color-mix(in oklab, var(--background) 94%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.viewTabs {
+  display: inline-flex;
+  gap: 18px;
+}
+.viewTabs button {
+  position: relative;
+  min-height: 34px;
+  border: 0;
+  padding: 0 1px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.16s var(--ease-standard);
+}
+.viewTabs button > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.viewTabs button:hover,
+.viewTabs button[aria-selected="true"] {
+  color: var(--foreground);
+}
+.viewIndicator {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--foreground);
+}
+
+.viewTools {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 14px;
+}
+.viewHint {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+@media (max-width: 900px) {
+  .viewHint {
+    display: none;
+  }
+}
+
+.tools {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+.switch {
+  display: inline-flex;
+  gap: 1px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-muted);
+}
+.option,
+.iconButton {
+  --focus-outline-offset: -2px;
+  position: relative;
+  display: grid;
+  width: 30px;
+  height: 26px;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color var(--duration-fast) var(--ease-standard),
+    background-color var(--duration-fast) var(--ease-standard);
+}
+.option > svg {
+  position: relative;
+  z-index: 1;
+}
+.option[aria-checked="true"] {
+  color: var(--foreground);
+}
+.highlight {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background: var(--surface);
+  box-shadow: var(--shadow-resting);
+}
+.iconButton {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
+.iconButton:active {
+  background: var(--surface-muted);
+  color: var(--foreground);
+}
+@media (hover: hover) and (pointer: fine) {
+  .option:hover {
+    color: var(--foreground);
+  }
+  .iconButton:hover {
+    background: var(--surface-muted);
+    color: var(--foreground);
+  }
+}
+
+.canvas {
+  display: grid;
+  min-height: 600px;
+  place-items: center;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  padding: clamp(16px, 4vw, 54px);
+  background: var(--surface-muted);
+}
+.canvas > * {
+  max-width: 100%;
+  min-width: 0;
+}
+@media (max-width: 760px) {
+  .canvas {
+    min-height: 520px;
+    padding: 16px;
+  }
+}
+
+.shell {
+  position: relative;
+  box-sizing: border-box;
+  display: grid;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  place-items: center;
+  border-radius: 34px;
+  transition:
+    width 0.42s var(--ease-standard),
+    padding 0.42s var(--ease-standard);
+}
+.shell[data-mode="mobile"] {
+  width: min(390px, 100%);
+  min-height: 640px;
+  padding: 24px 12px;
+  overflow: hidden;
+  isolation: isolate;
+}
+.bezel {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--border-strong);
+  border-radius: inherit;
+  background: var(--surface-raised, var(--surface));
+  box-shadow: var(--shadow-floating);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.24s var(--ease-standard);
+}
+.shell[data-mode="mobile"] .bezel {
+  opacity: 1;
+}
+.fitLayer {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  align-self: stretch;
+  place-items: center;
+}
+.fitLayer > * {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.notes {
+  display: grid;
+  gap: 6px;
+  margin: 18px 2px 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.notes li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.notes kbd {
+  font-family: var(--font-body);
+}
+
+@media (max-width: 760px) {
+  .main {
+    padding-top: 24px;
+  }
+  .header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .header p {
+    font-size: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell,
+  .bezel,
+  .option,
+  .iconButton {
+    transition: none;
+  }
+}

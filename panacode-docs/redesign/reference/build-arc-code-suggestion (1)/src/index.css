@@ -1,0 +1,235 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./assets/inter-latin-wght-normal.woff2") format("woff2");
+}
+
+/* ───────────────────────── Arc design tokens: light ───────────────────────── */
+
+:root {
+  color-scheme: light;
+
+  --neutral-0: oklch(100% 0 0);
+  --neutral-1: oklch(99% 0 0);
+  --neutral-2: oklch(97.8% 0 0);
+  --neutral-3: oklch(95.8% 0 0);
+  --neutral-4: oklch(91.5% 0 0);
+  --neutral-5: oklch(84% 0 0);
+  --neutral-6: oklch(72% 0 0);
+  --neutral-7: oklch(59% 0 0);
+  --neutral-8: oklch(46% 0 0);
+  --neutral-9: oklch(34% 0 0);
+  --neutral-10: oklch(23% 0 0);
+  --neutral-11: oklch(15% 0 0);
+
+  --background: var(--neutral-0);
+  --surface: var(--neutral-0);
+  --surface-raised: var(--neutral-0);
+  --surface-muted: var(--neutral-2);
+  --foreground: var(--neutral-11);
+  --text-secondary: var(--neutral-8);
+  --text-muted: var(--neutral-7);
+  --border: oklch(93.5% 0 0);
+  --border-subtle: oklch(96.5% 0 0);
+  --border-strong: oklch(82% 0 0);
+  --accent: oklch(33% 0 0);
+  --accent-strong: oklch(24% 0 0);
+  --accent-subtle: oklch(33% 0 0 / 0.1);
+  --accent-foreground: var(--background);
+
+  --tone-rose: oklch(53% 0.18 10);
+  --tone-amber: oklch(55% 0.12 68);
+  --tone-green: oklch(50% 0.12 162);
+  --success: var(--tone-green);
+  --warning: var(--tone-amber);
+  --danger: var(--tone-rose);
+
+  /* Data series, derived from a neutral accent */
+  --series-1: #1f7dcf;
+  --series-2: #7128a5;
+  --series-3: #e58f00;
+
+  --shadow-resting: 0 1px 2px oklch(0% 0 0 / 0.035);
+  --shadow-raised: 0 6px 18px oklch(0% 0 0 / 0.065), 0 1px 3px oklch(0% 0 0 / 0.035);
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+
+  --radius-control: 1.125rem;
+  --radius-panel: 1.625rem;
+  --radius-surface: 2.125rem;
+  --radius-pill: 9999px;
+
+  --control-height-sm: 2.25rem;
+  --control-height-md: 2.75rem;
+  --control-height-lg: 3.125rem;
+
+  --font-body: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+
+  --tracking-body: -0.01em;
+  --leading-body: 1.4;
+
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-exit: cubic-bezier(0.7, 0, 0.84, 0);
+
+  --duration-instant: 0.12s;
+  --duration-fast: 0.16s;
+  --duration-standard: 0.24s;
+}
+
+@supports (color: oklch(58% 0.15 250)) {
+  :root {
+    --series-1: oklch(58% 0.15 250);
+    --series-2: oklch(45% 0.19 307);
+    --series-3: oklch(72% 0.18 74);
+  }
+}
+
+/* ───────────────────────── Arc design tokens: dark ───────────────────────── */
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --background: oklch(19% 0 0);
+  --surface: oklch(21.5% 0 0);
+  --surface-raised: oklch(24% 0 0);
+  --surface-muted: oklch(26% 0 0);
+  --foreground: oklch(96% 0 0);
+  --text-secondary: oklch(77% 0 0);
+  --text-muted: oklch(64% 0 0);
+  --border: oklch(29% 0 0);
+  --border-subtle: oklch(25% 0 0);
+  --border-strong: oklch(40% 0 0);
+  --accent: oklch(80% 0 0);
+  --accent-strong: oklch(91% 0 0);
+  --accent-subtle: oklch(80% 0 0 / 0.13);
+
+  --tone-rose: oklch(71% 0.155 8);
+  --tone-amber: oklch(83% 0.12 78);
+  --tone-green: oklch(79% 0.14 162);
+
+  --series-1: #55adff;
+  --series-2: #9c37be;
+  --series-3: #e66e00;
+
+  --shadow-resting: 0 1px 2px oklch(0% 0 0 / 0.18);
+  --shadow-raised: 0 8px 22px oklch(0% 0 0 / 0.22);
+}
+
+@supports (color: oklch(58% 0.15 250)) {
+  :root[data-theme="dark"] {
+    --series-1: oklch(73% 0.15 250);
+    --series-2: oklch(54% 0.21 316);
+    --series-3: oklch(66.5% 0.21 65);
+  }
+}
+
+/* ───────────────────────── Base ───────────────────────── */
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  font-weight: 400;
+  letter-spacing: var(--tracking-body);
+  line-height: var(--leading-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color var(--duration-standard) var(--ease-standard);
+}
+
+/* Shared focus outline: keyboard focus only, pointer focus draws no ring. */
+:focus-visible:not([tabindex="-1"]) {
+  outline: var(--focus-outline-width, 2px) solid
+    var(--focus-outline, color-mix(in oklab, var(--accent-strong) 72%, transparent));
+  outline-offset: var(--focus-outline-offset, 2px);
+}
+
+/* ───────────────────────── Preview canvas (docs shell) ───────────────────────── */
+
+.preview-canvas {
+  display: grid;
+  min-width: 0;
+  min-height: 520px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  padding: clamp(18px, 3.5vw, 44px);
+  background: var(--surface-muted);
+  transition:
+    background-color var(--duration-standard) var(--ease-standard),
+    border-color var(--duration-standard) var(--ease-standard);
+}
+
+.preview-canvas > * {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.preview-stage {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  max-width: 760px;
+  margin-inline: auto;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  padding: 8px;
+  color: var(--foreground);
+}
+
+.preview-stage > * {
+  width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 760px) {
+  .preview-canvas {
+    min-height: 480px;
+    padding: 16px;
+  }
+}
+
+.theme-toggle {
+  display: inline-grid;
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color var(--duration-fast) var(--ease-standard),
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .theme-toggle:hover {
+    background: var(--surface-muted);
+    color: var(--foreground);
+  }
+}

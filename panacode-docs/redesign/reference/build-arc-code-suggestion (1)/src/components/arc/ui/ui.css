@@ -1,0 +1,272 @@
+/* ───────────────────────── Button ───────────────────────── */
+
+.arc-button {
+  position: relative;
+  display: inline-flex;
+  min-height: var(--control-height-md);
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  padding: 0 var(--space-4);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: var(--leading-body);
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color var(--duration-fast) var(--ease-standard),
+    background var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    opacity var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.arc-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.arc-button-label-slot {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.arc-button-label-content {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+.arc-button-label-phase {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+.arc-button-label-phase svg {
+  flex: none;
+}
+
+.arc-button-primary {
+  border-color: var(--foreground);
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.arc-button-secondary {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--foreground);
+}
+
+.arc-button-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.arc-button-secondary:disabled {
+  border-color: var(--border);
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+.arc-button-ghost:disabled {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .arc-button-primary:hover:not(:disabled) {
+    box-shadow: var(--shadow-resting);
+    opacity: 0.91;
+  }
+
+  .arc-button-secondary:hover:not(:disabled) {
+    background: var(--surface-muted);
+    box-shadow: var(--shadow-resting);
+  }
+
+  .arc-button-ghost:hover:not(:disabled) {
+    background: var(--surface-muted);
+    color: var(--foreground);
+  }
+}
+
+.arc-button-primary:active:not(:disabled) {
+  opacity: 0.84;
+}
+
+.arc-button-ghost:active:not(:disabled),
+.arc-button-secondary:active:not(:disabled) {
+  background: var(--surface-muted);
+  color: var(--foreground);
+}
+
+.arc-button-sm {
+  min-height: var(--control-height-sm);
+  padding-inline: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+/* ───────────────────────── Segmented control ───────────────────────── */
+
+.arc-segmented {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  flex-shrink: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-muted);
+}
+
+.arc-segmented-track {
+  --fade-start: 0px;
+  --fade-end: 0px;
+  isolation: isolate;
+  display: flex;
+  min-width: 0;
+  gap: 2px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 3px;
+  border-radius: inherit;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--fade-start),
+    #000 calc(100% - var(--fade-end)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--fade-start),
+    #000 calc(100% - var(--fade-end)),
+    transparent
+  );
+}
+
+.arc-segmented-track::-webkit-scrollbar {
+  display: none;
+}
+
+.arc-segmented-track[data-fade-start] {
+  --fade-start: 20px;
+}
+
+.arc-segmented-track[data-fade-end] {
+  --fade-end: 20px;
+}
+
+.arc-segmented-button {
+  position: relative;
+  flex: 0 0 auto;
+  min-height: var(--control-height-sm);
+  border: 0;
+  border-radius: calc(var(--radius-control) - 4px);
+  padding: 0 12px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .arc-segmented-button:hover {
+    color: var(--foreground);
+  }
+}
+
+.arc-segmented-button:active,
+.arc-segmented-button[aria-pressed="true"] {
+  color: var(--foreground);
+}
+
+.arc-segmented-selection {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border: 1px solid var(--border);
+  border-radius: inherit;
+  background: var(--surface);
+  box-shadow: var(--shadow-resting);
+}
+
+.arc-segmented-label {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (max-width: 380px) {
+  .arc-segmented-button {
+    padding: 0 10px;
+  }
+}
+
+/* ───────────────────────── Text shimmer ───────────────────────── */
+
+.arc-shimmer {
+  --ts-highlight: var(--text-shimmer-highlight, currentColor);
+  --ts-base: var(--text-shimmer-base, color-mix(in oklab, currentColor 12%, var(--text-muted)));
+}
+
+.arc-shimmer-stage {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.arc-shimmer-label {
+  display: inline-block;
+  max-width: 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.arc-shimmer-label::selection {
+  -webkit-text-fill-color: currentColor;
+}
+
+@supports not (color: color-mix(in oklab, red, blue)) {
+  .arc-shimmer-label {
+    background: none !important;
+    -webkit-text-fill-color: currentColor;
+  }
+}
+
+@media (forced-colors: active) {
+  .arc-shimmer-label {
+    background: none !important;
+    -webkit-text-fill-color: currentColor;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arc-button,
+  .arc-segmented-button {
+    transition: none;
+  }
+}

@@ -1,0 +1,52 @@
+/* Tooltip */
+.tt-tooltip{--tooltip-y:3px;z-index:90;max-width:15rem;padding:var(--space-3) var(--space-4);border:1px solid color-mix(in oklab,var(--background) 14%,var(--foreground));border-radius:var(--radius-control);background:var(--foreground);color:var(--background);box-shadow:var(--shadow-raised);font-size:var(--text-sm);font-weight:400;line-height:var(--leading-body);transform-origin:var(--radix-tooltip-content-transform-origin);transition:opacity var(--duration-fast) var(--ease-enter),transform var(--duration-fast) var(--ease-enter)}
+.tt-tooltip[data-side=bottom]{--tooltip-y:-3px}
+@starting-style{
+  .tt-tooltip[data-state$=-open]{opacity:0;transform:translateY(var(--tooltip-y)) scale(.97)}
+  .tt-tooltip[data-instant][data-state$=-open]{transform:none}
+}
+.tt-tooltip[data-instant][data-state$=-open],.tt-tooltip[data-state=closed]{transition:opacity var(--duration-instant) var(--ease-standard),transform var(--duration-instant) var(--ease-standard)}
+.tt-tooltip[data-state=closed]{opacity:0;transform:scale(.98);animation:tt-tooltip-exit var(--duration-instant) linear both}
+.tt-text{position:relative;display:block;overflow:clip;overflow-clip-margin:var(--space-2)}
+.tt-measure{position:absolute;top:0;left:0;visibility:hidden;pointer-events:none}
+.tt-line,.tt-measure{width:max-content;max-width:calc(15rem - 2 * var(--space-4) - 2px)}
+.tt-line{display:block}
+@keyframes tt-tooltip-exit{to{--tooltip-exit:1}}
+@media (prefers-reduced-motion:reduce){
+  .tt-tooltip,.tt-tooltip[data-instant][data-state$=-open],.tt-tooltip[data-state=closed]{transform:none;transition:opacity var(--duration-instant) var(--ease-standard)}
+}
+/* Text shimmer */
+.ts-shimmer{--ts-highlight:var(--text-shimmer-highlight,currentColor);--ts-base:var(--text-shimmer-base,color-mix(in oklab,currentColor 12%,var(--text-muted)))}
+.ts-stage{position:relative;display:inline-block;max-width:100%}
+.ts-label{display:inline-block;max-width:100%;background-repeat:no-repeat;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.ts-stage[data-sizing] .ts-label{max-width:none;white-space:nowrap}
+.ts-label::selection{-webkit-text-fill-color:currentColor}
+@supports not (color:color-mix(in oklab,red,blue)){
+  .ts-label{background:none!important;-webkit-text-fill-color:currentColor}
+}
+@media (forced-colors:active){
+  .ts-label{background:none!important;-webkit-text-fill-color:currentColor}
+}
+/* Copy button */
+.cb-button{display:inline-flex;width:max-content;max-width:100%;min-height:var(--control-height-sm);align-items:center;justify-content:center;gap:var(--space-2);border:1px solid var(--border);border-radius:var(--radius-control);padding:0 var(--space-3);background:var(--surface);color:var(--foreground);font:inherit;font-size:var(--text-sm);font-weight:500;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background-color var(--duration-fast) var(--ease-standard),border-color var(--duration-fast) var(--ease-standard),color var(--duration-fast) var(--ease-standard),transform var(--duration-spring) var(--ease-spring)}
+.cb-button:active:not(:disabled){transform:scale(.97);transition-duration:var(--duration-fast),var(--duration-fast),var(--duration-fast),var(--duration-instant);transition-timing-function:var(--ease-standard)}
+.cb-iconOnly:active:not(:disabled){transform:scale(.96)}
+@media (hover:hover) and (pointer:fine){
+  .cb-button:hover:not(:disabled){background:var(--surface-muted);border-color:var(--border-strong)}
+  .cb-plain:hover:not(:disabled){border-color:transparent;background:var(--surface-muted);color:var(--foreground)}
+}
+.cb-button:disabled{cursor:not-allowed;opacity:.5}
+.cb-icon{position:relative;display:grid;width:16px;height:16px;flex:none}
+.cb-iconInner{position:absolute;inset:0;display:grid;place-items:center}
+.cb-iconInner[data-state=copied]{color:var(--success)}
+.cb-iconInner[data-state=error]{color:var(--danger)}
+.cb-label{position:relative;display:grid;min-width:0;justify-items:center;white-space:nowrap}
+.cb-text{grid-area:1/1}
+.cb-measure{position:absolute;top:0;left:0;visibility:hidden;white-space:nowrap;pointer-events:none}
+.cb-iconOnly{width:var(--control-height-sm);padding:0}
+.cb-plain{border-color:transparent;background:transparent;color:var(--text-secondary)}
+.cb-srOnly{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){
+  .cb-button{transition:none}
+  .cb-button:active:not(:disabled){transform:none}
+}

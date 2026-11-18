@@ -1,0 +1,259 @@
+@import "tailwindcss";
+
+/* ───────────────────────── Fonts (same files Arc ships) ───────────────────────── */
+@font-face {
+  font-family: "Inter Variable";
+  src: url("./assets/fonts/inter-latin.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Variable";
+  src: url("./assets/fonts/geist-latin.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ───────────────────────── Arc design tokens · light ───────────────────────── */
+:root {
+  color-scheme: light;
+
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --default-font-family: var(--font-body);
+  --default-mono-font-family: var(--font-mono);
+
+  --neutral-0: oklch(100% 0 0);
+  --neutral-1: oklch(99% 0 0);
+  --neutral-2: oklch(97.8% 0 0);
+  --neutral-3: oklch(95.8% 0 0);
+  --neutral-4: oklch(91.5% 0 0);
+  --neutral-5: oklch(84% 0 0);
+  --neutral-6: oklch(72% 0 0);
+  --neutral-7: oklch(59% 0 0);
+  --neutral-8: oklch(46% 0 0);
+  --neutral-9: oklch(34% 0 0);
+  --neutral-10: oklch(23% 0 0);
+  --neutral-11: oklch(15% 0 0);
+
+  --background: var(--neutral-0);
+  --surface: var(--neutral-0);
+  --surface-raised: var(--neutral-0);
+  --surface-muted: var(--neutral-2);
+  --foreground: var(--neutral-11);
+  --text-secondary: var(--neutral-8);
+  --text-muted: var(--neutral-7);
+  --border: oklch(93.5% 0 0);
+  --border-subtle: oklch(96.5% 0 0);
+  --border-strong: oklch(82% 0 0);
+  --accent: oklch(33% 0 0);
+  --accent-strong: oklch(24% 0 0);
+  --accent-subtle: oklch(33% 0 0 / 0.1);
+  --accent-foreground: var(--background);
+
+  --control-on: oklch(23% 0 0);
+  --control-glyph: oklch(100% 0 0);
+  --control-track: oklch(89.5% 0 0);
+  --control-track-hover: oklch(86% 0 0);
+  --control-thumb: oklch(100% 0 0);
+  --control-thumb-on: oklch(100% 0 0);
+  --control-fill: var(--control-on);
+  --focus-ring: transparent;
+
+  --tone-teal: oklch(50% 0.095 182);
+  --tone-sky: oklch(51% 0.11 240);
+  --tone-orchid: oklch(52% 0.17 322);
+  --tone-violet: oklch(51% 0.16 290);
+  --tone-rose: oklch(53% 0.18 10);
+  --tone-amber: oklch(55% 0.12 68);
+  --tone-green: oklch(50% 0.12 162);
+  --success: var(--tone-green);
+  --warning: var(--tone-amber);
+  --danger: var(--tone-rose);
+  --info: var(--tone-sky);
+
+  --shadow-resting: 0 1px 2px oklch(0% 0 0 / 0.035);
+  --shadow-raised: 0 6px 18px oklch(0% 0 0 / 0.065), 0 1px 3px oklch(0% 0 0 / 0.035);
+  --shadow-floating: 0 20px 48px oklch(0% 0 0 / 0.105), 0 3px 10px oklch(0% 0 0 / 0.045);
+
+  --arc-gradient-from: oklch(90% 0.045 300);
+  --arc-gradient-to: oklch(92% 0.045 65);
+  --arc-gradient: linear-gradient(100deg, var(--arc-gradient-from), var(--arc-gradient-to));
+  --arc-gradient-foreground: oklch(22% 0.01 300);
+  --arc-gradient-soft: linear-gradient(135deg, oklch(97.5% 0.016 300), oklch(98% 0.016 65));
+  --arc-gradient-line: linear-gradient(100deg, oklch(83% 0.06 300), oklch(86% 0.06 65));
+  --arc-gradient-ink: linear-gradient(100deg, oklch(47% 0.1 300), oklch(50% 0.09 55));
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+  --space-24: 6rem;
+
+  --radius-control: 1.125rem;
+  --radius-panel: 1.625rem;
+  --radius-surface: 2.125rem;
+  --radius-pill: 9999px;
+
+  --control-height-sm: 2.25rem;
+  --control-height-md: 2.75rem;
+  --control-height-lg: 3.125rem;
+
+  --font-display: "Geist Variable", sans-serif;
+  --font-body: "Inter Variable", sans-serif;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.25rem;
+  --text-4xl: 3.25rem;
+  --text-5xl: 4.5rem;
+
+  --tracking-display: -0.03em;
+  --tracking-body: -0.01em;
+  --leading-display: 1.1;
+  --leading-body: 1.4;
+
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-exit: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: linear(0, 0.0213, 0.0739, 0.1443, 0.2235, 0.305, 0.3849, 0.4606, 0.5305, 0.594, 0.6508, 0.7011, 0.7452, 0.7836, 0.8168, 0.8454, 0.8699, 0.8907, 0.9084, 0.9234, 0.9361, 0.9467, 0.9557, 0.9632, 0.9694, 0.9747, 0.979, 0.9826, 0.9857, 0.9882, 0.9902, 0.992, 0.9934, 0.9946, 0.9955, 0.9963, 1);
+
+  --duration-instant: 0.12s;
+  --duration-fast: 0.16s;
+  --duration-standard: 0.24s;
+  --duration-considered: 0.48s;
+  --duration-spring: 0.58s;
+}
+
+/* ───────────────────────── Arc design tokens · dark ───────────────────────── */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: oklch(19% 0 0);
+  --surface: oklch(21.5% 0 0);
+  --surface-raised: oklch(24% 0 0);
+  --surface-muted: oklch(26% 0 0);
+  --foreground: oklch(96% 0 0);
+  --text-secondary: oklch(77% 0 0);
+  --text-muted: oklch(64% 0 0);
+  --border: oklch(29% 0 0);
+  --border-subtle: oklch(25% 0 0);
+  --border-strong: oklch(40% 0 0);
+  --focus-ring: transparent;
+  --accent: oklch(80% 0 0);
+  --accent-strong: oklch(91% 0 0);
+  --accent-subtle: oklch(80% 0 0 / 0.13);
+  --control-on: oklch(93% 0 0);
+  --control-glyph: oklch(19% 0 0);
+  --control-track: oklch(33% 0 0);
+  --control-track-hover: oklch(37% 0 0);
+  --control-thumb: oklch(97% 0 0);
+  --control-thumb-on: oklch(19% 0 0);
+  --control-fill: oklch(62% 0 0);
+  --tone-teal: oklch(79% 0.13 182);
+  --tone-sky: oklch(79% 0.095 236);
+  --tone-orchid: oklch(76% 0.15 322);
+  --tone-violet: oklch(74% 0.125 290);
+  --tone-rose: oklch(71% 0.155 8);
+  --tone-amber: oklch(83% 0.12 78);
+  --tone-green: oklch(79% 0.14 162);
+  --success: var(--tone-green);
+  --warning: var(--tone-amber);
+  --danger: var(--tone-rose);
+  --info: var(--tone-sky);
+  --shadow-resting: 0 1px 2px oklch(0% 0 0 / 0.18);
+  --shadow-raised: 0 8px 22px oklch(0% 0 0 / 0.22);
+  --shadow-floating: 0 22px 55px oklch(0% 0 0 / 0.34);
+  --arc-gradient-from: oklch(38% 0.05 300);
+  --arc-gradient-to: oklch(40% 0.045 60);
+  --arc-gradient-foreground: oklch(96% 0.005 300);
+  --arc-gradient-soft: linear-gradient(135deg, oklch(23.5% 0.016 300), oklch(24% 0.014 65));
+  --arc-gradient-line: linear-gradient(100deg, oklch(48% 0.06 300), oklch(52% 0.055 65));
+  --arc-gradient-ink: linear-gradient(100deg, oklch(82% 0.07 300), oklch(86% 0.065 70));
+}
+
+/* ───────────────────────── Base ───────────────────────── */
+html {
+  font-family: var(--font-body);
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: var(--tracking-body);
+  line-height: var(--leading-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--accent) 22%, transparent);
+}
+
+/* ───────────────────────── Arc's shared focus ring ─────────────────────────
+   Pointer focus draws no ring; keyboard focus shows the ring. */
+:focus:not(:focus-visible),
+:is(
+    input:not([type="button"], [type="checkbox"], [type="color"], [type="file"], [type="image"], [type="radio"], [type="range"], [type="reset"], [type="submit"]),
+    textarea,
+    [contenteditable]:not([contenteditable="false"]),
+    [role="menuitem"],
+    [role="menuitemcheckbox"],
+    [role="menuitemradio"],
+    [role="option"],
+    [tabindex="-1"]
+  ):focus {
+  outline: none !important;
+}
+
+:focus-visible:not(
+    input:not([type="button"], [type="checkbox"], [type="color"], [type="file"], [type="image"], [type="radio"], [type="range"], [type="reset"], [type="submit"]),
+    textarea,
+    [contenteditable]:not([contenteditable="false"]),
+    [role="menuitem"],
+    [role="menuitemcheckbox"],
+    [role="menuitemradio"],
+    [role="option"],
+    [tabindex="-1"]
+  ) {
+  outline: var(--focus-outline-width, 2px) solid var(--focus-outline, var(--accent-strong)) !important;
+  outline-offset: var(--focus-outline-offset, 2px) !important;
+}
+
+@supports (color: color-mix(in lab, red, red)) {
+  :focus-visible:not(
+    input:not([type="button"], [type="checkbox"], [type="color"], [type="file"], [type="image"], [type="radio"], [type="range"], [type="reset"], [type="submit"]),
+    textarea,
+    [contenteditable]:not([contenteditable="false"]),
+    [role="menuitem"],
+    [role="menuitemcheckbox"],
+    [role="menuitemradio"],
+    [role="option"],
+    [tabindex="-1"]
+  ) {
+    outline: var(--focus-outline-width, 2px) solid var(--focus-outline, color-mix(in oklab, var(--accent-strong) 72%, transparent)) !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:focus-within {
+    scroll-behavior: auto;
+  }
+}
