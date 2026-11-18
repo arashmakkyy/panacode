@@ -38,5 +38,5 @@ export function storageSnapshotNames(windowID: string) {
 }
 
 export function windowDataFile(id: string) {
-  return `opencode.window.${id.replace(/[^a-zA-Z0-9._-]/g, "-")}.dat`
+  return `panacode.window.${id.replace(/[^a-zA-Z0-9._-]/g, "-")}.dat`
 }

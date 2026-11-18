@@ -1,29 +1,91 @@
-[data-component="panacode-input"] {
-  box-sizing: border-box;
+/* Arc text field. Focus is a border color change, not an outline. */
+[data-component="panacode-field"] {
+  display: grid;
+  min-width: 0;
+  gap: 0;
+  color: var(--foreground);
+  font: inherit;
+}
+
+[data-slot="field-label"] {
+  margin-bottom: var(--space-2, 0.5rem);
+  color: var(--foreground);
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 500;
+  line-height: var(--leading-body, 1.4);
+}
+
+[data-component="panacode-input"],
+[data-component="panacode-field"] [data-slot="field-control"] {
   width: 100%;
   min-height: var(--control-height-md, 2.75rem);
-  padding: 0 var(--space-4, 1rem);
-  border: 1px solid var(--border, oklch(93.5% 0 0));
+  padding: 0 var(--space-3, 0.75rem);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-control, 1.125rem);
-  background: var(--surface, oklch(100% 0 0));
-  color: var(--foreground, oklch(15% 0 0));
+  background: var(--surface);
+  color: var(--foreground);
   font: inherit;
   font-size: var(--text-sm, 0.875rem);
+  line-height: var(--leading-body, 1.4);
   letter-spacing: var(--tracking-body, -0.01em);
   outline: none;
-  transition: border-color var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
+  transition:
+    border-color var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
+    background-color var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
 }
 
-[data-component="panacode-input"]::placeholder {
-  color: var(--text-muted, oklch(59% 0 0));
+[data-component="panacode-field"] textarea[data-slot="field-control"] {
+  min-height: 6.5rem;
+  padding: var(--space-3, 0.75rem);
+  resize: vertical;
 }
 
-[data-component="panacode-input"]:focus-visible {
-  border-color: var(--border-strong, oklch(82% 0 0));
-  box-shadow: 0 0 0 3px var(--accent-subtle, oklch(33% 0 0 / 0.1));
+[data-component="panacode-input"]::placeholder,
+[data-component="panacode-field"] [data-slot="field-control"]::placeholder {
+  color: var(--text-muted);
 }
 
-[data-component="panacode-input"]:disabled {
-  opacity: 0.55;
+@media (hover: hover) and (pointer: fine) {
+  [data-component="panacode-input"]:hover:not(:disabled, [aria-invalid="true"]),
+  [data-component="panacode-field"] [data-slot="field-control"]:hover:not(:disabled, [aria-invalid="true"]) {
+    border-color: var(--foreground);
+  }
+}
+
+[data-component="panacode-input"]:focus-visible,
+[data-component="panacode-field"] [data-slot="field-control"]:focus-visible {
+  border-color: var(--foreground);
+}
+
+[data-component="panacode-input"][aria-invalid="true"],
+[data-component="panacode-field"] [data-slot="field-control"][aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+[data-component="panacode-input"]:disabled,
+[data-component="panacode-field"] [data-slot="field-control"]:disabled {
   cursor: not-allowed;
+  opacity: 0.5;
+  background: var(--surface-muted);
+}
+
+[data-slot="field-description"],
+[data-slot="field-error"] {
+  padding-top: var(--space-2, 0.5rem);
+  font-size: var(--text-xs, 0.75rem);
+  line-height: var(--leading-body, 1.4);
+}
+
+[data-slot="field-description"] {
+  color: var(--text-muted);
+}
+[data-slot="field-error"] {
+  color: var(--danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="panacode-input"],
+  [data-component="panacode-field"] [data-slot="field-control"] {
+    transition: none;
+  }
 }

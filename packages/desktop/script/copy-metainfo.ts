@@ -26,7 +26,7 @@ const xml = `<?xml version="1.0" encoding="UTF-8"?>
 
   <description>
     <p>
-      Panacode is a PanaAI-branded OpenCode fork that helps you write and run code with PanaAI models.
+      Panacode is a PanaAI coding agent. Forked from OpenCode by Anomaly Innovations, Inc.
     </p>
   </description>
 
@@ -37,12 +37,6 @@ const xml = `<?xml version="1.0" encoding="UTF-8"?>
   <url type="bugtracker">https://github.com/arashmakkyy/panacode/issues</url>
   <url type="homepage">https://github.com/arashmakkyy/panacode</url>
   <url type="vcs-browser">https://github.com/arashmakkyy/panacode</url>
-
-  <screenshots>
-    <screenshot type="default">
-      <image>https://raw.githubusercontent.com/anomalyco/opencode/b75d4d1c5ec449585d515c756fc81f080a157a9a/packages/web/src/assets/lander/screenshot.png</image>
-    </screenshot>
-  </screenshots>
 </component>
 `
 

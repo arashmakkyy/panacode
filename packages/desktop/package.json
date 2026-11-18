@@ -4,10 +4,9 @@
   "version": "2.3.0",
   "type": "module",
   "license": "MIT",
-  "homepage": "https://opencode.ai",
+  "homepage": "https://panaai-psi.vercel.app",
   "author": {
-    "name": "OpenCode",
-    "email": "hello@opencode.ai"
+    "name": "PanaAI"
   },
   "scripts": {
     "typecheck": "bun check --no-script -b",

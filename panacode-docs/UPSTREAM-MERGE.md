@@ -13,12 +13,14 @@ Read this **before** editing UI surfaces or running an upstream merge.
 | Upstream repository | `https://github.com/anomalyco/opencode` |
 | Panacode fork | `https://github.com/arashmakkyy/panacode` |
 | Upstream integration branch | `dev` (verified via `upstream/dev`) |
-| Panacode working branch for this redesign | `cursor/panacode-ui-redesign-58f9` |
-| Recommended stable Panacode branch | `master` (fork default) / future `panacode/main` |
-| Baseline Panacode commit (pre-redesign tip) | `5c198b87a7adcc6f237d072be3d651c8e1433217` (original redesign base; **not present** on current `arashmakkyy/panacode` — patches rebased onto `origin/dev` `cbe71595e1`) |
-| Current Panacode redesign tip | `05fa01cca` on `cursor/panacode-ui-redesign-58f9` (update after each push) |
-| Baseline date (UTC) | 2026-11-17 |
-| Recorded upstream tip at redesign time | `a0fdbf9b91ed2cf8bfd778ccec340285403eddc2` on `upstream/dev` |
+| Panacode working branch for this redesign | `panacode/redesign-v2` |
+| Fork default branch | `dev` (this fork's `dev` matches upstream at the baseline below; it is not a Panacode release branch) |
+| Recommended stable Panacode branch | none yet. Do not treat `dev` as the branded product branch. |
+| Baseline (merge-base of `panacode/redesign-v2` with `origin/dev`) | `cbe71595e1f370ff91b3081872b96bbe56519c41` |
+| Stage 1 parent (docs + reference projects) | `94d16f928de1bcdd2f12be8961416aae41ecfe2e` |
+| Previous redesign tip contained in this branch | `4f3a17ba1a` (r8). Stage 1 does not claim that tip finished the redesign. |
+| Baseline date (UTC) | 2026-11-18 |
+| Recorded upstream tip | `cbe71595e1f370ff91b3081872b96bbe56519c41` on `origin/dev` (the fork `dev` equals that upstream commit; `upstream/dev` was not fetched in this environment) |
 | Toolchain | Bun `1.4.4` (root `packageManager`), SolidJS via workspace catalog, Electron desktop in `packages/desktop` |
 | Design package | `@panacode/ui` → `packages/panacode-ui` |
 
@@ -72,10 +74,10 @@ Reference Arc React demos (gitignored, not shipped):
 ### Theme + tokens
 
 1. **Desktop theme JSON (upstream theme pipeline):** `packages/ui/src/theme/themes/panacode.json`  
-   Registered in `packages/ui/src/theme/context.tsx` display names as `panacode: "Panacode"`.
-2. **Arc CSS tokens (Panacode-owned):** `packages/panacode-ui/src/theme/tokens.css` imported via `@panacode/ui/styles`.
-3. **App default theme:** `packages/app/src/app.tsx` sets `ThemeProvider defaultTheme={PANACODE_THEME_ID}`, document `data-brand="panacode"`, and `<Title>Panacode</Title>`.
-4. **Phase 2 chrome overlay:** `packages/panacode-ui/src/styles/shell.css` scopes restyles under `[data-brand="panacode"]` so upstream components keep their contracts while adopting Arc radii, switch pill, surfaces, dialogs, composer, tools, scrollbars.
+   Registered in `packages/ui/src/theme/context.tsx` display names as `panacode: "Panacode"`. This still drives the upstream `--v2-*` variables.
+2. **Arc CSS tokens (Panacode-owned):** `packages/panacode-ui/src/theme/tokens.css`. Light values live on `[data-brand="panacode"]`. Dark values live on `[data-brand="panacode"][data-color-scheme="dark"]`. The app sets `data-color-scheme` in `applyThemeCss`. `data-theme` is the theme id (`panacode`), not the scheme. Tokens do not paint the document root and do not set a global focus ring.
+3. **App default:** `packages/app/src/app.tsx` sets `defaultTheme={PANACODE_THEME_ID}`, `defaultColorScheme="dark"` (only when no scheme is stored), `data-brand="panacode"`, and `<Title>Panacode</Title>`. Light still works when the user selects it.
+4. **Stage 1 shell:** `packages/panacode-ui/src/shell/frame.tsx` plus `shell.css`. Mounted at the real window, titlebar, sidebar, and home nodes. Empty, loading, and error states for the session list use `EmptyState`, `Skeleton`, and `ErrorState`. This is not a CSS overlay on selectors that do not exist. Chat, composer, tools, and review are not restyled here.
 
 ### Adapter pattern
 
@@ -130,7 +132,16 @@ Internal package names `@opencode/*` remain for upstream compatibility.
 | `packages/ui/src/theme/context.tsx` | Shared integration boundary | Added `panacode` display name only | Medium | Re-apply one-line name map if upstream rewrites THEME_NAMES |
 | `packages/app/package.json` | Shared integration boundary | Adds `@panacode/ui` dependency | Medium | Preserve dependency when resolving package.json conflicts |
 | `packages/app/src/index.css` | Shared integration boundary | Imports `@panacode/ui/styles` | Medium | Keep `@import "@panacode/ui/styles"` |
-| `packages/app/src/app.tsx` | Shared integration boundary | Default theme, brand mark, title | High | Re-apply Panacode ThemeProvider/Title/brand hooks after upstream app shell changes |
+| `packages/app/src/app.tsx` | Shared integration boundary | Default theme, default dark scheme, brand mark, title | High | Re-apply Panacode ThemeProvider/Title/brand hooks after upstream app shell changes |
+| `packages/ui/src/theme/context.tsx` | Shared integration boundary | Optional `defaultColorScheme` when storage is empty | Medium | Keep the prop optional; upstream callers stay on system |
+| `packages/app/src/shell/shell.tsx` | Shared integration boundary | Root and sidebar render `WindowFrame` / `SidebarFrame` | High | Re-apply the two component mounts; do not restyle the motion machine |
+| `packages/app/src/shell/titlebar/titlebar.tsx` | Shared integration boundary | Header is `TitlebarFrame`; mobile help no longer opens upstream Discord | High | Re-apply the frame mount |
+| `packages/app/src/home/route.tsx` | Shared integration boundary | Home panel is `HomeFrame` | Medium | Re-apply the frame mount |
+| `packages/app/src/home/sessions/view.tsx` | Shared integration boundary | Empty, unavailable, and skeleton rows use Panacode states | High | Keep session controllers; re-apply the three presentation mounts |
+| `packages/app/src/shell/errors/error.tsx` | Shared integration boundary | Error page uses Panacode shell colors; upstream Discord link removed | Medium | Re-apply the shell attribute; do not restore the opencode.ai link |
+| `script/panacode-brand-scan.ts` | Panacode-owned | User-visible brand guard | Low | Keep ours; extend the allowlist only for internal ids, license lines, and real upstream service names |
+| `.github/workflows/panacode-ui.yml` | Panacode-owned | CI for ownership + brand scan | Low | Keep ours |
+| `.github/workflows/check.yml` | Shared integration boundary | Same two scripts run in the main check job | Medium | Re-add the step if upstream rewrites the workflow |
 | `packages/app/src/settings/providers/extensions.tsx` | Shared integration boundary | MCP tab uses `PanacodeMcpPanel` | High | Prefer Panacode panel; port any new upstream MCP row features into the adapter |
 | `packages/app/src/settings/workspaces/project-extensions.tsx` | Shared integration boundary | Project MCP tab uses `PanacodeMcpPanel` | High | Keep Panacode panel; preserve plugins/skills/lsps tabs from upstream |
 | `packages/app/src/settings/panacode-mcp-panel.tsx` | Panacode-owned | MCP presentation adapter | Low | Keep ours |
@@ -147,17 +158,22 @@ Classification reminder: modifying an upstream file does **not** make it Panacod
 
 ## D. Component replacement map
 
-| Feature | Upstream surface | Panacode feature | Adapter | App wiring | Contracts preserved |
+Stage 1 status, stated honestly. Stages 2–4 have not started. The six feature modules below are still unwired shells from the previous attempt. Do not describe them as integrated.
+
+| Feature | Upstream surface | Panacode feature | Adapter | App wiring | Status |
 |---|---|---|---|---|---|
-| AI Chat | `packages/app/src/session/timeline/*`, `packages/session-ui/src/message/*`, `timeline/*` | `features/ai-chat` | `adapters/ai-chat.ts` | CSS shell + feature shell ready; timeline still drives real messages | Streaming, markdown, restore |
-| AI Composer | `packages/app/src/session/composer/*`, `packages/app/src/composer/*` | `features/ai-composer` | `adapters/ai-composer.ts` | Shell CSS on composer chrome; controllers unchanged | Submit/stop, drafts, model slot |
-| Agent Run | `session/timeline`, `session-ui/tools` | `features/agent-run` | `adapters/agent-run.ts` | Status mapper + CSS | Real execution events |
-| Agent Orchestrator | subagent bars / session UI | `features/agent-orchestrator` | `adapters/agent-orchestrator.ts` | Lane mapper for delegated work | Existing task graph only |
-| Agent Approvals | `session/requests/session-permission-dock.tsx` | `features/agent-approvals` | `adapters/agent-approvals.ts` | `panacode-permission-adapter.tsx` in composer region | once / always / reject |
-| Tool Call | `session-ui/src/tools/*` | `features/tool-call` | `adapters/tool-call.ts` | Shell CSS on `tool-part-wrapper` | Args/output/errors/status |
-| Code Suggestion | `gui-plugins/review`, session review | `features/code-suggestion` | `adapters/code-suggestion.ts` | Shell CSS; Pierre engine untouched | Diff + review actions |
-| MCP Servers | `settings/providers/extensions.tsx` MCP tab | `features/mcp-servers` + Switch primitive | `adapters/mcp-servers.ts` | `panacode-mcp-panel.tsx` | Toggle, auth, DialogMcp, real registry |
-| Switch (global) | `@opencode/ui/switch` | primitive + shell CSS bridge | — | Brand-scoped CSS | Kobalte a11y / focus / disabled |
+| App shell | `shell/shell.tsx`, `shell/titlebar/titlebar.tsx` | `shell/frame.tsx` (`WindowFrame`, `TitlebarFrame`, `SidebarFrame`) | none; the frames are the integration | Mounted | Stage 1. Behavior (peek, resize, tabs, commands) stays upstream |
+| Home / sessions | `home/route.tsx`, `home/sessions/view.tsx` | `HomeFrame`, `EmptyState`, `ErrorState`, `Skeleton` | none | Mounted | Stage 1. Session data is still the upstream controller |
+| Error page | `shell/errors/error.tsx` | shell attribute + tokens | none | Mounted | Stage 1. Discord/opencode.ai report link removed |
+| AI Chat | timeline / message parts | `features/ai-chat` | `adapters/ai-chat.ts` | not mounted | Not stage 1. Dead shell |
+| AI Composer | composer | `features/ai-composer` | `adapters/ai-composer.ts` | not mounted | Not stage 1. Dead shell |
+| Agent Run | timeline tools | `features/agent-run` | `adapters/agent-run.ts` | not mounted | Not stage 1. Dead shell |
+| Agent Orchestrator | subagents | `features/agent-orchestrator` | `adapters/agent-orchestrator.ts` | not mounted | Not stage 1. Dead shell |
+| Agent Approvals | permission dock | `features/agent-approvals` | `adapters/agent-approvals.ts` | `panacode-permission-adapter.tsx` | Previous attempt. Still low fidelity. Not revisited in stage 1 |
+| Tool Call | `session-ui` tools | `features/tool-call` | `adapters/tool-call.ts` | not mounted | Not stage 1. Dead shell |
+| Code Suggestion | review | `features/code-suggestion` | `adapters/code-suggestion.ts` | not mounted | Not stage 1. Dead shell |
+| MCP Servers | settings extensions | `features/mcp-servers` | `adapters/mcp-servers.ts` | `panacode-mcp-panel.tsx` | Previous attempt. Still low fidelity. Not revisited in stage 1 |
+| Switch | `@opencode/ui/switch` | `primitives/switch.tsx` | — | primitive has the Arc spring; CSS bridge matches geometry for existing call sites | Stage 1 |
 
 External deps of `@panacode/ui`: `@kobalte/core`, `@opencode/ui` (workspace), `solid-js` peer. **No React.**
 
@@ -350,8 +366,9 @@ Prefer non-destructive recovery. Destructive resets are last resort and never th
 
 - **High-risk files:** `packages/app/src/app.tsx`, session composer region, settings extensions, theme context, desktop builder config. Upstream refactors here will conflict.
 - **Shell CSS selectors** (`[data-component=…]`) can drift if upstream renames data attributes — treat as soft coupling; fix selectors deliberately.
-- **Shallow or partial ports:** AI Chat / Composer / Tool Call feature shells exist for composition; much session chrome still renders via upstream components + Phase 2 CSS overlay. Full DOM replacement of virtualized timelines remains intentionally incomplete to avoid forking the session engine.
-- **Upstream tip drift:** At redesign time, Panacode tip `5c198b8…` and `upstream/dev` `a0fdbf9…` already differ; the next integration must triage that range.
+- **Stage 1 only.** The shell (window, titlebar, sidebar, home, session empty/loading/error) is mounted. Chat, composer, tool call, code suggestion, agent run, and orchestrator are not. Approvals and MCP remain the earlier low-fidelity mounts.
+- **Brand scan.** `bun script/panacode-brand-scan.ts` fails on user-visible `opencode` in prose, docs/Discord/GitHub links, and `www.opencode.ai`. It allows internal ids, license lines (`Forked from OpenCode`, the trademark sentence), and the upstream product names OpenCode Go / Console / Zen / Free because those are the services a person actually signs into.
+- **Upstream tip.** Baseline is `cbe71595e1` on `origin/dev`. Fetch `upstream` before the next integration; it was not available in the stage 1 environment.
 - **Release channel:** Panacode must not consume OpenCode production update feeds. Packaging identity is Panacode; confirm updater endpoints on each release.
 - **No conflict-free guarantee:** Large upstream architectural changes can still require multi-day conflict resolution. This architecture reduces surface area and makes conflicts understandable; it does not eliminate them.
 - **Unverified in this agent environment:** full desktop GUI smoke, Windows NSIS install, SSH/WSL, and broad `bun typecheck` across the monorepo may be incomplete depending on VM resources — re-run section H before shipping.

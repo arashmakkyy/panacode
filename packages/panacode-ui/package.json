@@ -19,7 +19,7 @@
     "./primitives/segmented-control": "./src/primitives/segmented-control.tsx",
     "./primitives/badge": "./src/primitives/badge.tsx",
     "./adapters": "./src/adapters/index.ts",
-    "./motion": "./src/motion/tokens.ts",
+    "./motion": "./src/motion/index.ts",
     "./features/ai-chat": "./src/features/ai-chat/index.tsx",
     "./features/ai-composer": "./src/features/ai-composer/index.tsx",
     "./features/agent-run": "./src/features/agent-run/index.tsx",

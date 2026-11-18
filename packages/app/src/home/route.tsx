@@ -10,6 +10,7 @@ import { createHomeScrollController } from "./scroll"
 import { createHomeSessionSearchController } from "./sessions/search"
 import { createHomeSessionsController } from "./sessions/controller"
 import { HomeSessions } from "./sessions/region"
+import { HomeFrame } from "@panacode/ui"
 
 export function Home() {
   const layout = useLayout()
@@ -35,7 +36,7 @@ export function HomeView(props: {
   const scroll = createHomeScrollController(props.sessions.data.groups)
 
   return (
-    <div
+    <HomeFrame
       data-slot="home-panel"
       class={`
         mx-[var(--shell-inline-inset,8px)] mb-[var(--shell-bottom-inset,8px)] mt-[var(--shell-top-inset,8px)] flex min-h-0 flex-1 flex-col self-stretch overflow-hidden rounded-[10px]
@@ -74,6 +75,6 @@ export function HomeView(props: {
           language={props.projects.copy.language}
         />
       </div>
-    </div>
+    </HomeFrame>
   )
 }

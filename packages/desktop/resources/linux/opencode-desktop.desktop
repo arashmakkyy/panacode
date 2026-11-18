@@ -1,10 +1,10 @@
 [Desktop Entry]
-Name=OpenCode
+Name=Panacode
 Exec=/opt/OpenCode/ai.opencode %U
 Terminal=false
 Type=Application
 Icon=ai.opencode
 StartupWMClass=ai.opencode.desktop
 NoDisplay=true
-Comment=Open source AI coding agent
+Comment=Panacode desktop launcher
 Categories=Development;

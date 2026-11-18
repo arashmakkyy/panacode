@@ -55,7 +55,7 @@ export function useSessionLinks() {
   function linkChunks(this: CodeRenderable, chunks: TextChunk[], context: ChunkRenderContext) {
     const style = context.syntaxStyle.mergeStyles("markup.link.url")
     // Like the web app, a code span links only when it is exactly a session ID, so a command such
-    // as `opencode --session ses_…` stays copyable. Marked by displayed offset, since detectLinks
+    // as `panacode --session ses_…` stays copyable. Marked by displayed offset, since detectLinks
     // can split chunks.
     const raw = context.highlights.filter(([, , group]) => group === "markup.raw" || group.startsWith("markup.raw."))
     let position = 0

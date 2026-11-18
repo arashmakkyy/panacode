@@ -191,13 +191,19 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
   init: (props: {
     defaultTheme?: string
+    /**
+     * Scheme used when nothing is stored yet. Panacode passes `"dark"`.
+     * A stored light, dark, or system choice still wins.
+     */
+    defaultColorScheme?: ColorScheme
     /** The window shows the theme: its colors, or until a registered theme arrives, those cached from the last run. */
     onThemeApplied?: (mode: "light" | "dark", scheme: ColorScheme) => void
   }) => {
     // An id no theme has yet stays selected until `settle`: a registered theme can arrive after startup.
+    const storedScheme = read(STORAGE_KEYS.COLOR_SCHEME)
     const initial = createThemeState({
       themeId: read(STORAGE_KEYS.THEME_ID) || props.defaultTheme || DEFAULT_THEME_ID,
-      scheme: parseColorScheme(read(STORAGE_KEYS.COLOR_SCHEME)),
+      scheme: storedScheme ? parseColorScheme(storedScheme) : (props.defaultColorScheme ?? "system"),
       systemMode: getSystemMode(),
       defaultTheme: oc2Theme,
       bundled: knownThemes(),

@@ -161,7 +161,7 @@ function cleanShellConfig(content: string) {
       (line, index) =>
         !entry(line) &&
         !(
-          (line.trim() === "# panacode" || line.trim() === "# opencode") &&
+          (line.trim() === "# panacode" || line.trim() === "# panacode") &&
           entry(lines[index + 1] ?? "")
         ),
     )

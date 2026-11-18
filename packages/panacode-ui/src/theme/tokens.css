@@ -1,15 +1,17 @@
-/* Panacode-owned Arc token set. Source: arc-ex MCP Servers reference (ported). Do not edit OpenCode theme JSON for these. */
+/* Panacode-owned Arc token set. Source: arc-ex MCP Servers reference (ported).
+ * Dark values follow the app theme machine: documentElement.dataset.colorScheme is "dark" or "light"
+ * (packages/ui/src/theme/context.tsx applyThemeCss). data-theme is the theme id ("panacode"), not the scheme.
+ * Tokens are scoped to [data-brand="panacode"] and do not paint the document root.
+ */
 
 /*
  * Arc theme tokens.
  *
- * Every Arc component reads these custom properties. Import this file once, before your own styles, and switch
- * themes by setting data-theme="dark" on the root element. If your app already carries Arc's tokens, skip it.
+ * Every Panacode component reads these custom properties. Light values sit on the brand root.
+ * Dark values replace them when the app sets data-color-scheme="dark".
  */
 
-:root {
-  color-scheme: light;
-
+[data-brand="panacode"] {
   /* Neutral scale */
   --neutral-0: oklch(100% 0 0);
   --neutral-1: oklch(99% 0 0);
@@ -125,9 +127,7 @@
   --duration-spring: 0.58s;
 }
 
-:root[data-theme="dark"] {
-  color-scheme: dark;
-
+[data-brand="panacode"][data-color-scheme="dark"] {
   --background: oklch(19% 0 0);
   --surface: oklch(21.5% 0 0);
   --surface-raised: oklch(24% 0 0);
@@ -174,7 +174,7 @@
 
 /* Where relative colors are available, the first series color is derived from the accent. */
 @supports (color: oklch(from red l c h)) {
-  :root {
+  [data-brand="panacode"] {
     --series-1: oklch(
       from var(--accent) calc(l * sign(max(c - 0.02, 0)) + 0.58 * (1 - sign(max(c - 0.02, 0))))
         calc(c * sign(max(c - 0.02, 0)) + 0.15 * (1 - sign(max(c - 0.02, 0))))
@@ -182,7 +182,7 @@
     );
   }
 
-  :root[data-theme="dark"] {
+  [data-brand="panacode"][data-color-scheme="dark"] {
     --series-1: oklch(
       from var(--accent) calc(l * sign(max(c - 0.02, 0)) + 0.73 * (1 - sign(max(c - 0.02, 0))))
         calc(c * sign(max(c - 0.02, 0)) + 0.15 * (1 - sign(max(c - 0.02, 0))))
@@ -192,25 +192,15 @@
 }
 
 /*
- * The shared focus ring. Only keyboard focus draws it. Text fields, menu items and elements that receive focus from
- * script (tabindex="-1") style their own focus. A component moves the ring with --focus-outline-offset.
+ * Focus ring for Panacode-owned controls only. Upstream focus styling is left alone.
+ * Text fields draw focus on their border (see primitives.css) and do not take this outline.
  */
-:focus-visible:not(
-    input:not([type="button"], [type="checkbox"], [type="color"], [type="file"], [type="image"], [type="radio"], [type="range"], [type="reset"], [type="submit"]),
-    textarea,
-    [contenteditable]:not([contenteditable="false"]),
-    [role="menuitem"],
-    [role="menuitemcheckbox"],
-    [role="menuitemradio"],
-    [role="option"],
-    [tabindex="-1"]
-  ) {
-  outline: var(--focus-outline-width, 2px) solid var(--focus-outline, color-mix(in oklab, var(--accent-strong) 72%, transparent)) !important;
-  outline-offset: var(--focus-outline-offset, 2px) !important;
+[data-brand="panacode"] :is([data-panacode-primitive], [data-panacode-shell] button, [data-panacode-shell] a, [data-panacode-shell] [role="tab"]):focus-visible {
+  outline: var(--focus-outline-width, 2px) solid
+    var(--focus-outline, color-mix(in oklab, var(--accent-strong) 72%, transparent));
+  outline-offset: var(--focus-outline-offset, 2px);
 }
 
-/* Pointer focus draws no ring, and text fields show focus on their own border instead of an outline. */
-:focus:not(:focus-visible),
-:is(input:not([type="button"], [type="checkbox"], [type="color"], [type="file"], [type="image"], [type="radio"], [type="range"], [type="reset"], [type="submit"]), textarea, [contenteditable]:not([contenteditable="false"])) {
-  outline: none !important;
+[data-brand="panacode"] :is([data-panacode-primitive="input"], [data-panacode-primitive="textarea"]):focus-visible {
+  outline: none;
 }

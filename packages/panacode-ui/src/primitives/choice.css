@@ -1,0 +1,63 @@
+[data-component="panacode-checkbox"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 0.5rem);
+  color: var(--foreground);
+  font: inherit;
+  font-size: var(--text-sm, 0.875rem);
+  cursor: pointer;
+}
+
+[data-component="panacode-checkbox"] [data-slot="choice-input"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+[data-component="panacode-checkbox"] [data-slot="choice-control"] {
+  display: grid;
+  place-items: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.4rem;
+  background: var(--surface);
+  color: var(--background);
+  transition:
+    background var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
+    border-color var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+[data-component="panacode-checkbox"][data-checked] [data-slot="choice-control"] {
+  background: var(--foreground);
+  border-color: var(--foreground);
+}
+
+[data-component="panacode-checkbox"] [data-slot="choice-indicator"] {
+  display: grid;
+  width: 0.85rem;
+  height: 0.85rem;
+  opacity: 0;
+}
+
+[data-component="panacode-checkbox"][data-checked] [data-slot="choice-indicator"] {
+  opacity: 1;
+}
+
+[data-component="panacode-checkbox"][data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+[data-component="panacode-checkbox"] [data-slot="choice-input"]:focus-visible + [data-slot="choice-control"] {
+  outline: 2px solid color-mix(in oklab, var(--accent-strong) 72%, transparent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="panacode-checkbox"] [data-slot="choice-control"] {
+    transition: none;
+  }
+}

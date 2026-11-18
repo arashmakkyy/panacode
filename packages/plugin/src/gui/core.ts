@@ -46,7 +46,7 @@ export type PluginOptions = { readonly [key: string]: Json }
 
 /** The running app. One shape in the window and in main, with the fields server and TUI plugins get in `ctx.app`. */
 export interface App {
-  /** The app's name, `opencode`, as in a server plugin's `ctx.app.name`. */
+  /** The app's name, `panacode`, as in a server plugin's `ctx.app.name`. */
   readonly name: string
   /**
    * The app version, e.g. `2.0.20`. Web and desktop windows always know it; it is `""` only in a window whose platform

@@ -1,0 +1,185 @@
+/* Chromium paints type=search white unless appearance and color-scheme are set on the control.
+ * The MCP field is the Panacode input; other search fields sit on a themed row and must stay transparent.
+ */
+[data-brand="panacode"] input[type="search"]:not([data-component="panacode-input"]) {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: transparent !important;
+  color: inherit;
+  -webkit-text-fill-color: currentColor;
+  color-scheme: inherit;
+}
+
+[data-brand="panacode"][data-color-scheme="dark"] [data-component="panacode-input"],
+[data-brand="panacode"][data-color-scheme="dark"] [data-component="text-input-v2"],
+[data-brand="panacode"][data-color-scheme="dark"] [data-component="input"] [data-slot="input-wrapper"] {
+  background-color: var(--surface);
+  color: var(--foreground);
+  color-scheme: dark;
+}
+
+[data-brand="panacode"][data-color-scheme="dark"] [data-component="panacode-input"] {
+  appearance: none;
+  -webkit-appearance: none;
+  border-color: var(--border-strong);
+}
+
+/* The "Updates" context bar and the follow-up composer sit on the dark transcript.
+ * Their own backgrounds still resolve to a light surface, so they read as white pills.
+ */
+[data-brand="panacode"][data-color-scheme="dark"] [data-component="collapsed-tool-group"] [data-slot="collapsible-trigger"],
+[data-brand="panacode"][data-color-scheme="dark"]
+  [data-component="collapsed-tool-group"]
+  > [data-component="collapsible"].tool-collapsible
+  > [data-slot="collapsible-trigger"][aria-expanded="true"],
+[data-brand="panacode"][data-color-scheme="dark"] [data-component="context-tool-group-trigger"],
+[data-brand="panacode"][data-color-scheme="dark"] [data-component="composer"],
+[data-brand="panacode"][data-color-scheme="dark"] [data-component="session-queue-panel"] {
+  background-color: var(--surface);
+  color: var(--foreground);
+  color-scheme: dark;
+}
+
+[data-brand="panacode"][data-color-scheme="dark"] [data-component="composer-editor"] {
+  background-color: transparent !important;
+  color: var(--foreground);
+  -webkit-text-fill-color: currentColor;
+  color-scheme: dark;
+}
+
+/* Stage 1 shell. Selectors are the real slots the app renders
+ * (titlebar-v2, vertical-tabs-sidebar, home-panel, home-session-row).
+ * Arc tokens come from [data-brand="panacode"] and follow data-color-scheme.
+ */
+
+[data-brand="panacode"] [data-panacode-shell="window"] {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+[data-brand="panacode"] [data-panacode-shell="titlebar"] {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+[data-brand="panacode"] [data-slot="vertical-tabs-mount"],
+[data-brand="panacode"] [data-slot="vertical-tabs-peek-surface"] {
+  background: var(--surface-muted);
+  color: var(--foreground);
+}
+
+[data-brand="panacode"] [data-panacode-shell="home"],
+[data-brand="panacode"] [data-component="new-session"] {
+  background: var(--surface);
+  color: var(--foreground);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-raised);
+}
+
+[data-brand="panacode"] [data-slot="home-sessions-list"],
+[data-brand="panacode"] [data-component="home-session-row"],
+[data-brand="panacode"] [data-component="home-session-row-container"] {
+  color: var(--text-secondary);
+}
+
+[data-brand="panacode"] [data-component="home-session-row"] {
+  border-radius: var(--radius-control);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-brand="panacode"] [data-component="home-session-row"]:hover {
+    background: color-mix(in oklab, var(--foreground) 6%, transparent);
+    color: var(--foreground);
+  }
+}
+
+[data-brand="panacode"] [data-component="panacode-empty"],
+[data-brand="panacode"] [data-component="panacode-error"],
+[data-brand="panacode"] [data-component="panacode-loading"] {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-12) var(--space-6) 0;
+  text-align: center;
+}
+
+[data-brand="panacode"] [data-slot="empty-title"] {
+  margin: 0;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  font-weight: 530;
+}
+
+[data-brand="panacode"] [data-slot="empty-description"] {
+  margin: 0 0 var(--space-2);
+  max-width: 28rem;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+}
+
+[data-brand="panacode"] [data-component="panacode-loading"] {
+  align-items: stretch;
+  width: min(100%, 28rem);
+  margin-inline: auto;
+}
+
+[data-brand="panacode"] [data-panacode-shell="error-page"] {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+[data-brand="panacode"] [data-panacode-shell="error-page"] [data-component="error-brand"] {
+  color: var(--foreground);
+  letter-spacing: var(--tracking-display);
+}
+
+/* Upstream switch inside the Panacode brand uses the Arc pill.
+ * The primitive owns the spring; this bridge matches the geometry for call sites
+ * that still render @opencode/ui/switch.
+ */
+[data-brand="panacode"] [data-component="switch"] [data-slot="switch-control"] {
+  width: 42px;
+  height: 24px;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--control-track);
+}
+
+[data-brand="panacode"] [data-component="switch"] [data-slot="switch-control"]::before {
+  background: var(--control-on);
+}
+
+[data-brand="panacode"] [data-component="switch"] [data-slot="switch-thumb"] {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-pill);
+  background: var(--control-thumb);
+  box-shadow: var(--control-thumb-shadow);
+  transition:
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    width 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color var(--duration-standard) var(--ease-standard);
+}
+
+[data-brand="panacode"] [data-component="switch"][data-checked] [data-slot="switch-thumb"] {
+  background: var(--control-thumb-on);
+  transform: translateX(18px);
+}
+
+[data-brand="panacode"] [data-component="switch"]:active:not([data-disabled]) [data-slot="switch-thumb"] {
+  width: 23px;
+}
+
+[data-brand="panacode"] [data-component="switch"][data-checked]:active:not([data-disabled]) [data-slot="switch-thumb"] {
+  transform: translateX(13px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-brand="panacode"] [data-component="switch"] [data-slot="switch-thumb"] {
+    transition: none;
+  }
+}

@@ -27,6 +27,11 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
+      - name: Panacode ownership and brand
+        run: |
+          bun script/panacode-ui-ownership-check.ts
+          bun script/panacode-brand-scan.ts
+
       - name: Lint
         run: bun run lint
 

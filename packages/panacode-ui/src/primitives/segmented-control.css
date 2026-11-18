@@ -1,27 +1,105 @@
+/* Ported from the Arc segmented control. The highlight travels; labels do not scale. */
 [data-component="panacode-segmented"] {
   display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  flex-shrink: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-muted);
+}
+
+[data-slot="segment-track"] {
+  --fade-start: 0px;
+  --fade-end: 0px;
+  isolation: isolate;
+  position: relative;
+  display: flex;
+  min-width: 0;
   gap: 2px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
   padding: 3px;
-  border-radius: var(--radius-control, 1.125rem);
-  background: var(--surface-muted, oklch(97.8% 0 0));
+  border-radius: inherit;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--fade-start),
+    #000 calc(100% - var(--fade-end)),
+    transparent
+  );
+  mask-image: linear-gradient(to right, transparent, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent);
 }
 
-[data-component="panacode-segmented"] > button {
-  appearance: none;
+[data-slot="segment-track"]::-webkit-scrollbar {
+  display: none;
+}
+
+[data-slot="segment-track"][data-fade-start] {
+  --fade-start: 20px;
+}
+[data-slot="segment-track"][data-fade-end] {
+  --fade-end: 20px;
+}
+
+[data-component="panacode-segmented"] button {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  min-height: var(--control-height-sm);
   border: 0;
+  border-radius: calc(var(--radius-control) - 4px);
+  padding: 0 12px;
   background: transparent;
-  color: var(--text-secondary, oklch(46% 0 0));
-  border-radius: calc(var(--radius-control, 1.125rem) - 2px);
-  min-height: calc(var(--control-height-sm, 2.25rem) - 2px);
-  padding: 0 var(--space-3, 0.75rem);
+  color: var(--text-muted);
   font: inherit;
-  font-size: var(--text-sm, 0.875rem);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
-  transition: background-color var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
+  -webkit-tap-highlight-color: transparent;
+  transition: color var(--duration-fast) var(--ease-standard);
 }
 
-[data-component="panacode-segmented"] > button[data-active] {
-  background: var(--surface, oklch(100% 0 0));
-  color: var(--foreground, oklch(15% 0 0));
-  box-shadow: var(--shadow-resting, 0 1px 2px oklch(0% 0 0 / 0.035));
+@media (hover: hover) and (pointer: fine) {
+  [data-component="panacode-segmented"] button:hover {
+    color: var(--foreground);
+  }
+}
+
+[data-component="panacode-segmented"] button[aria-pressed="true"] {
+  color: var(--foreground);
+}
+
+[data-slot="segment-selection"] {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  left: 0;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius-control) - 4px);
+  background: var(--surface);
+  box-shadow: var(--shadow-resting);
+  pointer-events: none;
+}
+
+[data-slot="segment-label"] {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (max-width: 380px) {
+  [data-component="panacode-segmented"] button {
+    padding: 0 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="panacode-segmented"] button {
+    transition: none;
+  }
 }

@@ -29,7 +29,7 @@ const Catalog = Schema.Struct({
 type Catalog = typeof Catalog.Type
 const CATALOG_KEY = "models"
 
-// Mantle is Bedrock serving Anthropic's API, and opencode drops most of its `anthropic.…` IDs from Bedrock's list,
+// Mantle is Bedrock serving Anthropic's API, and panacode drops most of its `anthropic.…` IDs from Bedrock's list,
 // so it uses Anthropic's prices.
 const PRICE_SOURCES: Partial<Record<NonNullable<AccountInfo["apiProvider"]>, Provider.ID>> = {
   firstParty: Provider.ID.anthropic,

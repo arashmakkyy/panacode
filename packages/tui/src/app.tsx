@@ -640,14 +640,14 @@ function App() {
     if (!terminalTitleEnabled()) return
 
     if (route.data.type === "home") {
-      setTerminalTitle(renderer, "OpenCode")
+      setTerminalTitle(renderer, "Panacode")
       return
     }
 
     if (route.data.type === "session") {
       const title = session?.title
       if (!title || isFallbackTitle(title)) {
-        setTerminalTitle(renderer, "OpenCode")
+        setTerminalTitle(renderer, "Panacode")
         return
       }
 
@@ -1063,7 +1063,7 @@ function App() {
         ? [
             {
               name: "opencode.update",
-              title: "Update OpenCode",
+              title: "Update Panacode",
               slash: { name: "update" },
               run: () => updater.open?.("manual"),
               category: "System",
@@ -1162,15 +1162,6 @@ function App() {
         slash: { name: "help" },
         run: () => {
           dialog.replace(() => <DialogHelp />)
-        },
-        category: "System",
-      },
-      {
-        name: "docs.open",
-        title: "Open docs",
-        run: () => {
-          openUrl("https://opencode.ai/docs").catch(() => {})
-          dialog.clear()
         },
         category: "System",
       },

@@ -677,7 +677,7 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
 
   const channel =
     config.sync && typeof BroadcastChannel !== "undefined"
-      ? new BroadcastChannel(`opencode.persist:${config.storage ?? "default"}:${config.key}`)
+      ? new BroadcastChannel(`panacode.persist:${config.storage ?? "default"}:${config.key}`)
       : undefined
 
   if (channel) onCleanup(() => channel.close())

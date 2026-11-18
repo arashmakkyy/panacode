@@ -14,6 +14,7 @@ export function Badge(
     <span
       {...others}
       data-component="panacode-badge"
+      data-panacode-primitive="badge"
       data-tone={local.tone ?? "neutral"}
       classList={{
         ...local.classList,

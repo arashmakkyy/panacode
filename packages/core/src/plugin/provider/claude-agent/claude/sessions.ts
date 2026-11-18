@@ -64,7 +64,7 @@ interface Entry {
 
 export interface Interface {
   readonly run: (request: Request) => Effect.Effect<void, Error>
-  // OpenCode stopped running the session, so a turn still waiting for tool results will not get them.
+  // Panacode stopped running the session, so a turn still waiting for tool results will not get them.
   readonly idle: (sessionID: string) => Effect.Effect<void>
 }
 
@@ -238,7 +238,7 @@ export function registry() {
           const connected = message.mcp_servers.some(
             (server) => server.name === "opencode" && server.status === "connected",
           )
-          if (!connected) throw new Error("The OpenCode tool server did not connect to Claude Code")
+          if (!connected) throw new Error("The Panacode tool server did not connect to Claude Code")
         }
         if (
           message.type === "assistant" &&

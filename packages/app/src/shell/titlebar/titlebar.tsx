@@ -16,6 +16,7 @@ import { useSettings } from "@/settings/model"
 import { WindowsAppMenu } from "./windows-menu"
 import { createTitlebarHistory } from "./history"
 import { TitlebarTabStrip } from "@/shell/titlebar/tab-strip"
+import { TitlebarFrame } from "@panacode/ui"
 import { macVerticalTrafficLights, SidebarToggle } from "@/shell/sidebar-toggle"
 import { SidebarInbox } from "@/shell/titlebar/inbox"
 import { SidebarCustomized, type SidebarStripGrouping } from "@/shell/titlebar/sidebar-customized"
@@ -161,7 +162,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
   ])
 
   return (
-    <header
+    <TitlebarFrame
       data-slot="titlebar-v2"
       hidden={hideVerticalTitlebar()}
       classList={{
@@ -712,7 +713,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                 class="flex h-7 shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02"
                                 onClick={() => {
                                   closeMobileTabs()
-                                  platform.openExternal("https://opencode.ai/desktop-feedback")
+                                  openSettings()
                                 }}
                               >
                                 <Icon name="help" size="small" />
@@ -849,6 +850,6 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
           }}
         </Match>
       </Switch>
-    </header>
+    </TitlebarFrame>
   )
 }

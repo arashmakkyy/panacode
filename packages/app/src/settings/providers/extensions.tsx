@@ -6,7 +6,6 @@ import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { ServerConnection } from "@/runtime/server/registry"
 import { ExtensionPlugins } from "@/runtime/plugin/extension-plugins"
-import { ExternalLink } from "@/runtime/platform/external-link"
 import { usePlatform } from "@/runtime/platform/platform"
 import { SettingsList } from "@/settings/list"
 import { createExtensionLoad, ExtensionLoadFailed } from "@/settings/extension-load"
@@ -126,9 +125,7 @@ export const SettingsExtensions: Component<{
                 <span class="settings-extension-heading text-13-medium">
                   {language.t("settings.extensions.availableAll")}
                 </span>
-                <ExternalLink class="settings-extension-link text-13-regular" href="https://opencode.ai/docs/skills">
-                  {language.t("settings.extensions.addSkills")}
-                </ExternalLink>
+                <span class="settings-extension-link text-13-regular">{language.t("settings.extensions.addSkills")}</span>
               </div>
               <SettingsList variant="catalog">
                 <For each={skills()}>

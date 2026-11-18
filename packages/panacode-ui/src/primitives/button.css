@@ -1,18 +1,27 @@
-[data-component="panacode-button"] {
+/* Arc button. Primary is the foreground fill (reference), not a separate accent chip. */
+[data-component="panacode-button"],
+[data-component="panacode-icon-button"] {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-2, 0.5rem);
-  border: 0;
+  border: 1px solid transparent;
   border-radius: var(--radius-control, 1.125rem);
   font: inherit;
   font-weight: 500;
   letter-spacing: var(--tracking-body, -0.01em);
+  line-height: var(--leading-body, 1.4);
+  white-space: nowrap;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
   transition:
-    background-color var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
     color var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
-    transform var(--duration-instant, 0.12s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
+    background var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
+    border-color var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
+    opacity var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
+    box-shadow var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
+    transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 [data-component="panacode-button"][data-size="sm"] {
@@ -28,41 +37,112 @@
 [data-component="panacode-button"][data-size="lg"] {
   min-height: var(--control-height-lg, 3.125rem);
   padding: 0 var(--space-5, 1.25rem);
-  font-size: var(--text-base, 1rem);
+  font-size: var(--text-sm, 0.875rem);
 }
 
 [data-component="panacode-button"][data-variant="primary"] {
-  background: var(--accent, oklch(33% 0 0));
-  color: var(--accent-foreground, oklch(100% 0 0));
+  color: var(--background);
+  background: var(--foreground);
+  border-color: var(--foreground);
 }
 [data-component="panacode-button"][data-variant="secondary"] {
-  background: var(--surface-muted, oklch(97.8% 0 0));
-  color: var(--foreground, oklch(15% 0 0));
+  color: var(--foreground);
+  background: var(--surface);
+  border-color: var(--border);
 }
 [data-component="panacode-button"][data-variant="ghost"] {
+  color: var(--text-secondary);
   background: transparent;
-  color: var(--foreground, inherit);
+  border-color: transparent;
 }
 [data-component="panacode-button"][data-variant="danger"] {
-  background: var(--danger, oklch(53% 0.18 10));
-  color: oklch(100% 0 0);
+  color: var(--danger);
+  background: var(--surface);
+  border-color: var(--border);
 }
 
 [data-component="panacode-button"]:disabled,
+[data-component="panacode-icon-button"]:disabled,
 [data-component="panacode-button"][data-loading] {
-  opacity: 0.55;
   cursor: not-allowed;
 }
+[data-component="panacode-button"][data-variant="primary"]:disabled,
+[data-component="panacode-button"][data-loading] {
+  opacity: 0.52;
+}
+[data-component="panacode-button"][data-variant="secondary"]:disabled,
+[data-component="panacode-button"][data-variant="danger"]:disabled {
+  opacity: 1;
+  color: var(--text-muted);
+  background: var(--surface-muted);
+  border-color: var(--border);
+}
+[data-component="panacode-button"][data-variant="ghost"]:disabled,
+[data-component="panacode-icon-button"]:disabled {
+  opacity: 1;
+  color: var(--text-muted);
+}
 
-[data-component="panacode-button"]:not(:disabled):active {
-  transform: scale(0.98);
+@media (hover: hover) and (pointer: fine) {
+  [data-component="panacode-button"][data-variant="primary"]:hover:not(:disabled) {
+    opacity: 0.91;
+    box-shadow: var(--shadow-resting);
+  }
+  [data-component="panacode-button"][data-variant="secondary"]:hover:not(:disabled),
+  [data-component="panacode-button"][data-variant="danger"]:hover:not(:disabled) {
+    background: var(--surface-muted);
+    box-shadow: var(--shadow-resting);
+  }
+  [data-component="panacode-button"][data-variant="ghost"]:hover:not(:disabled),
+  [data-component="panacode-icon-button"]:hover:not(:disabled) {
+    color: var(--foreground);
+    background: var(--surface-muted);
+  }
+}
+
+[data-component="panacode-icon-button"] {
+  color: var(--text-secondary);
+  background: transparent;
+  padding: 0;
+}
+[data-component="panacode-icon-button"][data-size="sm"] {
+  width: var(--control-height-sm, 2.25rem);
+  height: var(--control-height-sm, 2.25rem);
+}
+[data-component="panacode-icon-button"][data-size="md"] {
+  width: var(--control-height-md, 2.75rem);
+  height: var(--control-height-md, 2.75rem);
+}
+[data-component="panacode-icon-button"][data-size="lg"] {
+  width: var(--control-height-lg, 3.125rem);
+  height: var(--control-height-lg, 3.125rem);
+}
+
+[data-slot="button-spinner"] {
+  position: absolute;
+  width: 1rem;
+  height: 1rem;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: panacode-spin 0.7s linear infinite;
+}
+[data-component="panacode-button"][data-loading] [data-slot="button-label"] {
+  opacity: 0;
+}
+
+@keyframes panacode-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-component="panacode-button"] {
+  [data-component="panacode-button"],
+  [data-component="panacode-icon-button"] {
     transition: none;
   }
-  [data-component="panacode-button"]:not(:disabled):active {
-    transform: none;
+  [data-slot="button-spinner"] {
+    animation: none;
   }
 }

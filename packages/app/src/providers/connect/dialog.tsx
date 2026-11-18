@@ -10,7 +10,7 @@ import { DialogBody, DialogHeader, DialogTitle, DialogTitleGroup, Dialog } from 
 import { RedirectPasteForm } from "@opencode/ui/redirect-paste"
 import { TextInput } from "@opencode/ui/text-input"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { type Component, createMemo, createUniqueId, For, type JSX, Match, onMount, Show, Switch } from "solid-js"
+import { type Component, createMemo, createSignal, createUniqueId, For, type JSX, Match, onMount, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -941,6 +941,8 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
     ref: (el: HTMLInputElement) => void
   }) {
     const errorID = createUniqueId()
+    const secret = input.name === "apiKey"
+    const [shown, setShown] = createSignal(false)
 
     return (
       <div class="flex w-full flex-col gap-2">
@@ -951,13 +953,27 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
             class="!w-full"
             appearance="large"
             name={input.name}
-            data-input={input.name === "apiKey" ? "provider-api-key" : undefined}
+            type={secret && !shown() ? "password" : "text"}
+            data-input={secret ? "provider-api-key" : undefined}
             placeholder={input.placeholder}
             readOnly={connect().submitting}
             invalid={entryError() !== undefined}
             aria-describedby={entryError() ? errorID : undefined}
             autocomplete="off"
             spellcheck={false}
+            trailing={
+              secret ? (
+                <button
+                  type="button"
+                  class="flex size-6 items-center justify-center rounded-md text-v2-icon-icon-muted"
+                  aria-label={language.t(shown() ? "provider.connect.apiKey.hide" : "provider.connect.apiKey.reveal")}
+                  aria-pressed={shown()}
+                  onClick={() => setShown((value) => !value)}
+                >
+                  <Icon name={shown() ? "outline-eye-slash" : "outline-eye"} size="small" />
+                </button>
+              ) : undefined
+            }
           />
         </label>
         <Show when={entryError()}>

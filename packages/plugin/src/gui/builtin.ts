@@ -343,7 +343,7 @@ export type MainStoreFrom =
       readonly file?: string
     }
   | {
-      /** The storage namespace and the key in it, e.g. `["opencode.settings", "keepScreenActive"]`. */
+      /** The storage namespace and the key in it, e.g. `["panacode.settings", "keepScreenActive"]`. */
       readonly state: readonly [namespace: string, key: string]
     }
 

@@ -5,6 +5,7 @@ import { ResizeHandle } from "@opencode/ui/resize-handle"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { prefersReducedMotion } from "@opencode/ui/motion"
 import { Titlebar } from "@/shell/titlebar/titlebar"
+import { SidebarFrame, WindowFrame } from "@panacode/ui"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ToastRegion } from "@/shell/notifications/toast"
 import { createTipToasts } from "@/tips/model"
@@ -209,8 +210,8 @@ export default function Layout(props: ParentProps) {
   const dragInset = () => windowDragEnabled(platform) && !mobile()
 
   return (
-    <div
-      class="relative bg-v2-background-bg-deep flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text"
+    <WindowFrame
+      class="relative flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text"
       style={{
         // Mobile panels only need clearance for their outer border.
         "--shell-inline-inset": mobile() ? "1px" : "8px",
@@ -243,7 +244,7 @@ export default function Layout(props: ParentProps) {
           />
         </Show>
         <Show when={verticalTabs()}>
-          <aside
+          <SidebarFrame
             id="vertical-tabs-sidebar"
             data-slot="vertical-tabs-sidebar"
             data-state={preferences.appearance.sidebarOpen() ? "open" : "closed"}
@@ -297,7 +298,7 @@ export default function Layout(props: ParentProps) {
                 onDraggingChange={setPanelResizing}
               />
             </Show>
-          </aside>
+          </SidebarFrame>
         </Show>
         {/* Size containment collapses percentage-height descendants in WebKit. */}
         <main
@@ -326,6 +327,6 @@ export default function Layout(props: ParentProps) {
       <PluginSlot at="window.bottom" input={{}} />
       <ToastRegion />
       <UploadToastHost />
-    </div>
+    </WindowFrame>
   )
 }

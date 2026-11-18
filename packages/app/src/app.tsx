@@ -71,6 +71,7 @@ export function AppBaseProviders(
       <Font />
       <ThemeProvider
         defaultTheme={PANACODE_THEME_ID}
+        defaultColorScheme="dark"
         onThemeApplied={(mode, scheme) => props.onThemeApplied?.(mode, scheme)}
       >
         <LanguageProvider locale={props.locale} onNativeTranslations={props.onNativeTranslations}>

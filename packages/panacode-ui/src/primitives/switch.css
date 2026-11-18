@@ -74,20 +74,16 @@
     0 1px 2px oklch(0% 0 0 / 0.14),
     0 2px 6px oklch(0% 0 0 / 0.06)
   );
-  transform: translateX(0);
-  transition:
-    transform var(--duration-standard, 0.24s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
-    background-color var(--duration-standard, 0.24s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
-    width var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
+  transform-origin: center left;
+  transition: background-color var(--duration-standard, 0.24s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
 }
 
 [data-component="panacode-switch"][data-checked] [data-slot="switch-thumb"] {
-  transform: translateX(18px);
   background: var(--control-thumb-on, oklch(100% 0 0));
 }
 
-[data-component="panacode-switch"]:dir(rtl)[data-checked] [data-slot="switch-thumb"] {
-  transform: translateX(-18px);
+[data-component="panacode-switch"]:dir(rtl) [data-slot="switch-thumb"] {
+  transform-origin: center right;
 }
 
 @media (hover: hover) and (pointer: fine) {

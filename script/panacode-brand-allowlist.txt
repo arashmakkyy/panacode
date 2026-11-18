@@ -1,0 +1,70 @@
+# Phrases removed before a line is treated as a user-visible "opencode" hit.
+# Keep this list short. Each entry is a reason a person still sees the word,
+# or an identifier they never see as product branding.
+
+# License / trademark attribution. Do not rebrand these.
+OpenCode is a trademark of Anomaly Innovations, Inc.
+Forked from OpenCode
+
+# Console group names arrive as "Workspace / OpenCode". The suffix is matched, not shown as our product name.
+ / OpenCode
+# Upstream hosted products. The service the user signs into is still named this.
+OpenCode Go
+OpenCode Console
+OpenCode Zen
+OpenCode Free
+
+# Package, protocol, storage, and theme identifiers.
+@opencode
+@opencode/
+"opencode"
+'opencode'
+"opencode-go"
+"opencode-zen"
+opencode-go
+opencode-zen
+opencode-theme
+opencode-color-scheme
+opencode-theme-css
+ai.opencode
+ai.panacode
+
+# Legacy Linux launcher path kept so existing desktop pins still resolve.
+/opt/OpenCode/
+
+# Functional endpoints. Not docs, Discord, or the GitHub project page.
+https://opencode.ai/console
+https://opencode.ai/go
+https://opencode.ai/update
+https://opencode.ai/v2/
+https://opencode.ai/config.json
+https://opencode.ai/desktop-theme.json
+https://opencode.ai/changelog.json
+https://opencode.ai/theme.json
+opencode-pty
+opencode-next.db
+.well-known/opencode
+opencode-heap
+opencode-gitlab-auth
++https://opencode.ai
+https://models.opencode.ai
+https://app.opencode.ai
+https://console.opencode.ai
+http://opencode.ai
+
+# Upstream env prefix, storage keys, and on-disk fallback names.
+# Display copy uses panacode.json and the panacode command.
+OPENCODE_
+.opencode
+opencode.json
+opencode.jsonc
+opencode.global
+opencode.window
+opencode.workspace
+opencode.draft
+opencode.persist
+opencode.pwa
+opencode-drafts
+opencode.settings
+opencode.updater
+opencode.last-route

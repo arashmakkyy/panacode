@@ -4,6 +4,9 @@
 @import "../primitives/input.css";
 @import "../primitives/segmented-control.css";
 @import "../primitives/badge.css";
+@import "../primitives/choice.css";
+@import "../primitives/overlay.css";
+@import "../primitives/surface.css";
 @import "../features/ai-chat/ai-chat.css";
 @import "../features/ai-composer/ai-composer.css";
 @import "../features/agent-run/agent-run.css";

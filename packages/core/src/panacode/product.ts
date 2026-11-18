@@ -14,7 +14,7 @@ export const Product = {
   /** User-facing product name. Swap this to rebrand without hunting string literals. */
   name: "Panacode",
   /** Upstream project this fork tracks. */
-  upstream: "OpenCode",
+  upstream: "Panacode",
   /** XDG slug, CLI binary, install dir, and env prefix (isolated from OpenCode). */
   identity: ProductIdentity,
   provider: {

@@ -15,6 +15,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { showToast } from "@/shell/notifications/toast"
+import { EmptyState, ErrorState, Skeleton } from "@panacode/ui"
 import { sessionLabel } from "@/session/title"
 import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { shouldOpenSessionInBackground } from "./open"
@@ -971,31 +972,19 @@ function HomeSessionProjectName(props: { name: string; search?: boolean }) {
 
 function HomeSessionsEmpty(props: { onNewSession?: () => void; language: ReturnType<typeof useLanguage> }) {
   return (
-    <div class="flex min-h-full flex-col items-center gap-4 px-6 pt-[52px] text-center">
-      <div
-        class={`
-          shrink-0 text-[13px] leading-text-compact tracking-[-0.04px]
-          text-v2-text-text-base [font-weight:530]
-        `}
-      >
-        {props.language.t("home.sessions.empty")}
-      </div>
-      <p
-        class={`
-          mb-1 text-center text-[13px] leading-5 tracking-[-0.04px]
-          text-v2-text-text-muted [font-weight:440]
-        `}
-      >
-        {props.language.t("home.sessions.empty.description")}
-      </p>
-      <Show when={props.onNewSession}>
-        {(onNewSession) => (
-          <Button data-action="home-new-session" variant="neutral" size="normal" icon="edit" onClick={onNewSession()}>
-            {props.language.t("command.session.new")}
-          </Button>
-        )}
-      </Show>
-    </div>
+    <EmptyState
+      title={props.language.t("home.sessions.empty")}
+      description={props.language.t("home.sessions.empty.description")}
+      action={
+        props.onNewSession
+          ? {
+              label: props.language.t("command.session.new"),
+              onClick: props.onNewSession,
+              "data-action": "home-new-session",
+            }
+          : undefined
+      }
+    />
   )
 }
 
@@ -1008,27 +997,12 @@ function HomeSessionsUnavailable(props: {
   language: ReturnType<typeof useLanguage>
 }) {
   return (
-    <div
-      data-component="home-sessions-unavailable"
+    <ErrorState
       role={props.role}
-      class="flex min-h-full flex-col items-center gap-4 px-6 pt-[52px] text-center"
-    >
-      <div class="shrink-0 text-[13px] leading-text-compact tracking-[-0.04px] text-v2-text-text-base [font-weight:530]">
-        {props.title}
-      </div>
-      <Show when={props.description}>
-        <p class="mb-1 text-center text-[13px] leading-5 tracking-[-0.04px] text-v2-text-text-muted [font-weight:440]">
-          {props.description}
-        </p>
-      </Show>
-      <Show when={props.onRetry}>
-        {(onRetry) => (
-          <Button variant="neutral" size="normal" onClick={onRetry()}>
-            {props.language.t("common.retry")}
-          </Button>
-        )}
-      </Show>
-    </div>
+      title={props.title}
+      description={props.description}
+      action={props.onRetry ? { label: props.language.t("common.retry"), onClick: props.onRetry } : undefined}
+    />
   )
 }
 
@@ -1048,10 +1022,10 @@ function HomeSessionSkeleton(props: { visible: boolean; showProjectName: boolean
               class="flex h-10 min-w-0 items-center ps-1.5 pe-3 md:ps-3 md:pe-10"
               classList={{ "gap-1.5": props.desktop, "gap-2": !props.desktop, "max-md:h-12": props.showProjectName }}
             >
-              <span class="size-4 shrink-0 rounded-[4px] bg-v2-background-bg-layer-02" />
-              <span class="h-2 rounded-full bg-v2-background-bg-layer-02" style={{ width: `${width}%` }} />
+              <Skeleton class="shrink-0" width="1rem" height="1rem" />
+              <Skeleton width={`${width}%`} />
               <Show when={props.showProjectName}>
-                <span class="h-2 w-16 shrink-0 rounded-full bg-v2-background-bg-layer-01" />
+                <Skeleton class="shrink-0" width="4rem" />
               </Show>
             </div>
           )}

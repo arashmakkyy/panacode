@@ -1,4 +1,5 @@
 export const popularProviders = [
+  "panaai",
   "opencode-go",
   "opencode",
   "anthropic",

@@ -14,9 +14,18 @@ const required = [
   "packages/panacode-ui/package.json",
   "packages/panacode-ui/src/index.ts",
   "packages/panacode-ui/src/primitives/switch.tsx",
+  "packages/panacode-ui/src/primitives/button.tsx",
+  "packages/panacode-ui/src/primitives/dialog.tsx",
+  "packages/panacode-ui/src/primitives/menu.tsx",
+  "packages/panacode-ui/src/primitives/select.tsx",
+  "packages/panacode-ui/src/shell/frame.tsx",
+  "packages/panacode-ui/src/motion/spring.ts",
   "packages/panacode-ui/src/styles/shell.css",
   "packages/ui/src/theme/themes/panacode.json",
   "panacode-docs/UPSTREAM-MERGE.md",
+  "panacode-docs/redesign/RUNNING.md",
+  "script/panacode-brand-scan.ts",
+  "script/panacode-brand-allowlist.txt",
 ]
 
 for (const path of required) {
@@ -39,6 +48,20 @@ if (!appEntry.includes("PANACODE_THEME_ID") || !appEntry.includes("defaultTheme"
 }
 if (!appEntry.includes('dataset.brand = "panacode"') && !appEntry.includes("data-brand")) {
   failures.push("packages/app/src/app.tsx must mark the document with Panacode brand hooks")
+}
+if (!appEntry.includes('defaultColorScheme="dark"')) {
+  failures.push('packages/app/src/app.tsx must default the color scheme to dark')
+}
+
+const tokens = readFileSync(join(root, "packages/panacode-ui/src/theme/tokens.css"), "utf8")
+if (!tokens.includes('[data-color-scheme="dark"]')) {
+  failures.push("Panacode tokens must switch on data-color-scheme=dark")
+}
+if (tokens.includes(':root[data-theme="dark"]')) {
+  failures.push('Panacode tokens must not key dark mode off data-theme="dark"')
+}
+if (/^:focus-visible/m.test(tokens) || /outline:\s*none\s*!important/.test(tokens)) {
+  failures.push("Panacode focus styles must stay on Panacode primitives, not the global document")
 }
 
 if (failures.length) {

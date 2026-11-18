@@ -193,7 +193,7 @@ const run = Effect.fn("DesktopCli.run")(function* (binary: string, args: string[
   return stdout
 })
 
-// The installer runs `opencode --version`, which can take several seconds on first run while Gatekeeper scans it.
+// The installer runs `panacode --version`, which can take several seconds on first run while Gatekeeper scans it.
 const INSTALL_TIMEOUT_MS = 60_000
 
 const runInstaller = Effect.fn("DesktopCli.installForUser")(function* (binary: string, home: string) {
