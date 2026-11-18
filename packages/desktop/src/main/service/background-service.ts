@@ -11,6 +11,8 @@ import { keptStages, serviceVersion, shouldRetryEnsure } from "./cli-version"
 import { DesktopCli } from "./desktop-cli"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { takeSidecarProbe } from "./sidecar-probe"
+import { withEnsureTiming } from "@opencode/client/service"
+import { cliServiceRegistrationFile } from "./cli-service-file"
 
 export * as BackgroundService from "./background-service"
 
@@ -57,9 +59,14 @@ const probe = Effect.fn("BackgroundService.probe")(function* () {
 const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: BackgroundServiceMachine.ConnectMode) {
   const runFork = Effect.runForkWith(yield* Effect.context<FileSystem.FileSystem | Path.Path>())
   const setup = yield* prepare(mode)
+  // Windows antivirus + Hyper-V excluded ports often make the first boot exceed the client's 2s
+  // health probe; the ensure loop then kills a still-starting server. Use a safer port, longer
+  // probes, and skip the models.dev fetch so packaged Windows reaches /api/info ready in time.
+  const windowsPackaged = app.isPackaged && process.platform === "win32"
+  const servicePort = setup.isolated ? 0x0c0c : windowsPackaged ? 0x70de : undefined
 
-  const run = (version = setup.version) =>
-    setup.client.Service.ensure({
+  const run = (version = setup.version) => {
+    const options = {
       file: setup.file,
       version,
       // A fixed port makes a second contender fail to bind and back off; port 0 never collides, so two
@@ -68,11 +75,31 @@ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: Background
         ...setup.cli.command,
         "serve",
         "--service",
-        ...(setup.isolated ? ["--hostname", "0.0.0.0", "--port", String(0x0c0c)] : []),
+        ...(setup.isolated || windowsPackaged ? ["--hostname", "127.0.0.1"] : []),
+        ...(servicePort !== undefined ? ["--port", String(servicePort)] : []),
       ],
-      onStart: (reason, previousVersion) =>
+      env: windowsPackaged
+        ? {
+            OPENCODE_DISABLE_MODELS_FETCH: "1",
+            PANACODE_DISABLE_MODELS_FETCH: "1",
+            OPENCODE_DISABLE_FILEWATCHER: "1",
+            PANACODE_DISABLE_FILEWATCHER: "1",
+          }
+        : undefined,
+      onStart: (reason: "missing" | "version-mismatch", previousVersion?: string) =>
         runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion })),
-    })
+    }
+    return setup.client.Service.ensure(
+      windowsPackaged
+        ? withEnsureTiming(options, {
+            requestTimeout: 15_000,
+            promiseTimeout: 240_000,
+            spawnDelay: 15_000,
+            maxSpawnDelay: 60_000,
+          })
+        : options,
+    )
+  }
 
   const service = yield* Effect.tryPromise(() =>
     run().catch((error) => {
@@ -112,10 +139,17 @@ const prepare = Effect.fn("BackgroundService.prepare")(function* (mode: Backgrou
     process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
       ? path.join(
           process.env.XDG_STATE_HOME ?? path.join(app.getPath("home"), ".local", "state"),
-          "opencode",
+          "panacode",
           "service-local.json",
         )
-      : undefined
+      : cliServiceRegistrationFile({
+          join: path.join,
+          home: app.getPath("home"),
+          cliVersion: cli.version,
+          stateHome: process.env.XDG_STATE_HOME,
+        })
+
+  yield* Effect.logInfo("v2 CLI service registration file", { file, cliVersion: cli.version })
 
   return { cli, client, file, isolated, version }
 })

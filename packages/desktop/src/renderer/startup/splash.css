@@ -11,8 +11,8 @@
   color: #ededed;
 }
 
-[data-component="startup-splash"] .splash-brand,
-[data-component="first-launch-splash"] .splash-brand {
+[data-component="startup-splash"] [data-slot="startup-brand"],
+[data-component="first-launch-splash"] [data-slot="startup-brand"] {
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }

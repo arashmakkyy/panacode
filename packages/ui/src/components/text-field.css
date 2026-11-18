@@ -49,7 +49,11 @@
 
       border-radius: var(--radius-md);
       border: 1px solid var(--v2-border-border-base);
+      /* Keep surface + ink in sync; Electron/Windows otherwise paints a UA-white
+         textarea over a themed wrapper (white-on-white error logs). */
       background: var(--input-base);
+      color: var(--text-strong);
+      color-scheme: inherit;
 
       &:focus-within:not(:has([data-readonly])) {
         border-color: transparent;
@@ -73,7 +77,8 @@
     }
 
     [data-slot="input-input"] {
-      color: var(--text-strong);
+      color: inherit;
+      -webkit-text-fill-color: currentColor;
 
       display: flex;
       height: 32px;
@@ -82,8 +87,11 @@
       flex: 1;
       min-width: 0;
 
-      background: transparent;
+      appearance: none;
+      -webkit-appearance: none;
+      background-color: transparent !important;
       border: none;
+      color-scheme: inherit;
 
       /* text-14-regular */
       font-family: var(--font-family-sans);
@@ -99,6 +107,7 @@
 
       &::placeholder {
         color: var(--text-weak);
+        -webkit-text-fill-color: var(--text-weak);
       }
     }
 
@@ -107,6 +116,10 @@
       min-height: 32px;
       padding: 6px 12px;
       resize: none;
+      /* Chromium on Windows fills textareas white unless the control itself is themed. */
+      background-color: transparent !important;
+      color: inherit;
+      -webkit-text-fill-color: currentColor;
     }
 
     [data-slot="input-copy-button"] {

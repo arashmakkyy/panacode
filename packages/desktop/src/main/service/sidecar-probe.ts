@@ -3,6 +3,7 @@ import path from "node:path"
 import { app } from "electron"
 import type { Endpoint } from "@opencode/client/service"
 import { CHANNEL } from "../constants"
+import { cliServiceRegistrationFile } from "./cli-service-file"
 
 // The main thread idles between showing the first window and evaluating the main bundle, waiting
 // for the renderer's asset requests. That slot is long enough to find out whether a compatible
@@ -16,7 +17,14 @@ export function startSidecarProbe() {
   const version = CHANNEL === "beta" ? undefined : bundledVersion()
 
   if (version === "") return
-  probe = import("@opencode/client/service").then(({ Service }) => Service.discover({ version })).catch(() => undefined)
+  const file = cliServiceRegistrationFile({
+    join: path.join,
+    home: app.getPath("home"),
+    cliVersion: version ?? "",
+  })
+  probe = import("@opencode/client/service")
+    .then(({ Service }) => Service.discover({ version, file }))
+    .catch(() => undefined)
 }
 
 /** The probe's result, once: a later connect must not adopt a service that may have exited since boot. */
@@ -28,9 +36,11 @@ export function takeSidecarProbe() {
 }
 
 function bundledVersion() {
-  try {
-    return readFileSync(path.join(process.resourcesPath, "opencode-cli.version"), "utf8").trim()
-  } catch {
-    return ""
+  for (const name of ["panacode-cli.version", "opencode-cli.version"]) {
+    try {
+      const value = readFileSync(path.join(process.resourcesPath, name), "utf8").trim()
+      if (value) return value
+    } catch {}
   }
+  return ""
 }

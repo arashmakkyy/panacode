@@ -1,6 +1,5 @@
 import { TextField } from "@opencode/ui/text-field"
 import type { captureException } from "@sentry/solid"
-import { Logo } from "@opencode/ui/logo"
 import { Button } from "@opencode/ui/button"
 import { Component, createEffect, createSignal, on, onCleanup, onMount, Show, untrack } from "solid-js"
 import { Predicate } from "effect"
@@ -405,13 +404,20 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
       data-tauri-drag-region
     >
       <div class="w-full max-w-3xl flex flex-col items-center justify-center gap-6 sm:gap-8 my-auto">
-        <Logo class="w-48 sm:w-58.5 opacity-50 shrink-0" />
-        <div
-          class="text-20-medium tracking-tight select-text [app-region:no-drag]"
-          style={{ color: "var(--text-strong, CanvasText)" }}
+        <p
+          data-component="error-brand"
+          class="text-20-medium tracking-tight shrink-0"
+          style={{
+            "user-select": "text",
+            "-webkit-user-select": "text",
+            cursor: "text",
+            color: "var(--text-strong, #ededed)",
+            margin: "0",
+            "font-size": "28px",
+          }}
         >
           Panacode
-        </div>
+        </p>
         <div class="flex flex-col items-center gap-2 text-center">
           <h1 class="text-lg font-medium text-text-strong">
             {language.t(status() ? "error.page.title.status" : "error.page.title")}
@@ -427,7 +433,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
           readOnly
           copyable
           multiline
-          class="max-h-96 w-full font-mono text-xs no-scrollbar"
+          class="max-h-96 w-full font-mono text-xs no-scrollbar text-text-strong"
           label={language.t("error.page.details.label")}
           hideLabel
         />

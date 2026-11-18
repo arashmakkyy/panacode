@@ -2,6 +2,28 @@ import type { Platform } from "@opencode/app/desktop"
 import { onMount, Show } from "solid-js"
 import "./splash.css"
 
+function BrandMark(props: { large?: boolean }) {
+  return (
+    <p
+      data-slot="startup-brand"
+      classList={{
+        "text-20-medium tracking-tight": true,
+        "opacity-90": !!props.large,
+      }}
+      style={{
+        "font-size": props.large ? "32px" : undefined,
+        "user-select": "text",
+        "-webkit-user-select": "text",
+        cursor: "text",
+        color: "var(--text-strong, #ededed)",
+        margin: "0",
+      }}
+    >
+      Panacode
+    </p>
+  )
+}
+
 export function LoadingSplash(props: {
   deep: boolean
   firstLaunch: boolean
@@ -27,20 +49,23 @@ export function LoadingSplash(props: {
             "bg-v2-background-bg-deep": props.deep,
             "bg-v2-background-bg-base": !props.deep,
           }}
+          style={{
+            "background-color": props.deep
+              ? "var(--v2-background-bg-deep, #080808)"
+              : "var(--v2-background-bg-base, #161616)",
+          }}
         >
-          <div class="splash-brand text-20-medium tracking-tight select-text">Panacode</div>
+          <BrandMark />
         </div>
       }
     >
       <div
         data-component="first-launch-splash"
         data-drawing="running"
-        aria-hidden="true"
         class="h-dvh w-screen flex flex-col items-center justify-center bg-v2-background-bg-base"
+        style={{ "background-color": "var(--v2-background-bg-base, #161616)" }}
       >
-        <div class="splash-brand text-20-medium tracking-tight select-text opacity-90" style={{ "font-size": "32px" }}>
-          Panacode
-        </div>
+        <BrandMark large />
       </div>
     </Show>
   )

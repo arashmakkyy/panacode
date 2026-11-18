@@ -4,7 +4,7 @@ import { localServerStartupError } from "./initialization"
 
 /**
  * How long the window waits for the local server before it shows the error page. Main bounds its own start
- * (up to ~120 s, or ~300 s on Windows), so this only catches a renderer that never hears back, such as a lost IPC port.
+ * (up to ~120 s, or ~240 s on packaged Windows via withEnsureTiming), so this only catches a renderer that never hears back.
  */
 export const SIDECAR_TIMEOUT_MS = 300_000
 
