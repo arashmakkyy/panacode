@@ -1,0 +1,139 @@
+/* Arc dialog over the real confirm and form dialogs (dialog-v2 with `fit`): surface radius, raised panel,
+ * a blurred scrim, a spring rise on open, Arc type, and pill buttons in the footer. The command palette and the
+ * model menu keep their own frames (arc-palette.css, arc-shell.css). */
+
+[data-brand="panacode"] [data-component="dialog-overlay"] {
+  background: oklch(10% 0 0 / 0.46);
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+  animation: pc-dialog-scrim var(--duration-standard) var(--ease-enter) both;
+}
+
+[data-brand="panacode"] [data-component="dialog-v2"][data-fit]:not(:has(.command-palette-compact, .model-dialog)) [data-slot="dialog-container"] {
+  width: min(calc(100vw - 32px), 440px);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-surface);
+  background: var(--surface-raised);
+  color: var(--foreground);
+  box-shadow: var(--shadow-floating);
+  animation:
+    pc-dialog-fade var(--duration-fast) var(--ease-enter) both,
+    pc-dialog-rise var(--duration-spring) var(--ease-spring) both;
+}
+
+[data-brand="panacode"] [data-component="dialog-v2"][data-fit]:not(:has(.command-palette-compact, .model-dialog)) {
+  [data-slot="dialog-header"] {
+    gap: 20px;
+    padding: 24px 24px 8px;
+  }
+
+  [data-slot="dialog-title"] {
+    color: var(--foreground);
+    font-size: var(--text-lg, 1.125rem);
+    font-weight: 500;
+    letter-spacing: var(--tracking-body, -0.01em);
+    line-height: 1.4;
+  }
+
+  [data-slot="dialog-description"] {
+    margin-top: 6px;
+    color: var(--text-secondary);
+    font-size: var(--text-sm, 0.875rem);
+    font-weight: 400;
+    letter-spacing: 0;
+    line-height: 1.5;
+  }
+
+  [data-slot="dialog-body"] {
+    padding-inline: 24px;
+    font-size: var(--text-sm, 0.875rem);
+  }
+
+  [data-slot="dialog-close-button"] {
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: color-mix(in oklab, var(--surface-muted) 50%, transparent);
+    color: var(--text-secondary);
+  }
+
+  [data-slot="dialog-close-button"]:hover {
+    background: var(--surface-muted);
+    color: var(--foreground);
+  }
+
+  [data-slot="dialog-footer"] {
+    gap: 8px;
+    padding: 20px 24px 24px;
+  }
+
+  [data-slot="dialog-footer"] [data-component="button-v2"] {
+    height: 38px;
+    padding: 0 16px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-pill);
+    font-size: var(--text-sm, 0.875rem);
+    font-weight: 500;
+    letter-spacing: 0;
+    box-shadow: none;
+    transition:
+      background-color var(--duration-fast) var(--ease-standard),
+      transform var(--duration-spring) var(--ease-spring);
+  }
+
+  [data-slot="dialog-footer"] [data-component="button-v2"]:active {
+    transform: scale(0.97);
+    transition: transform var(--duration-instant) var(--ease-standard);
+  }
+
+  [data-slot="dialog-footer"] [data-component="button-v2"][data-variant="ghost"] {
+    border-color: var(--border);
+    background: transparent;
+    color: var(--foreground);
+  }
+
+  [data-slot="dialog-footer"] [data-component="button-v2"][data-variant="ghost"]:hover {
+    background: var(--surface-muted);
+  }
+
+  [data-slot="dialog-footer"] [data-component="button-v2"]:is([data-variant="primary"], [data-variant="neutral"]) {
+    background: var(--foreground);
+    color: var(--background);
+  }
+
+  [data-slot="dialog-footer"] [data-component="button-v2"][data-variant="danger"] {
+    background: var(--danger);
+    color: oklch(99% 0 0);
+  }
+
+  [data-slot="dialog-footer"] [data-component="button-v2"][data-variant="danger"]:hover {
+    background: color-mix(in oklab, var(--danger) 88%, var(--foreground));
+  }
+}
+
+@keyframes pc-dialog-scrim {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes pc-dialog-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes pc-dialog-rise {
+  from {
+    transform: translateY(8px) scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-brand="panacode"] [data-component="dialog-overlay"],
+  [data-brand="panacode"] [data-component="dialog-v2"][data-fit] [data-slot="dialog-container"] {
+    animation: pc-dialog-fade var(--duration-instant) var(--ease-standard) both;
+  }
+}
