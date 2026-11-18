@@ -64,3 +64,5 @@ export function AiComposer(props: AiComposerProps) {
     </form>
   )
 }
+
+export { ComposerHero, SuggestionChips, type ComposerSuggestion } from "./hero"

@@ -42,7 +42,7 @@ import {
 import { NewSessionBranch } from "./workspace/selector"
 import { NewSessionBrickBreaker } from "./brick-breaker"
 import { NewSessionPinBoard } from "./pin-board"
-import { NewSessionWordmark } from "./wordmark"
+import { PanacodeNewSessionHero, PanacodeNewSessionSuggestions } from "./panacode-hero"
 import {
   createWordmarkState,
   selectBrickBreaker,
@@ -76,7 +76,7 @@ export function NewSessionView(props: {
   const settings = useSettings()
 
   const [wordmark, setWordmark] = createSignal(createWordmarkState(false))
-  const [logo, setLogo] = createSignal<HTMLDivElement>()
+  const [logo] = createSignal<HTMLDivElement>()
 
   const dispatchWordmark = (event: WordmarkEvent) =>
     untrack(() => {
@@ -112,16 +112,11 @@ export function NewSessionView(props: {
           active={props.composer.state.drag === "active"}
           input={props.composer.model.selection.current()?.capabilities.input}
         />
-        <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
+        <div class="absolute inset-x-0 top-[18%] flex justify-center px-6">
           <div class={NEW_SESSION_CONTENT_WIDTH}>
-            <NewSessionWordmark
-              ref={setLogo}
-              state={wordmark}
-              onEvent={dispatchWordmark}
-              play
-              sound={settings.sounds.interfaceEnabled}
-            />
-            <div class="mt-8 flex flex-col gap-3">
+            {/* panacode: brand hero replaces the upstream pixel wordmark (and its easter-egg games). */}
+            <PanacodeNewSessionHero />
+            <div class="flex flex-col gap-3">
               <div data-slot="new-session-composer" class="flex flex-col gap-1">
                 <div class="relative z-10">
                   <Composer model={props.composer} />
@@ -148,6 +143,9 @@ export function NewSessionView(props: {
               </div>
               <Show when={props.project.empty()}>
                 <PromptProjectAddButton controller={props.project} />
+              </Show>
+              <Show when={!props.project.empty()}>
+                <PanacodeNewSessionSuggestions />
               </Show>
             </div>
           </div>
