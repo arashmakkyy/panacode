@@ -1,44 +1,133 @@
-/* Theme CSS vars may not be ready on first paint; keep splash text readable against the preload paper/ink. */
+/* Startup splash. Theme CSS vars may not be ready on first paint, so every var has a brand-paper fallback. */
 [data-component="startup-splash"],
 [data-component="first-launch-splash"] {
-  color: #171717;
-  user-select: text;
-  -webkit-user-select: text;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--v2-text-text-base, #091412);
+  background-color: var(--v2-background-bg-base, #fbfdfc);
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+
+[data-component="startup-splash"][data-deep],
+[data-component="first-launch-splash"][data-deep] {
+  background-color: var(--v2-background-bg-deep, #f2f6f5);
 }
 
 :root[data-color-scheme="dark"] [data-component="startup-splash"],
 :root[data-color-scheme="dark"] [data-component="first-launch-splash"] {
-  color: #ededed;
+  color: var(--v2-text-text-base, #e9f4f2);
+  background-color: var(--v2-background-bg-base, #0c1010);
 }
 
-[data-component="startup-splash"] [data-slot="startup-brand"],
-[data-component="first-launch-splash"] [data-slot="startup-brand"] {
-  app-region: no-drag;
-  -webkit-app-region: no-drag;
+:root[data-color-scheme="dark"] [data-component="startup-splash"][data-deep],
+:root[data-color-scheme="dark"] [data-component="first-launch-splash"][data-deep] {
+  background-color: var(--v2-background-bg-deep, #070909);
 }
 
-[data-component="first-launch-splash"] path {
-  /* Outline paths use a normalized length so the drawing scales with the wordmark. */
-  stroke-dasharray: 1;
-  animation: first-launch-wordmark-draw 1000ms ease-out both;
+/* Faint grid plus a soft brand glow behind the mark. */
+[data-component="startup-splash"]::before,
+[data-component="first-launch-splash"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, currentColor 5%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, currentColor 5%, transparent) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 50% 45% at 50% 46%, #000 0%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 50% 45% at 50% 46%, #000 0%, transparent 100%);
 }
 
-[data-component="first-launch-splash"][data-drawing="pending"] path {
-  animation-play-state: paused;
+[data-component="startup-splash"]::after,
+[data-component="first-launch-splash"]::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  width: 420px;
+  height: 420px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  background: radial-gradient(circle, var(--brand-glow, rgb(46 230 200 / 0.18)) 0%, transparent 62%);
+  opacity: 0.55;
 }
 
-@keyframes first-launch-wordmark-draw {
+[data-slot="startup-brand"] {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  animation: startup-brand-in 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+[data-slot="startup-mark"] {
+  display: flex;
+  margin-bottom: 6px;
+  filter: drop-shadow(0 12px 28px var(--brand-glow, rgb(46 230 200 / 0.25)));
+}
+
+[data-slot="startup-wordmark"] {
+  display: flex;
+  color: inherit;
+}
+
+[data-slot="startup-tagline"] {
+  margin: 0;
+  font-family: var(--font-body, "Inter", system-ui, sans-serif);
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  color: color-mix(in srgb, currentColor 55%, transparent);
+}
+
+[data-slot="startup-progress"] {
+  position: relative;
+  width: 120px;
+  height: 2px;
+  margin-top: 18px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+[data-slot="startup-progress"] > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  border-radius: inherit;
+  background: var(--brand-gradient, linear-gradient(90deg, #14c4ad, #2ee6c8));
+  animation: startup-progress 1.3s ease-in-out infinite;
+}
+
+@keyframes startup-brand-in {
   from {
-    stroke-dashoffset: 1;
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
   }
   to {
-    stroke-dashoffset: 0;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes startup-progress {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-component="first-launch-splash"] path {
+  [data-slot="startup-brand"],
+  [data-slot="startup-progress"] > span {
     animation: none;
-    stroke-dasharray: none;
   }
 }

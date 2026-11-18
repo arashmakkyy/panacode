@@ -1,26 +1,24 @@
 import type { Platform } from "@opencode/app/desktop"
-import { onMount, Show } from "solid-js"
+import { BrandMark, BrandWordmark, brand } from "@panacode/ui/brand"
+import { onMount } from "solid-js"
 import "./splash.css"
 
-function BrandMark(props: { large?: boolean }) {
+// The splash renders the active brand pack from @panacode/ui/brand, so swapping
+// the pack (script/panacode-brand-apply.ts) re-skins it with no edits here.
+function SplashBrand(props: { large?: boolean }) {
   return (
-    <p
-      data-slot="startup-brand"
-      classList={{
-        "text-20-medium tracking-tight": true,
-        "opacity-90": !!props.large,
-      }}
-      style={{
-        "font-size": props.large ? "32px" : undefined,
-        "user-select": "text",
-        "-webkit-user-select": "text",
-        cursor: "text",
-        color: "var(--text-strong, #ededed)",
-        margin: "0",
-      }}
-    >
-      Panacode
-    </p>
+    <div data-slot="startup-brand" data-size={props.large ? "large" : "default"}>
+      <div data-slot="startup-mark">
+        <BrandMark size={props.large ? 76 : 60} />
+      </div>
+      <div data-slot="startup-wordmark" aria-label={brand.name}>
+        <BrandWordmark height={props.large ? 34 : 28} />
+      </div>
+      <p data-slot="startup-tagline">{brand.tagline}</p>
+      <div data-slot="startup-progress" aria-hidden="true">
+        <span />
+      </div>
+    </div>
   )
 }
 
@@ -33,40 +31,18 @@ export function LoadingSplash(props: {
   onDrawEnd: () => void
 }) {
   onMount(() => {
-    // Skip OpenCode wordmark draw animation — show Panacode immediately.
+    // No wordmark draw animation: the brand lockup shows immediately.
     props.onDrawStart()
     props.onDrawEnd()
   })
 
   return (
-    <Show
-      when={props.firstLaunch}
-      fallback={
-        <div
-          data-component="startup-splash"
-          class="h-dvh w-screen flex flex-col items-center justify-center gap-3"
-          classList={{
-            "bg-v2-background-bg-deep": props.deep,
-            "bg-v2-background-bg-base": !props.deep,
-          }}
-          style={{
-            "background-color": props.deep
-              ? "var(--v2-background-bg-deep, #080808)"
-              : "var(--v2-background-bg-base, #161616)",
-          }}
-        >
-          <BrandMark />
-        </div>
-      }
+    <div
+      data-component={props.firstLaunch ? "first-launch-splash" : "startup-splash"}
+      data-deep={props.deep ? "" : undefined}
+      class="h-dvh w-screen"
     >
-      <div
-        data-component="first-launch-splash"
-        data-drawing="running"
-        class="h-dvh w-screen flex flex-col items-center justify-center bg-v2-background-bg-base"
-        style={{ "background-color": "var(--v2-background-bg-base, #161616)" }}
-      >
-        <BrandMark large />
-      </div>
-    </Show>
+      <SplashBrand large={props.firstLaunch} />
+    </div>
   )
 }

@@ -360,6 +360,7 @@
         "@opencode/plugin": "workspace:*",
         "@opencode/schema": "workspace:*",
         "@opencode/ui": "workspace:*",
+        "@panacode/ui": "workspace:*",
         "@sentry/solid": "catalog:",
         "@solidjs/router": "catalog:",
         "@types/bun": "catalog:",

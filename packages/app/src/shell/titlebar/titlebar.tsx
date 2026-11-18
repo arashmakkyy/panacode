@@ -16,7 +16,7 @@ import { useSettings } from "@/settings/model"
 import { WindowsAppMenu } from "./windows-menu"
 import { createTitlebarHistory } from "./history"
 import { TitlebarTabStrip } from "@/shell/titlebar/tab-strip"
-import { TitlebarFrame } from "@panacode/ui"
+import { SidebarBrand, TitlebarBrand, TitlebarFrame } from "@panacode/ui"
 import { macVerticalTrafficLights, SidebarToggle } from "@/shell/sidebar-toggle"
 import { SidebarInbox } from "@/shell/titlebar/inbox"
 import { SidebarCustomized, type SidebarStripGrouping } from "@/shell/titlebar/sidebar-customized"
@@ -589,6 +589,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 </Show>
                 <Show when={windows() && props.verticalTabs}>
                   <SidebarToggle />
+                  <TitlebarBrand />
                 </Show>
                 <Show when={!mobile() && !props.verticalTabs}>
                   {/* Pulls the first tab's avatar 10px from Search, past the row gap plus the tab's own inset. */}
@@ -792,14 +793,15 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                     aria-hidden="true"
                                   />
                                 </Show>
-                                <Show when={homeInSidebarHeader()} fallback={<div class="flex-1" />}>
-                                  <div class="min-w-0 flex-1">{homeButton(true)}</div>
-                                </Show>
+                                {/* panacode: the sidebar header carries the brand; Home moves into the action list. */}
+                                <div class="min-w-0 flex-1">
+                                  <SidebarBrand />
+                                </div>
                                 <SidebarToggle handoff="out" />
                               </div>
                             </Show>
-                            <div class="flex w-full shrink-0 flex-col gap-[3px]">
-                              <Show when={!homeInSidebarHeader()}>{homeButton(true)}</Show>
+                            <div data-slot="sidebar-actions" class="flex w-full shrink-0 flex-col gap-[3px]">
+                              {homeButton(true)}
                               {searchButton(true)}
                               <RecentlyClosedTabsMenu
                                 vertical

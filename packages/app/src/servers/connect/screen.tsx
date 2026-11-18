@@ -1,7 +1,7 @@
 import { lazy, Show, Suspense } from "solid-js"
 import { Button } from "@opencode/ui/button"
 import { TextInput } from "@opencode/ui/text-input"
-import { Wordmark } from "@opencode/ui/wordmark"
+import { BrandLockup, brand } from "@panacode/ui/brand"
 import { useLanguage } from "@/runtime/i18n/language"
 import { createServerConnectController } from "./controller"
 import { ConnectMethodSwitch } from "./method"
@@ -18,8 +18,8 @@ export function ConnectServerScreen(props: { url?: string } = {}) {
   return (
     <main data-component="connect-server" aria-labelledby="server-connect-title">
       <div class="server-connect-content">
-        <div class="server-connect-brand" role="img" aria-label="Panacode">
-          <Wordmark />
+        <div class="server-connect-brand" role="img" aria-label={brand.name}>
+          <BrandLockup size={28} />
         </div>
         <header>
           <h1 id="server-connect-title">{language.t("server.connect.title")}</h1>

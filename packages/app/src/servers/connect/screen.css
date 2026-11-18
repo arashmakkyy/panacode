@@ -18,7 +18,9 @@
   }
 
   .server-connect-brand {
-    width: 160px;
+    display: flex;
+    justify-content: center;
+    color: var(--text-strong);
     margin-inline: auto;
     margin-block-end: 16px;
   }

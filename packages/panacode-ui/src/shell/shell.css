@@ -1,3 +1,4 @@
+@import "./arc-shell.css";
 /* Stage 1 shell. Selectors are the real slots the app renders
  * (titlebar-v2, vertical-tabs-sidebar, home-panel, home-session-row).
  * Arc tokens come from [data-brand="panacode"] and follow data-color-scheme.
@@ -13,11 +14,6 @@
   color: var(--text-secondary);
 }
 
-[data-brand="panacode"] [data-slot="vertical-tabs-mount"],
-[data-brand="panacode"] [data-slot="vertical-tabs-peek-surface"] {
-  background: var(--surface-muted);
-  color: var(--foreground);
-}
 
 [data-brand="panacode"] [data-panacode-shell="home"],
 [data-brand="panacode"] [data-component="new-session"] {

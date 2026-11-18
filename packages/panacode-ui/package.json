@@ -5,12 +5,15 @@
   "type": "module",
   "license": "MIT",
   "description": "Panacode-owned SolidJS design system and presentation adapters (upstream-safe overlay on OpenCode).",
-  "sideEffects": ["**/*.css"],
+  "sideEffects": [
+    "**/*.css"
+  ],
   "exports": {
     "./package.json": "./package.json",
     ".": "./src/index.ts",
     "./theme": "./src/theme/index.ts",
     "./theme/tokens.css": "./src/theme/tokens.css",
+    "./brand": "./src/brand/index.ts",
     "./styles": "./src/styles/index.css",
     "./styles/shell.css": "./src/styles/shell.css",
     "./primitives/switch": "./src/primitives/switch.tsx",
@@ -28,7 +31,8 @@
     "./features/tool-call": "./src/features/tool-call/index.tsx",
     "./features/code-suggestion": "./src/features/code-suggestion/index.tsx",
     "./features/mcp-servers": "./src/features/mcp-servers/index.tsx",
-    "./adapters/*": "./src/adapters/*.ts"
+    "./adapters/*": "./src/adapters/*.ts",
+    "./features/providers": "./src/features/providers/index.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
