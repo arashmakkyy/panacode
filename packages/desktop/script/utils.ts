@@ -83,25 +83,30 @@ export function nodePtyPackage(target?: string) {
   return `@lydell/node-pty-${cli.os}-${cli.cpu}`
 }
 
-export async function downloadCliToResources(version = CLI_VERSION, dest = windowsify("resources/opencode-cli")) {
+export async function downloadCliToResources(version = CLI_VERSION, dest?: string) {
   const { $ } = await import("bun")
   const cli = getCurrentCli()
   const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))
+  const target = dest ?? resourceCliPath(cli.os)
 
   try {
     await $`bun install --no-save --cwd ${directory} ${`${cli.package}@${version}`} ${`--os=${cli.os}`} ${`--cpu=${cli.cpu}`}`
-    await copyCliToResources(join(directory, "node_modules", cli.package), dest)
+    await copyCliToResources(join(directory, "node_modules", cli.package), target)
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
 
-  console.log(`Copied ${cli.package}@${version} to ${dest}`)
+  console.log(`Copied ${cli.package}@${version} to ${target}`)
 }
 
-export async function copyBuiltCliToResources(root: string, dest = windowsify("resources/opencode-cli")) {
+export async function copyBuiltCliToResources(root: string, dest?: string) {
   const cli = getCurrentCli()
   const directory = cli.package.replace("@opencode/", "")
-  await copyCliToResources(join(root, directory), dest)
+  await copyCliToResources(join(root, directory), dest ?? resourceCliPath(cli.os))
+}
+
+function resourceCliPath(os: string) {
+  return os === "win32" ? "resources/opencode-cli.exe" : "resources/opencode-cli"
 }
 
 // The package directory is an npm package: its package.json version is the string the executable
