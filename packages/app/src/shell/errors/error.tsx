@@ -405,12 +405,18 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
       data-tauri-drag-region
     >
       <div class="w-full max-w-3xl flex flex-col items-center justify-center gap-6 sm:gap-8 my-auto">
-        <Logo class="w-48 sm:w-58.5 opacity-12 shrink-0" />
+        <Logo class="w-48 sm:w-58.5 opacity-50 shrink-0" />
+        <div
+          class="text-20-medium tracking-tight select-text [app-region:no-drag]"
+          style={{ color: "var(--text-strong, CanvasText)" }}
+        >
+          Panacode
+        </div>
         <div class="flex flex-col items-center gap-2 text-center">
           <h1 class="text-lg font-medium text-text-strong">
             {language.t(status() ? "error.page.title.status" : "error.page.title")}
           </h1>
-          <p class="text-sm text-text-weak">
+          <p class="text-sm text-text-base">
             {status()
               ? language.t("error.page.description.status", { status: status()! })
               : language.t(errorDescriptionKey(props.error))}

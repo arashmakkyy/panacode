@@ -3,8 +3,8 @@ import type { ServerReadyData } from "../../shared/ipc-contract"
 import { localServerStartupError } from "./initialization"
 
 /**
- * How long the window waits for the local server before it shows the error page. Main bounds its own start (two
- * 120 s attempts at most), so this only catches a renderer that never hears back, such as a lost IPC port.
+ * How long the window waits for the local server before it shows the error page. Main bounds its own start
+ * (up to ~120 s, or ~300 s on Windows), so this only catches a renderer that never hears back, such as a lost IPC port.
  */
 export const SIDECAR_TIMEOUT_MS = 300_000
 

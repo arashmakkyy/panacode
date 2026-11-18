@@ -18,7 +18,8 @@ export const defaultEnsureTiming: EnsureTiming = {
   requestTimeout: 2_000,
   spawnDelay: 5_000,
   maxSpawnDelay: 30_000,
-  promiseTimeout: 120_000,
+  // Windows AV / Defender often delays the first spawn of the bundled CLI past 120 s.
+  promiseTimeout: process.platform === "win32" ? 300_000 : 120_000,
   stopPollInterval: 50,
   stopPollAttempts: 100,
 }

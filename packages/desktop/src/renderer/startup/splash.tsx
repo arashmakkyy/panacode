@@ -28,7 +28,7 @@ export function LoadingSplash(props: {
             "bg-v2-background-bg-base": !props.deep,
           }}
         >
-          <div class="text-20-medium text-v2-text-text-strong tracking-tight">Panacode</div>
+          <div class="splash-brand text-20-medium tracking-tight select-text">Panacode</div>
         </div>
       }
     >
@@ -38,7 +38,7 @@ export function LoadingSplash(props: {
         aria-hidden="true"
         class="h-dvh w-screen flex flex-col items-center justify-center bg-v2-background-bg-base"
       >
-        <div class="text-20-medium text-v2-text-text-strong tracking-tight opacity-80" style={{ "font-size": "32px" }}>
+        <div class="splash-brand text-20-medium tracking-tight select-text opacity-90" style={{ "font-size": "32px" }}>
           Panacode
         </div>
       </div>

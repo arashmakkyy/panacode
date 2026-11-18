@@ -1,3 +1,22 @@
+/* Theme CSS vars may not be ready on first paint; keep splash text readable against the preload paper/ink. */
+[data-component="startup-splash"],
+[data-component="first-launch-splash"] {
+  color: #171717;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+:root[data-color-scheme="dark"] [data-component="startup-splash"],
+:root[data-color-scheme="dark"] [data-component="first-launch-splash"] {
+  color: #ededed;
+}
+
+[data-component="startup-splash"] .splash-brand,
+[data-component="first-launch-splash"] .splash-brand {
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
 [data-component="first-launch-splash"] path {
   /* Outline paths use a normalized length so the drawing scales with the wordmark. */
   stroke-dasharray: 1;
