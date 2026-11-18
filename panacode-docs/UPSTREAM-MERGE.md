@@ -149,6 +149,10 @@ Internal package names `@opencode/*` remain for upstream compatibility.
 | `packages/app/src/session/composer/session-composer-region.tsx` | Shared integration boundary | Permission dock → Panacode adapter | High | Preserve adapter wiring; merge new docks/features carefully |
 | `packages/session-ui/**` | Upstream-owned | Session domain/UI | High | Prefer CSS overlay / adapters over rewriting; only touch when new hooks needed |
 | `packages/desktop/**` | Shared (branding already Panacode) | App identity / packaging | High | Keep Panacode appId/productName; take upstream Electron fixes |
+| `packages/ui/src/icons/catalog.ts` | Shared integration boundary | `setIconArtwork(body, viewBox)` override registry; `getIcon` checks it first (lucide via `@panacode/ui/icons`) | Medium | Re-apply the 13-line hook if upstream rewrites the catalog; new upstream icon names need a MAP entry in `script/panacode-icons-generate.ts` (unmapped names fall back to upstream art) |
+| `packages/app/src/settings/model.tsx` | Shared integration boundary | Side-effect imports `@panacode/ui/icons` and `@panacode/ui/motion`; default `tabLayout` is `inbox` (workspace sidebar) | Medium | Re-apply the two imports and the default |
+| `packages/desktop/src/renderer/startup/splash.*` | Shared integration boundary | Splash uses the active brand pack | Medium | Keep the `SplashBrand` mount |
+| `script/panacode-icons-generate.ts`, `script/panacode-brand-apply.ts` | Panacode-owned | Generated lucide artwork; brand pack swap | Low | Keep ours |
 | `bun.lock` | Generated | Lockfile | Medium | Regenerate after resolving package.json |
 | `release/desktop/*.exe` | Generated output | Installers | None | Do not commit binaries |
 

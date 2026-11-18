@@ -55,3 +55,16 @@ bun --cwd packages/panacode-ui test
 bun --cwd packages/panacode-ui typecheck
 bun --cwd packages/app typecheck
 ```
+bun --cwd packages/app test:unit
+bun --cwd packages/desktop typecheck
+```
+
+The brand scan reads build output too. Run it on a clean tree (no `packages/app/dist`, no `packages/desktop/out`),
+otherwise bundled upstream strings in those gitignored folders fail it.
+
+## Notes for the dev loop
+
+- CSS in files pulled in through `@import` (arc-shell.css, pack tokens) is not always hot-reloaded by the bundled
+  dev server; restart `dev` after editing them.
+- Swapping the brand: `bun script/panacode-brand-apply.ts <pack>` (see packages/panacode-ui/src/brand/README.md).
+- Regenerating icons: `bun script/panacode-icons-generate.ts`.
