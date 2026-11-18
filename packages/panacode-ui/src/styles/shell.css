@@ -1,0 +1,188 @@
+/*
+ * Phase 2 shell overlay — applies Panacode surfaces to OpenCode layout chrome
+ * without rewriting session engines. Scoped via [data-brand="panacode"].
+ */
+[data-brand="panacode"] {
+  font-family: var(--font-body, inherit);
+  letter-spacing: var(--tracking-body, -0.01em);
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* ---- Buttons ---- */
+[data-brand="panacode"] [data-component="button-v2"],
+[data-brand="panacode"] [data-component="button"] {
+  border-radius: var(--radius-control, 1.125rem);
+  letter-spacing: var(--tracking-body, -0.01em);
+  transition:
+    background-color var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
+    color var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
+    box-shadow var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+/* ---- Canonical Switch bridge (upstream Kobalte → Arc pill) ---- */
+[data-brand="panacode"] [data-component="switch"] {
+  gap: var(--space-3, 0.75rem);
+}
+
+[data-brand="panacode"] [data-component="switch"] [data-slot="switch-control"] {
+  position: relative;
+  box-sizing: border-box;
+  width: 42px;
+  height: 24px;
+  padding: 3px;
+  border-radius: var(--radius-pill, 9999px);
+  border: 0;
+  background: var(--control-track, oklch(89.5% 0 0));
+  box-shadow: none;
+  isolation: isolate;
+  transition: background-color var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+[data-brand="panacode"] [data-component="switch"] [data-slot="switch-control"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--control-on, oklch(23% 0 0));
+  opacity: 0;
+  transition: opacity var(--duration-standard, 0.24s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+[data-brand="panacode"] [data-component="switch"][data-checked] [data-slot="switch-control"]::before {
+  opacity: 1;
+}
+
+[data-brand="panacode"] [data-component="switch"] [data-slot="switch-thumb"] {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-pill, 9999px);
+  border: 0;
+  background: var(--control-thumb, oklch(100% 0 0));
+  box-shadow: var(
+    --control-thumb-shadow,
+    0 0 0 0.5px oklch(0% 0 0 / 0.07),
+    0 1px 2px oklch(0% 0 0 / 0.14),
+    0 2px 6px oklch(0% 0 0 / 0.06)
+  );
+  transform: translateX(0);
+  transition:
+    transform var(--duration-standard, 0.24s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
+    background-color var(--duration-standard, 0.24s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+[data-brand="panacode"] [data-component="switch"][data-checked] [data-slot="switch-thumb"] {
+  transform: translateX(18px);
+  background: var(--control-thumb-on, oklch(100% 0 0));
+}
+
+[data-brand="panacode"] [data-component="switch"]:dir(rtl)[data-checked] [data-slot="switch-thumb"] {
+  transform: translateX(-18px);
+}
+
+[data-brand="panacode"] [data-component="switch"][data-checked]:hover:not([data-disabled], [data-readonly]) [data-slot="switch-thumb"] {
+  transform: translateX(18px);
+  width: 18px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-brand="panacode"] [data-component="switch"] [data-slot="switch-control"],
+  [data-brand="panacode"] [data-component="switch"] [data-slot="switch-control"]::before,
+  [data-brand="panacode"] [data-component="switch"] [data-slot="switch-thumb"] {
+    transition: none;
+  }
+}
+
+/* ---- Shell / sidebar / tabs ---- */
+[data-brand="panacode"] .sidebar,
+[data-brand="panacode"] [data-slot="sidebar"],
+[data-brand="panacode"] [data-component="sidebar"] {
+  background: var(--surface-muted, var(--surface));
+  border-color: var(--border-subtle, var(--border));
+}
+
+[data-brand="panacode"] [data-component="tabs"] [data-selected],
+[data-brand="panacode"] .settings-subtabs [data-selected] {
+  border-radius: var(--radius-control, 1.125rem);
+}
+
+[data-brand="panacode"] .settings-tab-title,
+[data-brand="panacode"] [data-slot="settings-title"] {
+  letter-spacing: var(--tracking-display, -0.02em);
+}
+
+[data-brand="panacode"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[data-brand="panacode"] textarea,
+[data-brand="panacode"] [data-component="text-field"] input,
+[data-brand="panacode"] [data-component="text-field"] textarea {
+  border-radius: var(--radius-control, 1.125rem);
+  border-color: var(--border, oklch(93.5% 0 0));
+  background: var(--surface, var(--neutral-0, #fff));
+}
+
+[data-brand="panacode"] [data-component="dialog"],
+[data-brand="panacode"] [data-component="popover"],
+[data-brand="panacode"] [role="dialog"] {
+  border-radius: var(--radius-panel, 1.5rem);
+  box-shadow: var(--shadow-floating, 0 20px 48px oklch(0% 0 0 / 0.105));
+}
+
+/* ---- Session / chat / tools ---- */
+[data-brand="panacode"] [data-component="tool-part-wrapper"],
+[data-brand="panacode"] [data-component="tool-trigger"] {
+  border-radius: var(--radius-control, 1.125rem);
+  border-color: var(--border-subtle, var(--border));
+  background: var(--surface-muted, var(--surface));
+}
+
+[data-brand="panacode"] [data-slot="permission-footer-actions"] button,
+[data-brand="panacode"] [data-component="dock-prompt"] button {
+  border-radius: var(--radius-control, 1.125rem);
+}
+
+[data-brand="panacode"] [data-component="session-composer"],
+[data-brand="panacode"] [data-slot="composer"],
+[data-brand="panacode"] .session-composer {
+  border-radius: var(--radius-panel, 1.5rem);
+  border-color: var(--border-subtle, var(--border));
+  background: var(--surface-raised, var(--surface));
+  box-shadow: var(--shadow-resting, 0 1px 2px oklch(0% 0 0 / 0.035));
+}
+
+/* ---- File tree / terminal chrome ---- */
+[data-brand="panacode"] [data-component="file-tree"],
+[data-brand="panacode"] [data-slot="file-tree"],
+[data-brand="panacode"] .file-tree {
+  background: var(--surface-muted, var(--surface));
+}
+
+[data-brand="panacode"] [data-component="terminal-tabs"],
+[data-brand="panacode"] [data-slot="terminal-toolbar"] {
+  border-color: var(--border-subtle, var(--border));
+  background: var(--surface-muted, var(--surface));
+}
+
+/* ---- Review / code suggestion chrome ---- */
+[data-brand="panacode"] [data-component="review"],
+[data-brand="panacode"] [data-slot="review-header"] {
+  border-radius: var(--radius-panel, 1.5rem);
+}
+
+/* ---- Scrollbars (app-controlled) ---- */
+[data-brand="panacode"] * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--neutral-5, #d4d4d4) transparent;
+}
+
+[data-brand="panacode"]::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+[data-brand="panacode"]::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: var(--neutral-5, #d4d4d4);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}

@@ -1,0 +1,51 @@
+{
+  "name": "@panacode/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Panacode-owned SolidJS design system and presentation adapters (upstream-safe overlay on OpenCode).",
+  "sideEffects": ["**/*.css"],
+  "exports": {
+    "./package.json": "./package.json",
+    ".": "./src/index.ts",
+    "./theme": "./src/theme/index.ts",
+    "./theme/tokens.css": "./src/theme/tokens.css",
+    "./styles": "./src/styles/index.css",
+    "./styles/shell.css": "./src/styles/shell.css",
+    "./primitives/switch": "./src/primitives/switch.tsx",
+    "./primitives/button": "./src/primitives/button.tsx",
+    "./primitives/input": "./src/primitives/input.tsx",
+    "./primitives/segmented-control": "./src/primitives/segmented-control.tsx",
+    "./primitives/badge": "./src/primitives/badge.tsx",
+    "./adapters": "./src/adapters/index.ts",
+    "./motion": "./src/motion/tokens.ts",
+    "./features/ai-chat": "./src/features/ai-chat/index.tsx",
+    "./features/ai-composer": "./src/features/ai-composer/index.tsx",
+    "./features/agent-run": "./src/features/agent-run/index.tsx",
+    "./features/agent-orchestrator": "./src/features/agent-orchestrator/index.tsx",
+    "./features/agent-approvals": "./src/features/agent-approvals/index.tsx",
+    "./features/tool-call": "./src/features/tool-call/index.tsx",
+    "./features/code-suggestion": "./src/features/code-suggestion/index.tsx",
+    "./features/mcp-servers": "./src/features/mcp-servers/index.tsx",
+    "./adapters/*": "./src/adapters/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "typecheck:tsc": "tsc --noEmit",
+    "test": "bun test src --only-failures"
+  },
+  "peerDependencies": {
+    "solid-js": "^1.9.8"
+  },
+  "dependencies": {
+    "@kobalte/core": "catalog:",
+    "@opencode/ui": "workspace:*"
+  },
+  "devDependencies": {
+    "@tsconfig/node22": "catalog:",
+    "@types/bun": "catalog:",
+    "solid-js": "catalog:",
+    "typescript": "catalog:"
+  }
+}

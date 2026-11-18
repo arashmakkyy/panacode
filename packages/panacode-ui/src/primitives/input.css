@@ -1,0 +1,29 @@
+[data-component="panacode-input"] {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--control-height-md, 2.75rem);
+  padding: 0 var(--space-4, 1rem);
+  border: 1px solid var(--border, oklch(93.5% 0 0));
+  border-radius: var(--radius-control, 1.125rem);
+  background: var(--surface, oklch(100% 0 0));
+  color: var(--foreground, oklch(15% 0 0));
+  font: inherit;
+  font-size: var(--text-sm, 0.875rem);
+  letter-spacing: var(--tracking-body, -0.01em);
+  outline: none;
+  transition: border-color var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+[data-component="panacode-input"]::placeholder {
+  color: var(--text-muted, oklch(59% 0 0));
+}
+
+[data-component="panacode-input"]:focus-visible {
+  border-color: var(--border-strong, oklch(82% 0 0));
+  box-shadow: 0 0 0 3px var(--accent-subtle, oklch(33% 0 0 / 0.1));
+}
+
+[data-component="panacode-input"]:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

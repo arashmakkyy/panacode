@@ -1,0 +1,43 @@
+[data-component="panacode-code-suggestion"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 0.75rem);
+}
+
+[data-component="panacode-code-suggestion"] [data-slot="suggestion-header"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3, 0.75rem);
+}
+
+[data-component="panacode-code-suggestion"] [data-slot="suggestion-header"] h3 {
+  margin: 0;
+  font-family: var(--font-display, inherit);
+  letter-spacing: var(--tracking-display, -0.03em);
+}
+
+[data-component="panacode-code-suggestion"] [data-slot="suggestion-hunk"] {
+  border: 1px solid var(--border, oklch(93.5% 0 0));
+  border-radius: var(--radius-panel, 1.625rem);
+  overflow: hidden;
+  background: var(--surface, oklch(100% 0 0));
+}
+
+[data-component="panacode-code-suggestion"] [data-slot="suggestion-hunk"] > header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2, 0.5rem);
+  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
+  background: var(--surface-muted, oklch(97.8% 0 0));
+}
+
+[data-component="panacode-code-suggestion"] [data-slot="hunk-actions"] {
+  display: flex;
+  gap: var(--space-2, 0.5rem);
+}
+
+[data-component="panacode-code-suggestion"] [data-slot="hunk-body"] {
+  padding: var(--space-3, 0.75rem);
+  overflow: auto;
+}

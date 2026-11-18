@@ -1,0 +1,62 @@
+[data-component="panacode-ai-chat"] {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: var(--background, transparent);
+  color: var(--foreground, inherit);
+}
+
+[data-component="panacode-ai-chat"] [data-slot="chat-scroll"] {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-4, 1rem) var(--space-5, 1.25rem);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4, 1rem);
+}
+
+[data-component="panacode-ai-chat"] [data-slot="chat-message"][data-role="user"] {
+  align-self: flex-end;
+  max-width: min(720px, 92%);
+}
+
+[data-component="panacode-ai-chat"] [data-slot="chat-message"][data-role="assistant"],
+[data-component="panacode-ai-chat"] [data-slot="chat-message"][data-role="system"] {
+  align-self: stretch;
+  max-width: min(820px, 100%);
+}
+
+[data-component="panacode-ai-chat"] [data-slot="chat-bubble"] {
+  border-radius: var(--radius-panel, 1.625rem);
+  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
+  line-height: var(--leading-body, 1.4);
+  letter-spacing: var(--tracking-body, -0.01em);
+}
+
+[data-component="panacode-ai-chat"] [data-slot="chat-message"][data-role="user"] [data-slot="chat-bubble"] {
+  background: var(--accent, oklch(33% 0 0));
+  color: var(--accent-foreground, oklch(100% 0 0));
+}
+
+[data-component="panacode-ai-chat"] [data-slot="chat-message"][data-role="assistant"] [data-slot="chat-bubble"] {
+  background: var(--surface-muted, oklch(97.8% 0 0));
+  border: 1px solid var(--border-subtle, transparent);
+}
+
+[data-component="panacode-ai-chat"] [data-slot="chat-message"][data-streaming] [data-slot="chat-bubble"] {
+  box-shadow: inset 0 0 0 1px var(--accent-subtle, oklch(33% 0 0 / 0.1));
+}
+
+[data-component="panacode-ai-chat"] [data-slot="chat-footer"] {
+  border-top: 1px solid var(--border-subtle, oklch(96.5% 0 0));
+  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
+  background: var(--surface, transparent);
+}
+
+[data-component="panacode-ai-chat"] [data-slot="chat-empty"] {
+  margin: auto;
+  color: var(--text-muted, oklch(59% 0 0));
+  text-align: center;
+}

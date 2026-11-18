@@ -1,0 +1,114 @@
+/* Arc-inspired pill switch (MCP Servers reference), Kobalte slots. */
+[data-component="panacode-switch"] {
+  display: inline-flex;
+  min-height: var(--control-height-md, 2.75rem);
+  align-items: center;
+  gap: var(--space-3, 0.75rem);
+  padding: 0;
+  border: 0;
+  color: var(--foreground, inherit);
+  background: transparent;
+  font: inherit;
+  font-size: var(--text-sm, 0.875rem);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+}
+
+[data-component="panacode-switch"][data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+[data-component="panacode-switch"] [data-slot="switch-input"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+[data-component="panacode-switch"] [data-slot="switch-control"] {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 24px;
+  align-items: center;
+  padding: 3px;
+  border-radius: var(--radius-pill, 9999px);
+  background: var(--control-track, oklch(89.5% 0 0));
+  isolation: isolate;
+  transition: background-color var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+[data-component="panacode-switch"] [data-slot="switch-control"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--control-on, oklch(23% 0 0));
+  opacity: 0;
+  transition: opacity var(--duration-standard, 0.24s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+[data-component="panacode-switch"][data-checked] [data-slot="switch-control"]::before {
+  opacity: 1;
+}
+
+[data-component="panacode-switch"] [data-slot="switch-thumb"] {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-pill, 9999px);
+  background: var(--control-thumb, oklch(100% 0 0));
+  box-shadow: var(
+    --control-thumb-shadow,
+    0 0 0 0.5px oklch(0% 0 0 / 0.07),
+    0 1px 2px oklch(0% 0 0 / 0.14),
+    0 2px 6px oklch(0% 0 0 / 0.06)
+  );
+  transform: translateX(0);
+  transition:
+    transform var(--duration-standard, 0.24s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
+    background-color var(--duration-standard, 0.24s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1)),
+    width var(--duration-fast, 0.16s) var(--ease-standard, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+[data-component="panacode-switch"][data-checked] [data-slot="switch-thumb"] {
+  transform: translateX(18px);
+  background: var(--control-thumb-on, oklch(100% 0 0));
+}
+
+[data-component="panacode-switch"]:dir(rtl)[data-checked] [data-slot="switch-thumb"] {
+  transform: translateX(-18px);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-component="panacode-switch"]:not([data-checked]):hover:not([data-disabled]) [data-slot="switch-control"] {
+    background: var(--control-track-hover, oklch(86% 0 0));
+  }
+}
+
+[data-component="panacode-switch"]:not([data-disabled]) [data-slot="switch-input"]:focus-visible ~ [data-slot="switch-control"] {
+  outline: 2px solid color-mix(in oklab, var(--accent-strong, currentColor) 72%, transparent);
+  outline-offset: 2px;
+}
+
+[data-component="panacode-switch"] [data-slot="switch-label"] {
+  line-height: var(--leading-body, 1.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="panacode-switch"] [data-slot="switch-control"],
+  [data-component="panacode-switch"] [data-slot="switch-control"]::before,
+  [data-component="panacode-switch"] [data-slot="switch-thumb"] {
+    transition: none;
+  }
+}

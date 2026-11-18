@@ -31,7 +31,8 @@
     "prepare": "husky",
     "random": "echo 'Random script'",
     "sso": "aws sso login --sso-session=opencode --no-browser",
-    "test": "echo 'do not run tests from root' && exit 1"
+    "test": "echo 'do not run tests from root' && exit 1",
+    "panacode:ui-ownership": "bun script/panacode-ui-ownership-check.ts"
   },
   "workspaces": {
     "packages": [

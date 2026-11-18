@@ -1,0 +1,41 @@
+[data-component="panacode-tool-call"] {
+  border: 1px solid var(--border, oklch(93.5% 0 0));
+  border-radius: var(--radius-control, 1.125rem);
+  background: var(--surface-muted, oklch(97.8% 0 0));
+  overflow: hidden;
+}
+
+[data-component="panacode-tool-call"] > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3, 0.75rem);
+  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+[data-component="panacode-tool-call"] > summary::-webkit-details-marker {
+  display: none;
+}
+
+[data-component="panacode-tool-call"] [data-slot="tool-name"] {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+[data-component="panacode-tool-call"] [data-slot="tool-status"] {
+  text-transform: capitalize;
+  color: var(--text-secondary, oklch(46% 0 0));
+}
+
+[data-component="panacode-tool-call"] [data-slot="tool-args"],
+[data-component="panacode-tool-call"] [data-slot="tool-output"],
+[data-component="panacode-tool-call"] [data-slot="tool-error"] {
+  padding: 0 var(--space-4, 1rem) var(--space-3, 0.75rem);
+  font-size: var(--text-sm, 0.875rem);
+}
+
+[data-component="panacode-tool-call"] [data-slot="tool-error"] {
+  color: var(--danger, oklch(53% 0.18 10));
+}

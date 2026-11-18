@@ -1,0 +1,31 @@
+[data-component="panacode-agent-approvals"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 0.75rem);
+}
+
+[data-component="panacode-agent-approvals"] [data-slot="approval"] {
+  border: 1px solid var(--border, oklch(93.5% 0 0));
+  border-radius: var(--radius-panel, 1.625rem);
+  background: var(--surface, oklch(100% 0 0));
+  padding: var(--space-4, 1rem);
+}
+
+[data-component="panacode-agent-approvals"] [data-slot="approval"] header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2, 0.5rem);
+  margin-bottom: var(--space-2, 0.5rem);
+}
+
+[data-component="panacode-agent-approvals"] [data-slot="approval"] h4 {
+  margin: 0;
+  font-size: var(--text-base, 1rem);
+}
+
+[data-component="panacode-agent-approvals"] [data-slot="approval-actions"] {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2, 0.5rem);
+  margin-top: var(--space-3, 0.75rem);
+}

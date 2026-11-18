@@ -1,0 +1,31 @@
+[data-component="panacode-badge"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-pill, 9999px);
+  font-size: var(--text-xs, 0.75rem);
+  letter-spacing: var(--tracking-body, -0.01em);
+  background: var(--surface-muted, oklch(97.8% 0 0));
+  color: var(--text-secondary, oklch(46% 0 0));
+}
+
+[data-component="panacode-badge"][data-tone="success"] {
+  background: color-mix(in oklch, var(--success, oklch(50% 0.12 162)) 16%, transparent);
+  color: var(--success, oklch(50% 0.12 162));
+}
+
+[data-component="panacode-badge"][data-tone="warning"] {
+  background: color-mix(in oklch, var(--warning, oklch(55% 0.12 68)) 16%, transparent);
+  color: var(--warning, oklch(55% 0.12 68));
+}
+
+[data-component="panacode-badge"][data-tone="danger"] {
+  background: color-mix(in oklch, var(--danger, oklch(53% 0.18 10)) 16%, transparent);
+  color: var(--danger, oklch(53% 0.18 10));
+}
+
+[data-component="panacode-badge"][data-tone="info"] {
+  background: color-mix(in oklch, var(--info, oklch(51% 0.11 240)) 16%, transparent);
+  color: var(--info, oklch(51% 0.11 240));
+}
