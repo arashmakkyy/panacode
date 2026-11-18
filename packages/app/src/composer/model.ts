@@ -587,6 +587,18 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       onSelect: () => controller.attach(),
     },
     {
+      // panacode: sends what is in the composer; the reply Retry action rewinds the turn, then runs this.
+      id: "prompt.submit",
+      title: language.t("command.prompt.submit"),
+      category: language.t("command.category.session"),
+      hidden: true,
+      disabled: !available() || blank(),
+      onSelect: () => {
+        if (!available() || blank()) return
+        void submission.submit(new Event("submit"))
+      },
+    },
+    {
       id: "prompt.mode.toggle",
       title: language.t("command.prompt.mode.toggle"),
       category: language.t("command.category.session"),

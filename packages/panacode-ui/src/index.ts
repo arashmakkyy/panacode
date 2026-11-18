@@ -17,7 +17,24 @@ export { Card } from "./primitives/card"
 export { ListRow } from "./primitives/list-row"
 export { Spinner, Skeleton, ScrollArea, ToastRegion, showToast } from "./primitives/feedback"
 export { WindowFrame, TitlebarFrame, SidebarFrame, HomeFrame, EmptyState, LoadingState, ErrorState } from "./shell/frame"
-export { AiChat } from "./features/ai-chat"
+export {
+  ChatReasoning,
+  ChatTools,
+  ChatAction,
+  ChatCopyAction,
+  ChatVersions,
+  ChatReplyActions,
+  ChatStatusLine,
+  ChatError,
+  ChatModelMenu,
+  ChatIcon,
+  defaultChatLabels,
+  hostOf,
+  type ChatLabels,
+  type ChatTool,
+  type ChatSource,
+  type ChatModel,
+} from "./features/ai-chat"
 export { AiComposer } from "./features/ai-composer"
 export { AgentRun } from "./features/agent-run"
 export { AgentOrchestrator } from "./features/agent-orchestrator"

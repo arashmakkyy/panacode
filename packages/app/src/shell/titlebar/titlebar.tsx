@@ -793,7 +793,11 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                     aria-hidden="true"
                                   />
                                 </Show>
-                                {/* panacode: the sidebar header carries the brand; Home moves into the action list. */}
+                                {/* panacode: the sidebar header carries the brand; Home moves into the action list. On Linux
+                                    the titlebar is hidden with vertical tabs, so the app menu moves here with it. */}
+                                <Show when={linux()}>
+                                  <WindowsAppMenu command={command} platform={platform} />
+                                </Show>
                                 <div class="min-w-0 flex-1">
                                   <SidebarBrand />
                                 </div>

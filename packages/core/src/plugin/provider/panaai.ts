@@ -43,6 +43,8 @@ const decodeExchangeError = Schema.decodeUnknownOption(
 
 type Discovered = typeof RemoteModel.Type
 
+const reasoningEfforts = ["low", "medium", "high"] as const
+
 const discovery = new Map<string, { checked: number; apiKey?: string; models?: readonly Discovered[] }>()
 const discoveryLocks = new Map<string, Semaphore.Semaphore>()
 
@@ -166,6 +168,12 @@ export const PanaAIPlugin = define({
             input: ["text"],
             output: ["text"],
           }
+          // panacode: PanaAI models think when asked for an effort (`reasoning_effort`); without one they answer
+          // directly. The efforts are the composer's effort control.
+          model.variants = reasoningEfforts.map((effort) => ({
+            id: Model.VariantID.make(effort),
+            settings: { reasoningEffort: effort },
+          }))
         })
       }
     })

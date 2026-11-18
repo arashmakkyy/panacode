@@ -24,6 +24,7 @@ export function AssistantContent(props: {
   turnTokensPerSecond?: number
   sources?: TurnSources
   onOpenSources?: () => void
+  onRetry?: () => Promise<void> | void
   defaultOpen?: boolean
   reasoningDefaultOpen?: boolean
   toolOpen?: boolean
@@ -43,6 +44,7 @@ export function AssistantContent(props: {
             turnTokensPerSecond={props.turnTokensPerSecond}
             sources={props.sources}
             onOpenSources={props.onOpenSources}
+            onRetry={props.onRetry}
           />
         )}
       </Match>

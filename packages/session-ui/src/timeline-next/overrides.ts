@@ -1,4 +1,5 @@
 import type { Component } from "solid-js"
+import { setTextFooterOverride, type TextFooterProps } from "../message/footer-override"
 import type { ContextGroup } from "./tools/context-group"
 import type { FileGroup } from "./tools/file-group"
 import type { ThoughtRow } from "./tools/thought"
@@ -6,6 +7,7 @@ import type { ThoughtRow } from "./tools/thought"
 export type ContextGroupProps = Parameters<typeof ContextGroup>[0]
 export type FileGroupProps = Parameters<typeof FileGroup>[0]
 export type ThoughtRowProps = Parameters<typeof ThoughtRow>[0]
+
 
 /**
  * Presentation overrides for timeline rows. A downstream app (Panacode) registers replacement components
@@ -15,12 +17,16 @@ export type TimelineOverrides = {
   ContextGroup?: Component<ContextGroupProps>
   FileGroup?: Component<FileGroupProps>
   ThoughtRow?: Component<ThoughtRowProps>
+  TextFooter?: Component<TextFooterProps>
 }
 
 let overrides: TimelineOverrides = {}
 
+export type { TextFooterProps }
+
 export function setTimelineOverrides(next: TimelineOverrides) {
   overrides = { ...overrides, ...next }
+  if ("TextFooter" in next) setTextFooterOverride(next.TextFooter)
 }
 
 export function timelineOverride<K extends keyof TimelineOverrides>(key: K): TimelineOverrides[K] {

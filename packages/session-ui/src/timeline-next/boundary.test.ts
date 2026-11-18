@@ -18,6 +18,7 @@ const switches = [
   // panacode: registers the Arc row overrides for the New timeline.
   "app/src/session/panacode-timeline.tsx",
   "app/src/session/panacode-code-suggestion.tsx",
+  "app/src/session/panacode-chat.tsx",
 ]
 
 // The setting itself and where it is offered.

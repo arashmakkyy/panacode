@@ -1,7 +1,6 @@
 export { toMcpServerViews } from "./mcp-servers"
 export { defaultToolCallCopy, fromOpenCodeTool, toolKind, toolKindMark, toolSubject, toToolCallStatus, type OpenCodeToolLike, type ToolCallCopy, type ToolKind } from "./tool-call"
 export { toAgentRunStatus } from "./agent-run"
-export { toChatMessageViews } from "./ai-chat"
 export { toComposerMode } from "./ai-composer"
 export { fromPermissionRequest, permissionKind, permissionRisk, toPermissionReply, toApprovalDecision } from "./agent-approvals"
 export type { PermissionCopy, PermissionKind, PermissionLike } from "./agent-approvals"

@@ -531,7 +531,9 @@ export function createNextTimelineRowRenderer(input: {
     const turnSourcesValue = createMemo(() => {
       const current = ref()
 
-      if (!sourcesHost?.enabled || !current || copyContentID(row().userMessageID) !== current.partID) return undefined
+      // panacode: an overriding reply footer shows sources without the upstream sources host.
+      if (!(sourcesHost?.enabled || timelineOverride("TextFooter")) || !current || copyContentID(row().userMessageID) !== current.partID)
+        return undefined
 
       const value = turnSources(
         input.projection.assistantMessagesByParent().get(row().userMessageID) ?? emptyAssistantMessages,
@@ -573,6 +575,11 @@ export function createNextTimelineRowRenderer(input: {
                 turnTokensPerSecond={turnTokensPerSecond()}
                 sources={turnSourcesValue()}
                 onOpenSources={() => sourcesHost?.open(row().userMessageID)}
+                onRetry={
+                  input.actions?.revert && latestSent() === row().userMessageID
+                    ? () => input.actions!.revert!({ sessionID: input.sessionID(), messageID: row().userMessageID })
+                    : undefined
+                }
                 defaultOpen={defaultOpen()}
                 toolOpen={input.disclosure.value(disclosureKey()) ?? defaultOpen()}
                 onToolOpenChange={(open) => input.disclosure.set(disclosureKey(), open)}

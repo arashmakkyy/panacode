@@ -15,6 +15,7 @@ import {
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Dynamic } from "solid-js/web"
 import { createMediaQuery } from "@solid-primitives/media"
 import { useData } from "../context"
 import { useDialog } from "@opencode/ui/context/dialog"
@@ -29,6 +30,7 @@ import {
 } from "../components/markdown-session-links"
 import { useMarkdown } from "../context/markdown"
 import { useSources } from "../context/sources"
+import { textFooterOverride } from "./footer-override"
 import { SourcesChip } from "../sources/sources-chip"
 import type { TurnSources } from "../sources/sources"
 import { ImagePreview } from "@opencode/ui/image-preview"
@@ -1151,10 +1153,12 @@ export function AssistantTextContent(props: {
   /** The finished turn's web searches and fetches, shown as a chip in its footer. */
   sources?: TurnSources
   onOpenSources?: () => void
+  onRetry?: () => Promise<void> | void
 }) {
   const data = useData()
   const i18n = useI18n()
   const sourcesHost = useSources()
+  const footerOverride = textFooterOverride()
   const numfmt = createMemo(() => new Intl.NumberFormat(i18n.locale()))
   // A footer that arrives after the reply rendered belongs to a turn that just finished, so its chip fades in.
   let rendered = false
@@ -1221,7 +1225,21 @@ export function AssistantTextContent(props: {
         <div data-slot="text-part-body">
           <PacedMarkdown text={props.text} cacheKey={props.id} streaming={props.message.time.completed === undefined} />
         </div>
-        <Show when={sources()} fallback={<Show when={props.showCopy}>{copyFooter()}</Show>}>
+        <Show when={footerOverride && props.showCopy}>
+          <Dynamic
+            component={footerOverride}
+            id={props.id}
+            text={props.text}
+            message={props.message}
+            turnDurationMs={props.turnDurationMs}
+            turnTokensPerSecond={props.turnTokensPerSecond}
+            sources={props.sources}
+            onOpenSources={props.onOpenSources}
+            onRetry={props.onRetry}
+            interrupted={interrupted()}
+          />
+        </Show>
+        <Show when={!footerOverride && sources()} fallback={<Show when={!footerOverride && props.showCopy}>{copyFooter()}</Show>}>
           {(value) => (
             <div data-slot="text-part-footer">
               <SourcesChip
