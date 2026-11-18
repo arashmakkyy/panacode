@@ -1,3 +1,5 @@
+import { timelineOverride } from "../overrides"
+import { Dynamic } from "solid-js/web"
 import type { SessionMessageAssistant } from "@opencode/client/promise"
 import { Match, Switch } from "solid-js"
 import { AssistantTextContent } from "../../message/message-content"
@@ -46,7 +48,7 @@ export function AssistantContent(props: {
       </Match>
       <Match when={props.content.type === "reasoning" ? props.content : undefined}>
         {(content) => (
-          <ThoughtRow
+          <Dynamic component={timelineOverride("ThoughtRow") ?? ThoughtRow}
             id={props.contentID}
             content={content()}
             streaming={false}

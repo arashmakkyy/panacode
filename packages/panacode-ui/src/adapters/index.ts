@@ -1,5 +1,5 @@
 export { toMcpServerViews } from "./mcp-servers"
-export { toToolCallStatus } from "./tool-call"
+export { defaultToolCallCopy, fromOpenCodeTool, toolKind, toolKindMark, toolSubject, toToolCallStatus, type OpenCodeToolLike, type ToolCallCopy, type ToolKind } from "./tool-call"
 export { toAgentRunStatus } from "./agent-run"
 export { toChatMessageViews } from "./ai-chat"
 export { toComposerMode } from "./ai-composer"

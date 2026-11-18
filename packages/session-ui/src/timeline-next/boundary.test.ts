@@ -12,7 +12,12 @@ const packages = path.resolve(import.meta.dir, "../../..")
 const folder = path.join(packages, "session-ui/src/timeline-next")
 
 // The places that choose which timeline to show.
-const switches = ["app/src/session/timeline/controller.tsx", "app/src/session/timeline/message-timeline.tsx"]
+const switches = [
+  "app/src/session/timeline/controller.tsx",
+  "app/src/session/timeline/message-timeline.tsx",
+  // panacode: registers the Arc row overrides for the New timeline.
+  "app/src/session/panacode-timeline.tsx",
+]
 
 // The setting itself and where it is offered.
 const setting = [

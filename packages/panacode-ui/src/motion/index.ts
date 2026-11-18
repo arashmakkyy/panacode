@@ -18,3 +18,4 @@ export const switchMotion = {
   pressReleaseMs: 250,
 } as const
 export { arcSpring, installMotionTokens, springEasing, springTo, type SpringPreset } from "./arc"
+export { Collapse } from "./presence"

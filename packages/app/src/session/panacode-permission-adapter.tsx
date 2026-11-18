@@ -1,4 +1,4 @@
-import { createSignal, Show } from "solid-js"
+import { createEffect, createSignal, onCleanup, Show } from "solid-js"
 import type { PermissionRequest } from "@opencode/client/promise"
 import {
   AgentApprovals,
@@ -9,6 +9,7 @@ import {
 import { fromPermissionRequest, toPermissionReply, type PermissionCopy } from "@panacode/ui/adapters/agent-approvals"
 import { useLanguage } from "@/runtime/i18n/language"
 import { SessionPermissionDock } from "@/session/requests/session-permission-dock"
+import { markToolWaiting } from "@/session/panacode-tool-state"
 
 // First time each request was shown, and this window's decisions per session (memory only, real events).
 const seen = new Map<string, number>()
@@ -26,6 +27,12 @@ export function PanacodePermissionAdapter(props: {
 }) {
   const language = useLanguage()
   const mode = () => props.presentation ?? "panacode"
+  // The waiting tool row in the transcript shows the approval state while this request is open.
+  createEffect(() => {
+    const callID = props.request.source?.type === "tool" ? props.request.source.id : undefined
+    markToolWaiting(callID, true)
+    onCleanup(() => markToolWaiting(callID, false))
+  })
   const [pending, setPending] = createSignal<{ id: string; decision: ApprovalDecision }>()
 
   const t = (key: string, params?: Record<string, string | number>) =>

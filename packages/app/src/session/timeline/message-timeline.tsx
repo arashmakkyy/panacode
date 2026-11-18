@@ -20,6 +20,8 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { Timeline } from "@opencode/session-ui/timeline/projection"
 import { createSessionTimelineRowRenderer } from "@opencode/session-ui/timeline/row"
 import { createNextTimelineRowRenderer, laneGap, StatusLane, timelineStatus } from "@opencode/session-ui/timeline-next"
+// panacode: Arc Tool Call / Code Suggestion / thinking rows replace the activity rows (timeline overrides).
+import "@/session/panacode-timeline"
 import { getReadyMarkdown, preloadMarkdown } from "@opencode/session-ui/markdown-cache"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
 import type { TimelineFollow } from "./follow"

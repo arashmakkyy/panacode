@@ -29,6 +29,7 @@
     "./features/agent-orchestrator": "./src/features/agent-orchestrator/index.tsx",
     "./features/agent-approvals": "./src/features/agent-approvals/index.tsx",
     "./features/tool-call": "./src/features/tool-call/index.tsx",
+    "./features/tool-call/marks": "./src/features/tool-call/marks.tsx",
     "./features/code-suggestion": "./src/features/code-suggestion/index.tsx",
     "./features/mcp-servers": "./src/features/mcp-servers/index.tsx",
     "./adapters/*": "./src/adapters/*.ts",

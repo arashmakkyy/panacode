@@ -54,6 +54,7 @@ import { noticeEvent, toolEvent } from "./events"
 import { trackNestedRails } from "./nested-rail"
 import { contentEntries, createNextTimelineProjection, resolveContent, workedDuration } from "./projection"
 import { contentOpens, diffOpens, goal as goalMessage, movedInPlace, thoughtOpens, toolRule } from "./rules"
+import { timelineOverride } from "./overrides"
 import { Separator } from "./separator"
 import { timelineGaps } from "./spacing"
 import { AssistantContent } from "./tools/assistant-content"
@@ -381,7 +382,7 @@ export function createNextTimelineRowRenderer(input: {
 
       return (
         <div class="contents" data-notices-only={parts().every((part) => part.type === "notice") ? "" : undefined}>
-          <ContextGroup
+          <Dynamic component={timelineOverride("ContextGroup") ?? ContextGroup}
             parts={parts()}
             patchGroupKey={(tools) => {
               const parts = tools.map((tool) => patchPartKeys.get(tool)!)
@@ -489,7 +490,7 @@ export function createNextTimelineRowRenderer(input: {
       })
 
       return (
-        <FileGroup
+        <Dynamic component={timelineOverride("FileGroup") ?? FileGroup}
           tools={tools()}
           fileOpen={(path) =>
             input.disclosure.value(`${row().group.key}:file:${path}`) ?? diffOpens(input.timelineDetail())
@@ -1226,7 +1227,7 @@ export function createNextTimelineRowRenderer(input: {
             <div data-slot="session-turn-thinking-row" data-live-slot="">
               <Show when={content()}>
                 {(content) => (
-                  <ThoughtRow
+                  <Dynamic component={timelineOverride("ThoughtRow") ?? ThoughtRow}
                     id={current().ref.partID}
                     content={content()}
                     streaming

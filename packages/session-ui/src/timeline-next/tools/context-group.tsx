@@ -1,3 +1,5 @@
+import { timelineOverride } from "../overrides"
+import { Dynamic } from "solid-js/web"
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
 import { AnimatedNumber } from "@opencode/ui/animated-number"
 import { Badge } from "@opencode/ui/badge"
@@ -175,7 +177,7 @@ export function ContextGroup(props: {
         <div data-component="thought-rows" data-timeline-part-ids={props.parts.map((part) => part.id).join(",")}>
           <For each={reasoning()}>
             {(part) => (
-              <ThoughtRow
+              <Dynamic component={timelineOverride("ThoughtRow") ?? ThoughtRow}
                 id={part.id}
                 content={part}
                 streaming={part.streaming ?? false}
@@ -390,11 +392,11 @@ function GroupItem(props: {
         <SkillsItem tools={props.tools} />
       </Match>
       <Match when={changesFiles(tool())}>
-        <FileGroup
+        <Dynamic component={timelineOverride("FileGroup") ?? FileGroup}
           tools={props.tools}
-          fileOpen={props.fileOpen && ((path) => props.fileOpen?.(`${props.patchKey}:${path}`))}
+          fileOpen={props.fileOpen && ((path: string) => props.fileOpen?.(`${props.patchKey}:${path}`))}
           onFileOpenChange={
-            props.onFileOpenChange && ((path, open) => props.onFileOpenChange?.(`${props.patchKey}:${path}`, open))
+            props.onFileOpenChange && ((path: string, open: boolean) => props.onFileOpenChange?.(`${props.patchKey}:${path}`, open))
           }
           onSizeChange={props.onSizeChange}
         />

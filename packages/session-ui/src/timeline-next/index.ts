@@ -8,3 +8,11 @@ export { laneGap } from "./spacing"
 export { timelineStatus } from "./status"
 
 export { StatusLane } from "./status-line"
+
+export { setTimelineOverrides, type TimelineOverrides, type ContextGroupProps, type FileGroupProps, type ThoughtRowProps } from "./overrides"
+
+export { ContextGroup, type ActivityGroupPart } from "./tools/context-group"
+
+export { FileGroup } from "./tools/file-group"
+
+export { ThoughtRow } from "./tools/thought"

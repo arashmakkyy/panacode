@@ -443,7 +443,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setFoldUserMessages(value: boolean) {
           setStore("general", "foldUserMessages", value)
         },
-        newTimeline: withFallback(() => store.general?.newTimeline, false),
+        newTimeline: withFallback(() => store.general?.newTimeline, true /* panacode: Arc rows hook into the new timeline */),
         setNewTimeline(value: boolean) {
           setStore("general", "newTimeline", value)
         },
