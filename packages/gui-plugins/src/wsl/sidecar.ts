@@ -43,7 +43,7 @@ export async function spawnWslSidecar(
     "export OPENCODE_CLIENT=desktop",
     `export OPENCODE_SERVER_PASSWORD=${shellEscape(password)}`,
     'export XDG_STATE_HOME="$HOME/.local/state"',
-    `exec ${shellEscape(panacode)} --log-level ${opts.packaged ? "warn" : "info"} serve --hostname 0.0.0.0 --port ${port}`,
+    `exec ${shellEscape(opencode)} --log-level ${opts.packaged ? "warn" : "info"} serve --hostname 0.0.0.0 --port ${port}`,
   ].join("\n")
 
   const child = spawn("wsl", wslArgs(["bash", "-se"], distro), {
