@@ -157,6 +157,7 @@ Internal package names `@opencode/*` remain for upstream compatibility.
 | `packages/app/src/session/requests/model.ts`, `permission-machine.ts` | Shared integration boundary | `decide(decision, message?)`: a rejection can carry a note (Agent Run "Send back"); the reply sends `message` | Low | Re-add the optional `message` field |
 | `packages/app/src/session/panacode-agent-run.tsx` | Panacode-owned | Builds the run from the turn's messages, permission request and tool state | None | Keep ours |
 | `packages/app/src/session/panacode-orchestrator.tsx` | Panacode-owned | Arc Agent Orchestrator for a turn with `subagent`/`task` calls: each call is a lane, its child session (`data.session.message.list/status`) the worker; Stop interrupts the lead and running children | None | Keep ours |
+| `packages/app/src/settings/panacode-mcp-panel.tsx` | Panacode-owned | Arc MCP Servers on real state: server list/status, config entry (transport, credential-free endpoint), resource catalog, shared MCP controller (connect, disconnect, sign-in), `experimental.mcp.add/remove` (runtime only, not written to config) | None | Keep ours |
 | `packages/panacode-ui/src/theme/tokens.css` (`--series-2..4`) | Panacode-owned | Lane colors for the orchestrator (violet, amber, teal tones) | None | Keep ours |
 | `packages/app/src/composer/composer.tsx` | Shared integration boundary | Model chip provider wrapped in `data-slot="composer-model-provider"` so a narrow composer hides it | Low | Re-wrap |
 | `packages/app/src/runtime/i18n/en.ts` (`command.provider.connect.description`) | Panacode copy | "Sign in to PanaAI or another model provider" | Low | Keep ours |
@@ -189,7 +190,7 @@ Status, stated honestly. Rows marked Ported are full Arc ports wired to real ses
 | Agent Approvals | permission dock | `features/agent-approvals` | `adapters/agent-approvals.ts` | `panacode-permission-adapter.tsx` | Previous attempt. Still low fidelity. Not revisited in stage 1 |
 | Tool Call | `session-ui` tools | `features/tool-call` | `adapters/tool-call.ts` | `panacode-timeline.tsx` | Ported |
 | Code Suggestion | review | `features/code-suggestion` | `adapters/code-suggestion.ts` | `panacode-code-suggestion.tsx` | Ported |
-| MCP Servers | settings extensions | `features/mcp-servers` | `adapters/mcp-servers.ts` | `panacode-mcp-panel.tsx` | Previous attempt. Still low fidelity. Not revisited in stage 1 |
+| MCP Servers | settings extensions | `features/mcp-servers` | `adapters/mcp-servers.ts` | `panacode-mcp-panel.tsx` | Ported. No per-tool switches or token budget: the API reports neither |
 | Switch | `@opencode/ui/switch` | `primitives/switch.tsx` | — | primitive has the Arc spring; CSS bridge matches geometry for existing call sites | Stage 1 |
 
 External deps of `@panacode/ui`: `@kobalte/core`, `@opencode/ui` (workspace), `solid-js` peer. **No React.**

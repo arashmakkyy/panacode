@@ -7,18 +7,28 @@ import { toOrchestratorLanes } from "./agent-orchestrator"
 import { toApprovalDecision } from "./agent-approvals"
 
 describe("panacode adapters", () => {
-  test("maps MCP server status into presentation views", () => {
-    expect(
-      toMcpServerViews([
-        { name: "fs", status: { status: "connected" } },
+  test("maps MCP server status, config and resources into rows", () => {
+    const rows = toMcpServerViews(
+      [
+        { name: "github", status: { status: "connected" } },
         { name: "broken", status: { status: "failed", error: "timeout" } },
         { name: "off", status: { status: "disabled" } },
-      ]),
-    ).toEqual([
-      { id: "fs", name: "fs", enabled: true, connected: true, error: undefined },
-      { id: "broken", name: "broken", enabled: true, connected: false, error: "timeout" },
-      { id: "off", name: "off", enabled: false, connected: false, error: undefined },
-    ])
+        { name: "slow", status: { status: "connected" } },
+      ],
+      {
+        config: (name) =>
+          name === "github"
+            ? { type: "remote", url: "https://user:pw@api.githubcopilot.com/mcp/?token=secret" }
+            : { type: "local", command: ["npx", "-y", "@acme/server", "--key", "secret"] },
+        resources: [{ server: "github", name: "README", uri: "repo://readme" }],
+        busy: (name) => name === "slow",
+      },
+    )
+    expect(rows.map((row) => row.status)).toEqual(["connected", "error", "disabled", "connecting"])
+    expect(rows[0]).toMatchObject({ brand: "github", transport: "remote", endpoint: "https://api.githubcopilot.com/mcp/" })
+    expect(rows[0]?.resources).toEqual([{ name: "README", uri: "repo://readme", description: undefined }])
+    expect(rows[1]).toMatchObject({ transport: "local", endpoint: "npx -y", error: "timeout" })
+    expect(JSON.stringify(rows)).not.toContain("secret")
   })
 
   test("normalizes tool and agent statuses", () => {
