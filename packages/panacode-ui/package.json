@@ -32,7 +32,8 @@
     "./features/code-suggestion": "./src/features/code-suggestion/index.tsx",
     "./features/mcp-servers": "./src/features/mcp-servers/index.tsx",
     "./adapters/*": "./src/adapters/*.ts",
-    "./features/providers": "./src/features/providers/index.tsx"
+    "./features/providers": "./src/features/providers/index.tsx",
+    "./icons": "./src/icons/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

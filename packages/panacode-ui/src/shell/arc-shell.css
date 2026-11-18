@@ -124,12 +124,21 @@
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
-/* ---------- main panels ---------- */
+/* ---------- main panels: no inset card (Arc: page on --background, hairlines between panes) ---------- */
+[data-brand="panacode"] main {
+  --shell-inline-inset: 0px;
+  --shell-bottom-inset: 0px;
+  --shell-top-inset: 0px;
+  border-inline-start: 1px solid var(--border-subtle);
+  background: var(--background);
+}
+
 [data-brand="panacode"] [data-component="new-session"],
-[data-brand="panacode"] [data-panacode-shell="home"] {
-  background: var(--surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-panel);
+[data-brand="panacode"] [data-panacode-shell="home"],
+[data-brand="panacode"] main [class*="rounded-[10px]"] {
+  background: var(--background);
+  border: 0;
+  border-radius: 0;
   box-shadow: none;
 }
 
@@ -222,7 +231,7 @@
   transition:
     background-color var(--duration-fast) var(--ease-standard),
     color var(--duration-fast) var(--ease-standard),
-    transform var(--duration-fast) var(--ease-standard);
+    transform var(--spring-snappy-duration, 260ms) var(--spring-snappy, ease);
 }
 
 [data-brand="panacode"] [data-action="composer-submit"]:not([data-disabled]):not(:disabled) {
@@ -342,4 +351,48 @@
 [data-brand="panacode"] .model-dialog [role="option"] {
   min-height: 36px;
   border-radius: 10px;
+}
+
+/* Anchor the model menu to the composer's model pill (CSS anchor positioning), like the Arc composer popover. */
+[data-brand="panacode"] form[data-component="composer"] [data-action="composer-model"] {
+  anchor-name: --panacode-model-pill;
+}
+
+[data-brand="panacode"] form[data-component="composer"] {
+  anchor-name: --panacode-composer;
+}
+
+/* A popover, not a modal: no scrim behind the model menu. */
+[data-brand="panacode"]:has(.model-dialog) [data-component="dialog-overlay"] {
+  background: transparent;
+  backdrop-filter: none;
+}
+
+@supports (position-anchor: --a) {
+  [data-brand="panacode"] [data-component="dialog-v2"]:has(.model-dialog) [data-slot="dialog-container"] {
+    position: fixed;
+    position-anchor: --panacode-model-pill;
+    inset: auto;
+    bottom: calc(anchor(--panacode-composer top) + 8px);
+    left: anchor(left);
+    margin: 0;
+    transform-origin: bottom left;
+    position-try-fallbacks: flip-block;
+    animation: panacode-pop-in var(--spring-snappy-duration, 260ms) var(--spring-snappy, ease-out) both;
+  }
+}
+
+@keyframes panacode-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+
+/* Kbd caps in title case ("Ctrl T"), never uppercase. */
+[data-brand="panacode"] kbd,
+[data-brand="panacode"] [data-component="keybind"],
+[data-brand="panacode"] [data-slot="keybind"],
+[data-brand="panacode"] [data-slot="keybind-v2-label"] {
+  text-transform: none;
 }

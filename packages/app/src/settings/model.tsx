@@ -4,6 +4,10 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { Effect, Option, Predicate, Schema, SchemaGetter } from "effect"
 import { createSimpleContext } from "@opencode/ui/context"
 import { setNewIcons } from "@opencode/ui/icon"
+// panacode: lucide artwork for every <Icon> (Arc icon rule); must load before the first icon mounts.
+import "@panacode/ui/icons"
+// panacode: Arc spring timings as CSS easings (--spring-snappy/smooth/morph).
+import "@panacode/ui/motion"
 import { timelinePresets, type TimelineCategory, type TimelineDetail } from "@opencode/session-ui/timeline/detail"
 import { persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
@@ -316,7 +320,7 @@ export const defaultSettings: Settings = {
     mobileTitlebarPosition: "top",
     followUpBehavior: "steer",
   },
-  appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "vertical", reduceMotion: "system" },
+  appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "inbox", reduceMotion: "system" },
   keybinds: {},
   permissions: { autoApprove: false, autoApproveProjects: {} },
   workspaces: { defaultDestination: "last-used", lastUsed: {} },
