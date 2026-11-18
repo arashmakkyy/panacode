@@ -1,4 +1,5 @@
 @import "./arc-shell.css";
+@import "./arc-palette.css";
 /* Stage 1 shell. Selectors are the real slots the app renders
  * (titlebar-v2, vertical-tabs-sidebar, home-panel, home-session-row).
  * Arc tokens come from [data-brand="panacode"] and follow data-color-scheme.

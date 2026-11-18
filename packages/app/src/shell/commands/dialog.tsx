@@ -5,9 +5,10 @@ import { Dialog, DialogBody } from "@opencode/ui/dialog"
 import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { SearchHighlight, SearchList, type SearchListRow } from "@opencode/ui/search-list"
-import { createMemo, Match, Show, Switch } from "solid-js"
+import { createMemo, Match, onCleanup, onMount, Show, Switch } from "solid-js"
+import { glideHighlight } from "@panacode/ui/motion"
 import { createStore } from "solid-js/store"
-import { formatKeybindParts } from "@/shell/commands/command"
+import { DEFAULT_PALETTE_KEYBIND, formatKeybindParts } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useTabs } from "@/shell/tabs/tabs"
 import { ActivityRing } from "@opencode/ui/activity-ring"
@@ -90,10 +91,25 @@ export function CommandPaletteView(props: {
     open: sessionOpen,
   })
 
+  // Panacode: Arc's palette glides one highlight between rows and shows its own shortcut in the search row.
+  let body: HTMLDivElement | undefined
+  onMount(() => {
+    if (!body) return
+    const stop = glideHighlight(body, { active: "data-active", within: '[data-slot="search-list-results"]' })
+    onCleanup(stop)
+  })
+  const paletteKeys = formatKeybindParts(DEFAULT_PALETTE_KEYBIND, language.t)
+
   return (
     <Dialog class="command-palette command-palette-compact" size="large" fit>
       <DialogBody class="command-palette-body">
+        <div ref={body} class="contents">
         <SearchList
+          trailing={
+            <span class="pc-palette-key" aria-hidden="true">
+              {paletteKeys.join(" ")}
+            </span>
+          }
           query={store.query}
           onQuery={(query) => setStore("query", query)}
           placeholder={props.placeholder}
@@ -137,8 +153,24 @@ export function CommandPaletteView(props: {
             )
           }}
         </SearchList>
+        </div>
       </DialogBody>
     </Dialog>
+  )
+}
+
+/** Arc rows lead with an icon: lucide command for commands, settings for settings (stroke 1.75). */
+function PaletteGlyph(props: { setting: boolean }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+      <Show
+        when={props.setting}
+        fallback={<path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3" />}
+      >
+        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+        <circle cx="12" cy="12" r="3" />
+      </Show>
+    </svg>
   )
 }
 
@@ -179,6 +211,9 @@ function PaletteRow(props: {
       >
         <Match when={props.item.type === "command" || props.item.type === "setting"}>
           <div class="command-palette-row-main">
+            <span class="pc-palette-icon" aria-hidden="true">
+              <PaletteGlyph setting={props.item.type === "setting"} />
+            </span>
             <div class="command-palette-row-text">
               <span class="command-palette-title palette-menu-title" dir="auto">
                 <SearchHighlight text={props.item.title} />
