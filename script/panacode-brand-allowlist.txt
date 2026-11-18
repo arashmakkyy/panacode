@@ -68,3 +68,4 @@ opencode-drafts
 opencode.settings
 opencode.updater
 opencode.last-route
+shellEscape(opencode)
