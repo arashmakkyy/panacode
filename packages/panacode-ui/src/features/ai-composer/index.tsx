@@ -66,3 +66,11 @@ export function AiComposer(props: AiComposerProps) {
 }
 
 export { ComposerHero, SuggestionChips, type ComposerSuggestion } from "./hero"
+export {
+  SendButton,
+  EffortMenu,
+  AttachmentChip,
+  type SendState,
+  type EffortOption,
+  type AttachmentStatus,
+} from "./parts"

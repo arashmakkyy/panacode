@@ -162,11 +162,11 @@ function ComposerModelControl(props: {
       <span class="flex min-w-0 whitespace-nowrap leading-4">
         <Show when={props.label.provider}>
           {(name) => (
-            <>
+            <span data-slot="composer-model-provider" class="contents">
               <bdi class="min-w-0 shrink-[2] truncate text-v2-text-text-faint">{name()}</bdi>
               <Slash />
               <span class="sr-only">{" / "}</span>
-            </>
+            </span>
           )}
         </Show>
         <bdi class="min-w-0 truncate">{props.label.model}</bdi>

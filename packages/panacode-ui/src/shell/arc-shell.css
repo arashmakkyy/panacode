@@ -198,12 +198,12 @@
   color: var(--foreground);
 }
 
-[data-brand="panacode"] form[data-component="composer"] [data-action="composer-model"] bdi:last-of-type {
+[data-brand="panacode"] form[data-component="composer"] [data-action="composer-model"] > span > bdi {
   font-weight: 500;
   color: var(--foreground);
 }
 
-[data-brand="panacode"] form[data-component="composer"] [data-action="composer-model"] bdi:first-of-type {
+[data-brand="panacode"] form[data-component="composer"] [data-action="composer-model"] [data-slot="composer-model-provider"] bdi {
   color: var(--text-muted);
 }
 
@@ -220,27 +220,17 @@
   background: var(--aic-press);
 }
 
-/* .aic-send: muted circle while empty, accent when ready */
-[data-brand="panacode"] [data-action="composer-submit"] {
-  width: var(--control-height-sm) !important;
-  height: var(--control-height-sm) !important;
-  border-radius: var(--radius-pill) !important;
-  background: var(--surface-muted) !important;
-  color: var(--text-muted) !important;
-  box-shadow: none !important;
-  transition:
-    background-color var(--duration-fast) var(--ease-standard),
-    color var(--duration-fast) var(--ease-standard),
-    transform var(--spring-snappy-duration, 260ms) var(--spring-snappy, ease);
+/* The send button is the Arc SendButton (features/ai-composer/parts.tsx), styled by its own sheet. */
+
+/* A narrow composer drops the provider so the model name stays whole (Arc shows the model alone). */
+[data-brand="panacode"] form[data-component="composer"] {
+  container: pc-composer / inline-size;
 }
 
-[data-brand="panacode"] [data-action="composer-submit"]:not([data-disabled]):not(:disabled) {
-  background: var(--accent) !important;
-  color: var(--accent-foreground) !important;
-}
-
-[data-brand="panacode"] [data-action="composer-submit"]:not([data-disabled]):not(:disabled):active {
-  transform: scale(0.92);
+@container pc-composer (max-width: 640px) {
+  [data-brand="panacode"] [data-action="composer-model"] [data-slot="composer-model-provider"] {
+    display: none;
+  }
 }
 
 /* ---------- settings ---------- */

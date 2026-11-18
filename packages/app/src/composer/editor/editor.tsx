@@ -23,15 +23,16 @@ import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Loader } from "@opencode/ui/loader"
 import { ProviderModelIcon } from "@/providers/models/provider-group"
+import { useLanguage } from "@/runtime/i18n/language"
+import { AttachmentChip, EffortMenu, SendButton } from "@panacode/ui/features/ai-composer"
+import { ChatIcon } from "@panacode/ui/features/ai-chat"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Button } from "@opencode/ui/button"
 import { Keybind } from "@opencode/ui/keybind"
 import { Menu } from "@opencode/ui/menu"
 import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { AttachmentCard } from "@opencode/session-ui/attachment-card"
 import { useMarkdown } from "@opencode/session-ui/context/markdown"
-import { ProgressCircle } from "@opencode/ui/progress-circle"
 import type { Upload } from "../attachments/uploads"
 import { CommentCard, commentCardTarget, quoteTooltip } from "@opencode/session-ui/comment-card"
 import { typeLabel } from "@opencode/session-ui/message-file"
@@ -72,13 +73,13 @@ const MobilePanelDrawer = lazy(async () => {
 
 type ComposerMode = "normal" | "shell"
 
-const COMPOSER_SUGGESTION_MAX_HEIGHT = 320
+const COMPOSER_SUGGESTION_MAX_HEIGHT = 280
 
-const COMPOSER_SUGGESTION_ROW_HEIGHT = 28
+const COMPOSER_SUGGESTION_ROW_HEIGHT = 44
 
 const COMPOSER_SUGGESTION_ROW_PEEK = 18
 
-const COMPOSER_SUGGESTION_TOP_PADDING = 6
+const COMPOSER_SUGGESTION_TOP_PADDING = 5
 
 const COMPOSER_SUGGESTION_SEARCH_HEIGHT = 28
 
@@ -497,13 +498,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
                 <Show when={view.variant} keyed>
                   {(control) => (
                     <Show when={control.options().length > 1}>
-                      <ComposerEditorConfiguredSelect
-                        mobileDrawer
-                        title={i18n.t("ui.promptInput.chooseVariant")}
-                        keybind={["Shift", "Mod", "D"]}
-                        control={control}
-                        class={control.current() === "default" ? "composer-variant-default" : undefined}
-                      />
+                      <ComposerEditorEffort control={control} />
                     </Show>
                   )}
                 </Show>
@@ -825,31 +820,21 @@ function ComposerAttachments(props: {
           </For>
           <For each={props.files ?? []}>
             {(file) => (
-              <div class="relative group shrink-0" data-slot="composer-context-file">
-                <Tooltip value={file.path} placement="top" contentClass="break-all">
-                  <AttachmentCard title={file.name ?? getFilename(file.path)} surface="base">
-                    <FileIcon node={{ path: file.path, type: "file" }} />
-                    <span>
-                      {typeLabel(file.name ?? file.path, "text/plain", i18n.t("ui.common.file"))}
-                      <Show when={file.selection}>
-                        {(selection) =>
-                          selection().startLine === selection().endLine
-                            ? `:${selection().startLine}`
-                            : `:${selection().startLine}-${selection().endLine}`
-                        }
-                      </Show>
-                    </span>
-                  </AttachmentCard>
-                </Tooltip>
-                <button
-                  type="button"
-                  onClick={() => props.onFileRemove?.(file)}
-                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
-                  aria-label={props.removeLabel}
-                >
-                  <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
-                </button>
-              </div>
+              <AttachmentChip
+                status="ready"
+                name={file.name ?? getFilename(file.path)}
+                meta={
+                  typeLabel(file.name ?? file.path, "text/plain", i18n.t("ui.common.file")) +
+                  (file.selection
+                    ? file.selection.startLine === file.selection.endLine
+                      ? `:${file.selection.startLine}`
+                      : `:${file.selection.startLine}-${file.selection.endLine}`
+                    : "")
+                }
+                glyph={<FileIcon node={{ path: file.path, type: "file" }} />}
+                removeLabel={props.removeLabel}
+                onRemove={() => props.onFileRemove?.(file)}
+              />
             )}
           </For>
           <For each={props.attachments}>
@@ -862,65 +847,30 @@ function ComposerAttachments(props: {
               const missing = () => url.state === "errored" || (url.state === "ready" && !url())
 
               return (
-                <div class="relative group shrink-0">
-                  <Tooltip
-                    value={attachment.type === "path" ? attachment.path : attachment.filename}
-                    placement="top"
-                    contentClass="break-all"
-                  >
-                    <Show
-                      when={image && !missing()}
-                      fallback={
-                        <AttachmentCard title={attachment.filename}>
-                          {typeLabel(attachment.filename, attachment.mime, i18n.t("ui.common.file"))}
-                        </AttachmentCard>
-                      }
-                    >
-                      <Show when={src()} fallback={<div class="w-[58px] h-[46px]" />}>
-                        {(value) => (
-                          <img
-                            src={value()}
-                            alt={attachment.filename}
-                            class="w-[58px] h-[46px] rounded-[6px] object-cover"
-                            onClick={(event) => props.onAttachmentClick?.(attachment, event.currentTarget)}
-                          />
-                        )}
-                      </Show>
-                      <div class="absolute inset-0 rounded-[6px] shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)] pointer-events-none" />
-                    </Show>
-                  </Tooltip>
-                  <button
-                    type="button"
-                    onClick={() => props.onAttachmentRemove(attachment)}
-                    class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
-                    aria-label={props.removeLabel}
-                  >
-                    <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
-                  </button>
-                </div>
+                <AttachmentChip
+                  status="ready"
+                  name={attachment.filename}
+                  meta={typeLabel(attachment.filename, attachment.mime, i18n.t("ui.common.file"))}
+                  thumb={image && !missing() ? src() : undefined}
+                  glyph={<ChatIcon name={image ? "image" : "file"} />}
+                  removeLabel={props.removeLabel}
+                  onOpen={image ? (element) => props.onAttachmentClick?.(attachment, element) : undefined}
+                  onRemove={() => props.onAttachmentRemove(attachment)}
+                />
               )
             }}
           </For>
           <For each={props.uploads ?? []}>
             {(upload) => (
-              <div class="relative group shrink-0" data-slot="composer-upload">
-                <Tooltip value={upload.filename} placement="top" contentClass="break-all">
-                  <AttachmentCard title={upload.filename}>
-                    <span class="inline-flex items-center gap-1">
-                      <ProgressCircle percentage={percent(upload)} />
-                      {i18n.t("ui.promptInput.uploading", { percent: percent(upload) })}
-                    </span>
-                  </AttachmentCard>
-                </Tooltip>
-                <button
-                  type="button"
-                  onClick={() => props.onUploadCancel?.(upload)}
-                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
-                  aria-label={i18n.t("ui.promptInput.cancelUpload")}
-                >
-                  <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
-                </button>
-              </div>
+              <AttachmentChip
+                status="uploading"
+                name={upload.filename}
+                progress={percent(upload) / 100}
+                uploadingLabel={(value) => i18n.t("ui.promptInput.uploading", { percent: value })}
+                glyph={<ChatIcon name="file" />}
+                removeLabel={i18n.t("ui.promptInput.cancelUpload")}
+                onRemove={() => props.onUploadCancel?.(upload)}
+              />
             )}
           </For>
         </div>
@@ -1307,7 +1257,7 @@ function ComposerEditorPopover(props: {
     <div
       ref={container}
       data-component="composer-suggestions"
-      class="absolute inset-x-0 -top-2 z-40 flex -translate-y-full scroll-pb-[18px] flex-col rounded-xl bg-v2-background-bg-base p-1.5 shadow-[var(--v2-elevation-raised)] no-scrollbar"
+      class="pc-aic-pop absolute inset-x-0 -top-2 z-40 flex -translate-y-full scroll-pb-[18px] flex-col rounded-xl bg-v2-background-bg-base p-1.5 shadow-[var(--v2-elevation-raised)] no-scrollbar"
       classList={{ "overflow-auto": !props.history, "overflow-hidden": !!props.history }}
       style={{ "max-height": `${store.maxHeight}px` }}
       onMouseDown={(event) => event.preventDefault()}
@@ -1406,24 +1356,26 @@ function ComposerEditorPopover(props: {
                 type="button"
                 data-suggestion-id={item().id}
                 data-active={active(item().id) ? "" : undefined}
-                class="flex h-7 w-full shrink-0 items-center gap-2 rounded-md px-2 py-1 text-start"
-                classList={{ "bg-v2-overlay-simple-overlay-hover": active(item().id) }}
+                aria-selected={active(item().id)}
+                class="pc-aic-option"
                 onPointerMove={(event) => {
                   if (event.movementX || event.movementY) props.onActiveChange(item())
                 }}
                 onClick={() => props.onSelect(item())}
               >
-                <div class="flex min-w-0 flex-1 items-center gap-2">
+                <span class="pc-aic-optionGlyph">
                   <ComposerSuggestionIcon item={item()} />
-                  <bdi dir="auto" class="shrink-0 text-v2-text-text-base">
+                </span>
+                <span class="pc-aic-optionText">
+                  <bdi dir="auto" class="pc-aic-optionLabel">
                     {item().label}
                   </bdi>
                   <Show when={item().description}>
-                    <span class="min-w-0 truncate text-v2-text-text-muted">{item().description}</span>
+                    <span class="pc-aic-optionHint">{item().description}</span>
                   </Show>
-                </div>
+                </span>
                 <Show when={item().keybind?.length}>
-                  <span class="shrink-0 text-v2-text-text-muted">{item().keybind?.join("+")}</span>
+                  <span class="pc-aic-optionKbd">{item().keybind?.join("+")}</span>
                 </Show>
               </button>
             )}
@@ -1524,42 +1476,54 @@ function ComposerEditorSubmitButton(props: {
   onSubmit: () => void
   onStop: () => void
 }) {
+  // The Arc send button: muted while empty, accent when ready, and the stop square inside a spinning ring while the
+  // turn runs (a live reply has no known length, so the ring spins rather than fills).
+  const held = () => !!props.busy && !props.stopping
   return (
     <Tooltip
       placement="top"
       inactive={!props.stopping && props.disabled}
       value={props.stopping ? props.stopLabel : props.sendLabel}
     >
-      <IconButton
+      <SendButton
         data-action="composer-submit"
-        type="button"
+        state={props.stopping ? "generating" : props.disabled ? "empty" : "ready"}
+        held={held()}
+        progress={null}
+        label={props.stopping ? props.stopLabel : props.sendLabel}
+        aria-busy={held()}
         disabled={!props.stopping && props.disabled}
         tabIndex={props.mode === "normal" ? undefined : -1}
-        icon={
-          props.busy && !props.stopping ? (
-            <Loader class="size-4" />
-          ) : (
-            <Icon name={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"} />
-          )
-        }
-        aria-busy={props.busy && !props.stopping}
-        variant="submit"
-        class="size-7 rounded-md p-[6px]"
-        aria-label={props.stopping ? props.stopLabel : props.sendLabel}
-        onClick={(event) => {
-          event.preventDefault()
-          event.stopPropagation()
-
-          if (props.stopping) {
-            props.onStop()
-
-            return
-          }
-
-          props.onSubmit()
-        }}
+        onSend={props.onSubmit}
+        onStop={props.onStop}
       />
     </Tooltip>
+  )
+}
+
+// The Arc effort control: the model's variants as one segmented row under an "Effort" head with a hint per level.
+function ComposerEditorEffort(props: { control: ComposerSelectControl }) {
+  const language = useLanguage()
+  const hint = (id: string) => {
+    const key = `panacode.effort.hint.${id}`
+    return language.t(key as Parameters<typeof language.t>[0]) || undefined
+  }
+  const label = (id: string, fallback: string) => {
+    const key = `panacode.effort.level.${id}`
+    return language.t(key as Parameters<typeof language.t>[0]) || fallback
+  }
+  return (
+    <EffortMenu
+      heading={language.t("panacode.effort.heading")}
+      label={language.t("panacode.effort.choose")}
+      value={props.control.current()}
+      options={props.control.options().map((option) => ({
+        id: option.id,
+        label: label(option.id, option.label),
+        hint: hint(option.id),
+      }))}
+      onChange={props.control.onSelect}
+    />
   )
 }
 
@@ -1725,7 +1689,7 @@ function ComposerSuggestionIcon(props: { item: ComposerSuggestion }) {
 
   if (props.item.kind === "skill") return <Icon name="post-skill" size="small" class="shrink-0" />
 
-  if (props.item.kind === "command") return null
+  if (props.item.kind === "command") return <ChatIcon name="slash" size={16} />
 
   return (
     <FileIcon

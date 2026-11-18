@@ -1,0 +1,521 @@
+/* Arc AI Composer parts (replicate-arc-ai-composer ai-composer.css), classes prefixed pc-aic-. */
+
+/* ------------------------------------------------------------ send / stop */
+.pc-aic-send {
+  --pc-aic-size: var(--control-height-sm, 32px);
+  position: relative;
+  display: grid;
+  width: var(--pc-aic-size);
+  height: var(--pc-aic-size);
+  flex: none;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  cursor: default;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard),
+    transform var(--spring-snappy-duration, 0.2s) var(--spring-snappy, var(--ease-standard));
+}
+.pc-aic-send[data-state="ready"] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+  cursor: pointer;
+}
+.pc-aic-send[data-state="generating"] {
+  color: var(--foreground);
+  cursor: pointer;
+}
+.pc-aic-send[data-pressed] {
+  transform: scale(0.92);
+}
+@media (hover: hover) and (pointer: fine) {
+  .pc-aic-send[data-state="ready"]:hover {
+    background: var(--accent-strong);
+  }
+  .pc-aic-send[data-state="generating"]:hover {
+    background: color-mix(in oklab, var(--surface-muted), var(--foreground) 8%);
+  }
+}
+.pc-aic-send:focus-visible {
+  outline: 2px solid var(--focus-ring, var(--accent));
+  outline-offset: 2px;
+}
+.pc-aic-sendGlyph {
+  display: grid;
+  grid-area: 1 / 1;
+  place-items: center;
+}
+.pc-aic-sendGlyph svg {
+  width: 18px;
+  height: 18px;
+}
+.pc-aic-stopGlyph {
+  display: block;
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  background: currentColor;
+}
+.pc-aic-arrowIn {
+  animation: pc-aic-arrow-in var(--spring-snappy-duration, 0.2s) var(--spring-snappy, var(--ease-standard)) both;
+}
+.pc-aic-stopIn {
+  animation: pc-aic-stop-in var(--spring-snappy-duration, 0.2s) var(--spring-snappy, var(--ease-standard)) both;
+}
+@keyframes pc-aic-arrow-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+@keyframes pc-aic-stop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+    border-radius: 8px;
+  }
+}
+.pc-aic-sendRing {
+  position: absolute;
+  inset: -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  overflow: visible;
+  pointer-events: none;
+  transform: rotate(-90deg);
+}
+.pc-aic-sendRing[data-spin] {
+  animation: pc-aic-ring-spin 1.1s linear infinite;
+}
+@keyframes pc-aic-ring-spin {
+  from {
+    transform: rotate(-90deg);
+  }
+  to {
+    transform: rotate(270deg);
+  }
+}
+.pc-aic-sendTrack,
+.pc-aic-sendArc {
+  fill: none;
+  stroke-width: 1.5;
+  opacity: 0;
+  transition: opacity var(--duration-standard, 0.24s) var(--ease-standard);
+}
+.pc-aic-sendTrack {
+  stroke: var(--border);
+}
+.pc-aic-sendArc {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  transition:
+    opacity var(--duration-standard, 0.24s) var(--ease-standard) 0.12s,
+    stroke-dashoffset 0.6s linear;
+}
+.pc-aic-sendTrack[data-on],
+.pc-aic-sendArc[data-on] {
+  opacity: 1;
+  transition-delay: 0s;
+}
+
+/* --------------------------------------------------------- model / effort */
+.pc-aic-modelChip {
+  display: inline-flex;
+  height: var(--control-height-sm, 32px);
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 10px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--duration-instant) var(--ease-standard);
+}
+@media (hover: hover) and (pointer: fine) {
+  .pc-aic-modelChip:hover {
+    background: color-mix(in oklab, var(--foreground) 6%, transparent);
+  }
+}
+.pc-aic-modelChip:active,
+.pc-aic-modelChip[data-expanded] {
+  background: color-mix(in oklab, var(--foreground) 10%, transparent);
+}
+.pc-aic-modelEffort {
+  color: var(--text-muted);
+}
+.pc-aic-chevron {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--text-muted);
+  transition: transform var(--spring-snappy-duration, 0.2s) var(--spring-snappy, var(--ease-standard));
+}
+.pc-aic-modelChip[data-expanded] .pc-aic-chevron {
+  transform: rotate(180deg);
+}
+.pc-aic-menu {
+  z-index: 60;
+  min-width: 13.5rem;
+  max-width: min(19rem, calc(100vw - 24px));
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-floating);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-body);
+  line-height: var(--leading-body);
+  outline: none;
+  transform-origin: var(--kb-menu-content-transform-origin);
+  animation: pc-aic-menu-in var(--spring-snappy-duration, 0.2s) var(--spring-snappy, var(--ease-enter)) both;
+}
+.pc-aic-menu[data-closed] {
+  animation: pc-aic-menu-out 0.13s var(--ease-standard) both;
+}
+@keyframes pc-aic-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px) scale(0.97);
+  }
+}
+@keyframes pc-aic-menu-out {
+  to {
+    opacity: 0;
+    transform: translateY(2.5px) scale(0.985);
+  }
+}
+.pc-aic-effortMenu {
+  width: 18.5rem;
+}
+.pc-aic-effortHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 11px;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+.pc-aic-effortHint {
+  color: var(--text-muted);
+}
+.pc-aic-effortRow {
+  --pc-aic-gap: 2px;
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: repeat(var(--pc-aic-effort-count, 4), minmax(0, 1fr));
+  gap: var(--pc-aic-gap);
+  margin: 0 2px 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius-panel) - 9px);
+  background: var(--surface-muted);
+}
+.pc-aic-effortThumb {
+  position: absolute;
+  z-index: -1;
+  top: 3px;
+  bottom: 3px;
+  inset-inline-start: 3px;
+  width: calc((100% - 6px - (var(--pc-aic-effort-count) - 1) * var(--pc-aic-gap)) / var(--pc-aic-effort-count));
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius-panel) - 13px);
+  background: var(--surface);
+  box-shadow: var(--shadow-resting);
+  transform: translateX(calc(var(--pc-aic-effort-index) * (100% + var(--pc-aic-gap))));
+  transition: transform var(--spring-snappy-duration, 0.2s) var(--spring-snappy, var(--ease-standard));
+}
+[dir="rtl"] .pc-aic-effortThumb {
+  transform: translateX(calc(var(--pc-aic-effort-index) * -1 * (100% + var(--pc-aic-gap))));
+}
+.pc-aic-effortItem {
+  position: relative;
+  display: grid;
+  height: 30px;
+  place-items: center;
+  border-radius: calc(var(--radius-panel) - 13px);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  transition:
+    color var(--duration-fast) var(--ease-standard),
+    background-color var(--duration-instant) var(--ease-standard);
+}
+.pc-aic-effortItem[data-highlighted] {
+  background: color-mix(in oklab, var(--foreground) 6%, transparent);
+  color: var(--foreground);
+}
+.pc-aic-effortItem[data-checked] {
+  color: var(--foreground);
+  background: transparent;
+}
+
+/* ------------------------------------------------------------ attachments */
+.pc-aic-chip {
+  position: relative;
+  display: flex;
+  width: 212px;
+  height: 52px;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  list-style: none;
+  animation: pc-aic-chip-in var(--spring-snappy-duration, 0.2s) var(--spring-snappy, var(--ease-standard)) both;
+}
+@keyframes pc-aic-chip-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+.pc-aic-chip[data-status="error"] {
+  border-color: color-mix(in oklab, var(--danger) 35%, var(--border));
+}
+.pc-aic-chipBody {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.pc-aic-chipBody:disabled {
+  cursor: default;
+}
+.pc-aic-chipGlyph {
+  display: grid;
+  flex: none;
+  place-items: center;
+  color: var(--text-secondary);
+}
+.pc-aic-chipGlyph svg {
+  width: 20px;
+  height: 20px;
+}
+.pc-aic-chipGlyphImage {
+  margin-inline-start: -6px;
+}
+.pc-aic-thumb {
+  display: block;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  object-fit: cover;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.pc-aic-chipText {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+}
+.pc-aic-chipName {
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pc-aic-chipMeta {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.3;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.pc-aic-chip[data-status="error"] .pc-aic-chipMeta {
+  color: var(--danger);
+}
+.pc-aic-chipAction {
+  position: relative;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-instant) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+@media (hover: hover) and (pointer: fine) {
+  .pc-aic-chipAction:hover {
+    background: color-mix(in oklab, var(--foreground) 6%, transparent);
+    color: var(--foreground);
+  }
+}
+.pc-aic-chipActionGlyph {
+  display: grid;
+  grid-area: 1 / 1;
+  place-items: center;
+  animation: pc-aic-glyph-in var(--spring-snappy-duration, 0.2s) var(--spring-snappy, var(--ease-standard)) both;
+}
+@keyframes pc-aic-glyph-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6) rotate(-45deg);
+  }
+}
+.pc-aic-chipActionGlyph svg {
+  width: 14px;
+  height: 14px;
+}
+.pc-aic-chipCheck {
+  color: var(--success);
+}
+.pc-aic-chipCheck svg {
+  width: 16px;
+  height: 16px;
+}
+.pc-aic-ring {
+  width: 18px !important;
+  height: 18px !important;
+  transform: rotate(-90deg);
+}
+.pc-aic-ringTrack {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 2;
+}
+.pc-aic-ringFill {
+  fill: none;
+  stroke: var(--foreground);
+  stroke-width: 2;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 90ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pc-aic-send,
+  .pc-aic-chevron,
+  .pc-aic-effortThumb,
+  .pc-aic-effortItem,
+  .pc-aic-chip,
+  .pc-aic-chipActionGlyph,
+  .pc-aic-arrowIn,
+  .pc-aic-stopIn,
+  .pc-aic-menu {
+    animation: none;
+    transition: none;
+  }
+  .pc-aic-sendRing[data-spin] {
+    animation: none;
+  }
+}
+
+/* ------------------------------------------- "/" and "@" menus (.aic-pop) */
+.pc-aic-pop[data-component="composer-suggestions"] {
+  inset-inline: 6px auto;
+  width: min(340px, calc(100% - 12px));
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-floating);
+  cursor: default;
+  transform-origin: 16px 100%;
+  animation: pc-aic-pop-in var(--spring-snappy-duration, 0.2s) var(--spring-snappy, var(--ease-enter)) both;
+}
+@keyframes pc-aic-pop-in {
+  from {
+    opacity: 0;
+    scale: 0.97;
+  }
+}
+.pc-aic-option {
+  display: flex;
+  width: 100%;
+  height: 44px;
+  min-height: 44px;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 15px;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.pc-aic-option[aria-selected="true"] {
+  background: var(--surface-muted);
+}
+.pc-aic-optionGlyph {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  place-items: center;
+  color: var(--text-secondary);
+}
+.pc-aic-optionGlyph svg {
+  width: 16px;
+  height: 16px;
+}
+.pc-aic-optionText {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+.pc-aic-optionLabel {
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pc-aic-optionHint {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pc-aic-optionKbd {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pc-aic-pop[data-component="composer-suggestions"] {
+    animation: none;
+  }
+}
