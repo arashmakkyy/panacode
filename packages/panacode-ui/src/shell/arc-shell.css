@@ -233,6 +233,13 @@
   }
 }
 
+/* Narrower still, the model name gives way (ellipsis) so the effort chip is never clipped. */
+@container pc-composer (max-width: 520px) {
+  [data-brand="panacode"] [data-action="composer-model"] {
+    max-width: max(96px, calc(100cqw - 276px)) !important;
+  }
+}
+
 /* ---------- settings ---------- */
 [data-brand="panacode"] .settings-tab-title {
   font-family: var(--font-display);
