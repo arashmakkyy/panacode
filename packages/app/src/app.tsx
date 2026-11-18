@@ -5,6 +5,7 @@ import { DialogProvider } from "@opencode/ui/context/dialog"
 import { FileComponentProvider } from "@opencode/ui/context/file"
 import { Font } from "@opencode/ui/font"
 import { ThemeProvider } from "@opencode/ui/theme/context"
+import { PANACODE_THEME_ID } from "@panacode/ui/theme"
 import { MetaProvider, Title } from "@solidjs/meta"
 import { type BaseRouterProps, Router } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
@@ -48,6 +49,15 @@ function BodyTypography() {
   return null
 }
 
+function PanacodeBrandMark() {
+  createRenderEffect(() => {
+    if (typeof document === "undefined") return
+    document.documentElement.dataset.brand = "panacode"
+    document.documentElement.classList.add("panacode-ui")
+  })
+  return null
+}
+
 export function AppBaseProviders(
   props: ParentProps<{
     locale?: Locale
@@ -57,9 +67,12 @@ export function AppBaseProviders(
 ) {
   return (
     <MetaProvider>
-      <Title>OpenCode</Title>
+      <Title>Panacode</Title>
       <Font />
-      <ThemeProvider onThemeApplied={(mode, scheme) => props.onThemeApplied?.(mode, scheme)}>
+      <ThemeProvider
+        defaultTheme={PANACODE_THEME_ID}
+        onThemeApplied={(mode, scheme) => props.onThemeApplied?.(mode, scheme)}
+      >
         <LanguageProvider locale={props.locale} onNativeTranslations={props.onNativeTranslations}>
           <UiI18nBridge>
             <ErrorBoundary
@@ -72,6 +85,7 @@ export function AppBaseProviders(
               <QueryProvider>
                 <DialogProvider>
                   <PluginRoot>
+                    <PanacodeBrandMark />
                     <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
                   </PluginRoot>
                 </DialogProvider>

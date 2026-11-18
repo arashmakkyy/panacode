@@ -1,34 +1,20 @@
-import type { McpServer } from "@opencode/client/promise"
 import { Component, For, Show, createEffect, createMemo, onCleanup, type JSX } from "solid-js"
-import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
-import { Button } from "@opencode/ui/button"
-import { Switch } from "@opencode/ui/switch"
 import { Tabs } from "@opencode/ui/tabs"
-import { TruncatedText } from "@opencode/ui/truncated-text"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { ServerConnection } from "@/runtime/server/registry"
-import { useMcpController } from "@/providers/connect/mcp"
-import { mcpRowView } from "@/providers/connect/mcp-machine"
-import { DialogMcp } from "@/providers/connect/mcp-dialog"
 import { ExtensionPlugins } from "@/runtime/plugin/extension-plugins"
 import { ExternalLink } from "@/runtime/platform/external-link"
 import { usePlatform } from "@/runtime/platform/platform"
 import { SettingsList } from "@/settings/list"
 import { createExtensionLoad, ExtensionLoadFailed } from "@/settings/extension-load"
 import type { SettingsView } from "@/settings/surface"
-import { ConsoleName, ConsoleReplaced, createConsoleSources } from "./console-link"
+import { ConsoleName, createConsoleSources } from "./console-link"
+import { PanacodeMcpPanel } from "@/settings/panacode-mcp-panel"
 import "@/settings/settings.css"
 import "@/shell/search-list.css"
-
-const statusLabels = {
-  connected: "mcp.status.connected",
-  failed: "mcp.status.failed",
-  needs_auth: "mcp.status.needs_auth",
-  disabled: "mcp.status.disabled",
-} as const
 
 export const SettingsExtensions: Component<{
   directory?: string
@@ -39,32 +25,7 @@ export const SettingsExtensions: Component<{
   const language = useLanguage()
   const serverSdk = useServerSDK()
   const data = useData()
-  const dialog = useDialog()
   const platform = usePlatform()
-  // MCP connections are per Location, so read and toggle them where the active session runs, as the TUI does. The
-  // names come from the default Location so this page lists only the servers available to all projects.
-  const location = () => (props.directory ? { directory: props.directory } : data.location.default())
-  const mcp = useMcpController(() => props.directory)
-
-  // The synced lists follow mcp.status.changed, so a finished sign-in shows up without a refetch.
-  createEffect(() => {
-    if (serverSdk.connection.status() !== "connected") return
-    void data.location.mcp.server.sync(data.location.default()).catch(() => undefined)
-
-    if (props.directory) void data.location.mcp.server.sync(location()).catch(() => undefined)
-  })
-
-  const mcps = createMemo(() => {
-    const active = data.location.mcp.server.list(location())
-
-    return (data.location.mcp.server.list(data.location.default()) ?? [])
-      .map((server) => active?.find((item) => item.name === server.name) ?? server)
-      .toSorted((a, b) => a.name.localeCompare(b.name))
-  })
-
-  const toggle = (item: McpServer, enabled: boolean) =>
-    mcp.dispatch({ type: "toggle.requested", name: item.name, enabled, status: item.status.status })
-
   const sources = createConsoleSources(() => props.directory)
 
   const plugins = createExtensionLoad({
@@ -121,124 +82,15 @@ export const SettingsExtensions: Component<{
           </Tabs.List>
 
           <Tabs.Content value="mcps">
-            <div class="settings-section">
-              <div class="flex items-center justify-between">
-                <span class="settings-extension-heading text-13-medium">
-                  {language.t("settings.extensions.availableAll")}
-                </span>
-                <span class="text-13-regular text-v2-text-text-muted">
-                  {language.t("settings.extensions.manageConfig")}
-                </span>
-              </div>
-              <SettingsList variant="catalog">
-                <For each={mcps()}>
-                  {(item) => {
-                    const row = () => mcpRowView(mcp.state(), item.name, item.status.status)
-
-                    const busy = () => row().busy
-
-                    const managed = () => sources.managed(item.name)
-
-                    const links = () => sources.links(item.name)
-
-                    const status = () =>
-                      managed()?.needsConnection && item.status.status === "connected"
-                        ? "needs_auth"
-                        : item.status.status
-
-                    // The dot shows the status, as in the MCPs dialog; the words stay for assistive technology.
-                    const label = () => {
-                      if (managed()) return language.t("settings.extensions.console.temporary")
-
-                      return item.status.status === "pending" ? undefined : language.t(statusLabels[item.status.status])
-                    }
-
-                    const connect = () => sources.connect(item.name)
-
-                    return (
-                      <div class="settings-extension-row settings-mcp-row" data-status={status()}>
-                        <div class="settings-extension-lead">
-                          <span class="settings-mcp-status">
-                            <span class="mcp-status-dot" data-status={status()} aria-hidden="true" />
-                          </span>
-                          <Show
-                            when={managed() && links()}
-                            fallback={<TruncatedText text={item.name} class="settings-extension-name" />}
-                          >
-                            {(current) => <ConsoleName name={item.name} href={current().manage} />}
-                          </Show>
-                          <Show when={sources.mcp(item.name)?.overridden && links()}>
-                            {(current) => <ConsoleReplaced name={item.name} href={current().manage} />}
-                          </Show>
-                        </div>
-                        <div class="settings-extension-trailing">
-                          <Show when={item.status.status === "failed"}>
-                            <Button
-                              size="small"
-                              variant="ghost-muted"
-                              aria-label={language.t("dialog.mcp.error.viewLabel", { name: item.name })}
-                              onClick={() =>
-                                dialog.show(() => <DialogMcp directory={location().directory} server={item.name} />)
-                              }
-                            >
-                              {language.t("dialog.mcp.error.view")}
-                            </Button>
-                          </Show>
-                          <Show
-                            when={connect()}
-                            fallback={
-                              <Show
-                                when={item.status.status === "needs_auth" && item.integrationID}
-                                fallback={
-                                  <Switch
-                                    checked={item.status.status !== "disabled"}
-                                    disabled={row().pending}
-                                    description={label()}
-                                    class="[&_[data-slot=switch-description]]:sr-only"
-                                    onChange={(enabled) => toggle(item, enabled)}
-                                  >
-                                    <span class="sr-only">{item.name}</span>
-                                  </Switch>
-                                }
-                              >
-                                <Button
-                                  size="small"
-                                  variant="ghost-muted"
-                                  disabled={busy()}
-                                  aria-busy={busy()}
-                                  aria-label={language.t("dialog.mcp.signIn.open", { name: item.name })}
-                                  onClick={() => toggle(item, true)}
-                                >
-                                  {language.t(busy() ? "dialog.mcp.signingIn" : "dialog.mcp.signIn")}
-                                </Button>
-                              </Show>
-                            }
-                          >
-                            {(href) => (
-                              <Button
-                                size="small"
-                                variant="ghost-muted"
-                                aria-label={language.t("settings.extensions.console.connect", { name: item.name })}
-                                onClick={() => platform.openExternal(href())}
-                              >
-                                {language.t("common.connect")}
-                              </Button>
-                            )}
-                          </Show>
-                        </div>
-                      </div>
-                    )
-                  }}
-                </For>
-              </SettingsList>
-              <Show when={sources.view().status === "error"}>
-                <ExtensionLoadFailed
-                  message={language.t("settings.extensions.sources.loadFailed")}
-                  retry={language.t("common.retry")}
-                  onRetry={sources.retry}
-                />
-              </Show>
-            </div>
+            {/* Panacode presentation adapter — MCP controllers/state remain upstream OpenCode. */}
+            <PanacodeMcpPanel directory={props.directory} />
+            <Show when={sources.view().status === "error"}>
+              <ExtensionLoadFailed
+                message={language.t("settings.extensions.sources.loadFailed")}
+                retry={language.t("common.retry")}
+                onRetry={sources.retry}
+              />
+            </Show>
           </Tabs.Content>
 
           <Tabs.Content value="plugins">

@@ -1,6 +1,6 @@
 import { createMemo, Show, type JSX } from "solid-js"
 import { SessionElicitationDock } from "@/session/requests/session-elicitation-dock"
-import { SessionPermissionDock } from "@/session/requests/session-permission-dock"
+import { PanacodePermissionAdapter } from "@/session/panacode-permission-adapter"
 import { SessionQuestionDock } from "@/session/requests/session-question-dock"
 import { questionMotion } from "@/session/requests/question-motion"
 import { useSettings } from "@/settings/model"
@@ -47,6 +47,7 @@ export function SessionComposerRegion(props: {
     <div
       ref={controller.setDockRef}
       data-component="session-composer-dock"
+      data-panacode-feature="ai-composer"
       class="w-full shrink-0 flex flex-col justify-center items-center pb-3 pointer-events-none"
     >
       {/* Only the docks and composer take the pointer; the gaps beside them belong to the timeline underneath. */}
@@ -83,7 +84,7 @@ export function SessionComposerRegion(props: {
 
                 <Grow when={current().permission} fade card class={controller.child() ? "mb-2" : undefined}>
                   {(request) => (
-                    <SessionPermissionDock
+                    <PanacodePermissionAdapter
                       request={request}
                       responding={controller.state.permissionResponding()}
                       onDecide={(response) => {
