@@ -352,6 +352,17 @@ const icons = {
   },
 }
 
+// panacode: a product shell may swap the artwork per name (Panacode draws lucide). Call before the first <Icon> mounts.
+let artwork: { body: Partial<Record<string, string>>; viewBox: string } = { body: {}, viewBox: "0 0 16 16" }
+
+/**
+ * Replaces the artwork for the given names; names left out keep the catalog artwork.
+ * @param body - SVG bodies keyed by icon name, all drawn on `viewBox`.
+ */
+export function setIconArtwork(body: Partial<Record<string, string>>, viewBox: string) {
+  artwork = { body, viewBox }
+}
+
 /** Icon names derived from the shared artwork, with no UI or runtime dependencies. */
 export type IconName = keyof typeof icons | keyof typeof additionalIcons
 
@@ -374,6 +385,8 @@ export function isIconName(name: string): name is IconName {
  * @param name - A name validated by the type or by `isIconName`.
  */
 export function getIcon(name: IconName) {
+  const override = artwork.body[name]
+  if (override) return { body: override, viewBox: artwork.viewBox }
   // SAFETY: IconName is the union of both catalogs' keys; an absent primary entry falls back to additional artwork.
   const icon = icons[name as keyof typeof icons]
 
