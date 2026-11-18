@@ -164,7 +164,7 @@ export function SettingsAbout(props: { active: boolean }) {
       </div>
 
       <p class="settings-about-faint">
-        <ExternalLink href="https://opencode.ai">
+        <ExternalLink href="https://panaai-psi.vercel.app">
           <bdi dir="ltr">{language.t("settings.about.website")}</bdi>
         </ExternalLink>
       </p>

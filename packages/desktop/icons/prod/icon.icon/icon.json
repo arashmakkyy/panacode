@@ -1,10 +1,10 @@
 {
   "groups": [
     {
-      "name": "OpenCode",
+      "name": "Panacode",
       "layers": [
         {
-          "name": "OpenCode",
+          "name": "Panacode",
           "image-name": "icon.png",
           "glass": false
         }
