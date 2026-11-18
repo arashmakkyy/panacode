@@ -42,7 +42,7 @@ export function PanacodePermissionAdapter(props: {
       tool: t("panacode.approvals.title.tool"),
     },
     tool: (action) => {
-      const key = `settings.permissions.tool.${action}.title`
+      const key = `settings.permissions.tool.${action === "shell" ? "bash" : action}.title`
       const value = t(key)
       return value === key ? undefined : value
     },

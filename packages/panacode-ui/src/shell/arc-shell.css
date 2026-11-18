@@ -396,3 +396,9 @@
 [data-brand="panacode"] [data-slot="keybind-v2-label"] {
   text-transform: none;
 }
+
+/* Flat main panel: upstream sticky headers keep the panel colour instead of the old card colour. */
+[data-brand="panacode"] [data-component="panacode-home"] [class~="bg-v2-background-bg-base"],
+[data-brand="panacode"] main [class~="sticky"][class~="bg-v2-background-bg-base"] {
+  background: var(--background);
+}
