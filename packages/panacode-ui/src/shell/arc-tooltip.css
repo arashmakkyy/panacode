@@ -1,0 +1,54 @@
+/* Arc tooltip over the real tooltips (tooltip-v2): an ink chip that rises a few pixels from its trigger, with
+ * keyboard shortcuts as soft caps inside it. */
+
+[data-brand="panacode"] [data-component="tooltip-v2"],
+[data-brand="panacode"] [data-component="tooltip-v2"][data-appearance="standard"] {
+  max-width: 15rem;
+  padding: 6px 11px;
+  gap: 8px;
+  border: 1px solid color-mix(in oklab, var(--background) 14%, var(--foreground));
+  border-radius: calc(var(--radius-control) - 6px);
+  background: var(--foreground);
+  color: var(--background);
+  box-shadow: var(--shadow-raised);
+  font-family: var(--font-sans, inherit);
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: 0;
+  font-variant-numeric: normal;
+  animation: pc-tooltip-in var(--duration-fast) var(--ease-enter);
+}
+
+[data-brand="panacode"] [data-component="tooltip-v2"][data-appearance="large"] {
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+[data-brand="panacode"] [data-component="tooltip-v2"] :is(kbd, [data-component="keybind-v2-key"], [data-slot$="keybind"]) {
+  color: color-mix(in oklab, var(--background) 62%, var(--foreground));
+  font-weight: 400;
+}
+
+[data-brand="panacode"] [data-component="tooltip-v2"] [data-component="keybind-v2-key"] {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--background) 16%, var(--foreground));
+  box-shadow: none;
+}
+
+@keyframes pc-tooltip-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px) scale(0.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-brand="panacode"] [data-component="tooltip-v2"] {
+    animation: none;
+  }
+}

@@ -195,6 +195,7 @@ Status, stated honestly. Rows marked Ported are full Arc ports wired to real ses
 | Command palette | `shell/commands/dialog.tsx` | `shell/arc-palette.css`, `motion/glide.ts` (`glideHighlight`) | none | `dialog.tsx` (glide, key chip, glyphs) | Ported (free) |
 | Dropdown / context menu | `@opencode/ui/menu`, `@opencode/ui/context-menu` | `shell/arc-menu.css`, `motion/glide.ts` (`menuGlide`) | none | `WindowFrame` attaches the glide to every menu that opens | Ported (free). Upstream menus have no danger variant, so Delete is not tinted |
 | Toast stack | `@opencode/ui/toast` (solid-sonner) | `shell/arc-toast.css` | none | CSS over `.toast-v2`; sonner keeps stacking, swipe and timers | Ported (free) |
+| Tooltip | `@opencode/ui/tooltip` (tooltip-v2) | `shell/arc-tooltip.css` | none | CSS over every tooltip | Ported (free) |
 | Switch | `@opencode/ui/switch` | `primitives/switch.tsx` | — | primitive has the Arc spring; CSS bridge matches geometry for existing call sites | Stage 1 |
 
 External deps of `@panacode/ui`: `@kobalte/core`, `@opencode/ui` (workspace), `solid-js` peer. **No React.**
