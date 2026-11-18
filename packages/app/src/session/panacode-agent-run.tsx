@@ -1,4 +1,4 @@
-import { createMemo, createSignal, Show } from "solid-js"
+import { createMemo, createSignal, Match, Switch } from "solid-js"
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise"
 import { createTwoFilesPatch } from "diff"
 import { AgentRun, type AgentRunLabels, type AgentRunState, type DiffLine, type ProposedChange } from "@panacode/ui/features/agent-run"
@@ -15,6 +15,7 @@ import { BrandMark } from "@panacode/ui/brand"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
 import { toolWaitingApproval } from "./panacode-tool-state"
+import { PanacodeOrchestrator } from "./panacode-orchestrator"
 import { toolFileChanges } from "./panacode-code-suggestion"
 import type { SessionRequestModel } from "./requests/model"
 
@@ -179,7 +180,7 @@ export function PanacodeAgentRun(props: {
     stop: t("panacode.run.stop"),
     dismiss: t("panacode.run.dismiss"),
     secondsOfWork: (seconds) => t("panacode.run.secondsOfWork", { seconds }),
-    stepsFolded: (count, seconds) => t("panacode.run.stepsFolded", { count, seconds }),
+    stepsFolded: (count, seconds) => t(count === 1 ? "panacode.run.stepsFolded.one" : "panacode.run.stepsFolded", { count, seconds }),
     filesChanged: (count) => t(count === 1 ? "panacode.run.filesChanged.one" : "panacode.run.filesChanged.other", { count }),
     added: (count) => t("panacode.run.added", { count }),
     removed: (count) => t("panacode.run.removed", { count }),
@@ -204,8 +205,30 @@ export function PanacodeAgentRun(props: {
     return text.length > 90 ? `${text.slice(0, 89)}…` : text
   }
 
+  const orchestrated = () => tools().some((tool) => tool.name === "subagent" || tool.name === "task")
+  const stop = () =>
+    props.sessionID ? void server.api.session.interrupt({ sessionID: props.sessionID }).catch(() => undefined) : undefined
+  const dismiss = () => {
+    const id = turn()?.user.id
+    if (id) setDismissed((all) => new Set([...all, id]))
+  }
+
   return (
-    <Show when={visible() && run()}>
+    <Switch>
+      <Match when={visible() && orchestrated() && turn()}>
+        {(current) => (
+          <PanacodeOrchestrator
+            user={current().user}
+            assistants={current().assistants}
+            working={props.working}
+            directory={props.directory}
+            model={props.model}
+            onStop={props.sessionID ? stop : undefined}
+            onDismiss={dismiss}
+          />
+        )}
+      </Match>
+    <Match when={visible() && run()}>
       {(state) => (
         <AgentRun
           task={task()}
@@ -219,17 +242,11 @@ export function PanacodeAgentRun(props: {
             setNotes((all) => ({ ...all, [change.id]: reason }))
             props.requests.decide("reject", reason)
           }}
-          onStop={
-            props.sessionID
-              ? () => void server.api.session.interrupt({ sessionID: props.sessionID! }).catch(() => undefined)
-              : undefined
-          }
-          onDismiss={() => {
-            const id = turn()?.user.id
-            if (id) setDismissed((all) => new Set([...all, id]))
-          }}
+          onStop={props.sessionID ? stop : undefined}
+          onDismiss={dismiss}
         />
       )}
-    </Show>
+    </Match>
+    </Switch>
   )
 }

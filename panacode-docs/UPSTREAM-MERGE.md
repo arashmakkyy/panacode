@@ -156,6 +156,8 @@ Internal package names `@opencode/*` remain for upstream compatibility.
 | `packages/app/src/session/composer/region.tsx` | Shared integration boundary | Mounts `PanacodeAgentRun` (Arc Agent Run card for the latest turn) at the top of the `above` lane | Low | Re-add the mount |
 | `packages/app/src/session/requests/model.ts`, `permission-machine.ts` | Shared integration boundary | `decide(decision, message?)`: a rejection can carry a note (Agent Run "Send back"); the reply sends `message` | Low | Re-add the optional `message` field |
 | `packages/app/src/session/panacode-agent-run.tsx` | Panacode-owned | Builds the run from the turn's messages, permission request and tool state | None | Keep ours |
+| `packages/app/src/session/panacode-orchestrator.tsx` | Panacode-owned | Arc Agent Orchestrator for a turn with `subagent`/`task` calls: each call is a lane, its child session (`data.session.message.list/status`) the worker; Stop interrupts the lead and running children | None | Keep ours |
+| `packages/panacode-ui/src/theme/tokens.css` (`--series-2..4`) | Panacode-owned | Lane colors for the orchestrator (violet, amber, teal tones) | None | Keep ours |
 | `packages/app/src/composer/composer.tsx` | Shared integration boundary | Model chip provider wrapped in `data-slot="composer-model-provider"` so a narrow composer hides it | Low | Re-wrap |
 | `packages/app/src/runtime/i18n/en.ts` (`command.provider.connect.description`) | Panacode copy | "Sign in to PanaAI or another model provider" | Low | Keep ours |
 | `packages/session-ui/**` | Upstream-owned | Session domain/UI | High | Prefer CSS overlay / adapters over rewriting; only touch when new hooks needed |
@@ -173,20 +175,20 @@ Classification reminder: modifying an upstream file does **not** make it Panacod
 
 ## D. Component replacement map
 
-Stage 1 status, stated honestly. Stages 2–4 have not started. The six feature modules below are still unwired shells from the previous attempt. Do not describe them as integrated.
+Status, stated honestly. Rows marked Ported are full Arc ports wired to real session state; the rest are still from the previous attempt.
 
 | Feature | Upstream surface | Panacode feature | Adapter | App wiring | Status |
 |---|---|---|---|---|---|
 | App shell | `shell/shell.tsx`, `shell/titlebar/titlebar.tsx` | `shell/frame.tsx` (`WindowFrame`, `TitlebarFrame`, `SidebarFrame`) | none; the frames are the integration | Mounted | Stage 1. Behavior (peek, resize, tabs, commands) stays upstream |
 | Home / sessions | `home/route.tsx`, `home/sessions/view.tsx` | `HomeFrame`, `EmptyState`, `ErrorState`, `Skeleton` | none | Mounted | Stage 1. Session data is still the upstream controller |
 | Error page | `shell/errors/error.tsx` | shell attribute + tokens | none | Mounted | Stage 1. Discord/opencode.ai report link removed |
-| AI Chat | timeline / message parts | `features/ai-chat` | `adapters/ai-chat.ts` | not mounted | Not stage 1. Dead shell |
-| AI Composer | composer | `features/ai-composer` | `adapters/ai-composer.ts` | not mounted | Not stage 1. Dead shell |
-| Agent Run | timeline tools | `features/agent-run` | `adapters/agent-run.ts` | not mounted | Not stage 1. Dead shell |
-| Agent Orchestrator | subagents | `features/agent-orchestrator` | `adapters/agent-orchestrator.ts` | not mounted | Not stage 1. Dead shell |
+| AI Chat | timeline / message parts | `features/ai-chat` | `adapters/ai-chat.ts` | `panacode-chat.tsx` (timeline overrides) | Ported |
+| AI Composer | composer | `features/ai-composer` | `adapters/ai-composer.ts` | `composer/editor/editor.tsx` | Ported |
+| Agent Run | timeline tools | `features/agent-run` | `adapters/agent-run.ts` | `panacode-agent-run.tsx` (composer `above` lane) | Ported |
+| Agent Orchestrator | subagents | `features/agent-orchestrator` | `adapters/agent-orchestrator.ts` | `panacode-orchestrator.tsx` (via Agent Run mount) | Ported. No concurrency control: the backend has none |
 | Agent Approvals | permission dock | `features/agent-approvals` | `adapters/agent-approvals.ts` | `panacode-permission-adapter.tsx` | Previous attempt. Still low fidelity. Not revisited in stage 1 |
-| Tool Call | `session-ui` tools | `features/tool-call` | `adapters/tool-call.ts` | not mounted | Not stage 1. Dead shell |
-| Code Suggestion | review | `features/code-suggestion` | `adapters/code-suggestion.ts` | not mounted | Not stage 1. Dead shell |
+| Tool Call | `session-ui` tools | `features/tool-call` | `adapters/tool-call.ts` | `panacode-timeline.tsx` | Ported |
+| Code Suggestion | review | `features/code-suggestion` | `adapters/code-suggestion.ts` | `panacode-code-suggestion.tsx` | Ported |
 | MCP Servers | settings extensions | `features/mcp-servers` | `adapters/mcp-servers.ts` | `panacode-mcp-panel.tsx` | Previous attempt. Still low fidelity. Not revisited in stage 1 |
 | Switch | `@opencode/ui/switch` | `primitives/switch.tsx` | — | primitive has the Arc spring; CSS bridge matches geometry for existing call sites | Stage 1 |
 

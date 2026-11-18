@@ -4,4 +4,4 @@ export { changedFile, defaultRunStepCopy, patchToLines, runChecks, runSteps, run
 export { toComposerMode } from "./ai-composer"
 export { fromPermissionRequest, permissionKind, permissionRisk, toPermissionReply, toApprovalDecision } from "./agent-approvals"
 export type { PermissionCopy, PermissionKind, PermissionLike } from "./agent-approvals"
-export { toOrchestratorLanes } from "./agent-orchestrator"
+export { isSubagentTool, orchestratorLane, subagentSessionID, toOrchestratorLanes, type ChildLike, type ChildMessageLike } from "./agent-orchestrator"

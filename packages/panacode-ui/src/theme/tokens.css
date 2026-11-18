@@ -73,6 +73,9 @@
 
   /* Data series. The first follows a chromatic accent and falls back to blue under a neutral one. */
   --series-1: #1f7dcf;
+  --series-2: var(--tone-violet);
+  --series-3: var(--tone-amber);
+  --series-4: var(--tone-teal);
 
   /* Elevation */
   --shadow-resting: 0 1px 2px oklch(0% 0 0 / 0.035);
