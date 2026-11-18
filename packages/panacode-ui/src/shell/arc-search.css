@@ -1,0 +1,66 @@
+/* Arc search field over the home session search: a bordered control that darkens on hover and focus (it never
+ * changes size), a glass that wakes with the field, and the results panel as an Arc floating panel. */
+
+[data-brand="panacode"] [data-component="home-session-search"] > label {
+  height: 40px;
+  gap: 8px;
+  padding-inline: 14px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text-muted);
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-brand="panacode"] [data-component="home-session-search"] > label:hover:not(:focus-within) {
+    border-color: color-mix(in oklab, var(--foreground) 55%, var(--border-strong));
+    background: var(--surface);
+  }
+}
+
+[data-brand="panacode"] [data-component="home-session-search"] > label:focus-within {
+  border-color: var(--foreground);
+  background: var(--surface);
+  color: var(--foreground);
+}
+
+[data-brand="panacode"] [data-component="home-session-search"] > label input {
+  color: var(--foreground);
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 400;
+  letter-spacing: var(--tracking-body, -0.01em);
+}
+
+[data-brand="panacode"] [data-component="home-session-search"] > label input::placeholder {
+  color: var(--text-muted);
+}
+
+[data-brand="panacode"] [data-component="home-session-search-panel"] {
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius-control) + 6px);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-floating);
+  animation: pc-search-panel-in var(--duration-fast) var(--ease-enter) both;
+}
+
+[data-brand="panacode"] [data-component="home-session-search-panel"] [role="option"] {
+  border-radius: 12px;
+}
+
+@keyframes pc-search-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-brand="panacode"] [data-component="home-session-search"] > label,
+  [data-brand="panacode"] [data-component="home-session-search-panel"] {
+    transition: none;
+    animation: none;
+  }
+}
