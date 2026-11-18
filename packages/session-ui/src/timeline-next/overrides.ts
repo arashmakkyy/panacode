@@ -26,3 +26,14 @@ export function setTimelineOverrides(next: TimelineOverrides) {
 export function timelineOverride<K extends keyof TimelineOverrides>(key: K): TimelineOverrides[K] {
   return overrides[key]
 }
+
+// The user message that opened the turn a tool part belongs to (for a downstream "undo this turn").
+const toolTurns = new WeakMap<object, string>()
+
+export function setToolTurn(tool: object, userMessageID: string) {
+  toolTurns.set(tool, userMessageID)
+}
+
+export function toolTurn(tool: object) {
+  return toolTurns.get(tool)
+}

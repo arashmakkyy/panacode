@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, createUniqueId, For, Index, on, onCleanup, Show, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, createUniqueId, For, Index, on, onCleanup, Show, untrack, type JSX } from "solid-js"
 import { Collapse } from "../../motion/presence"
 import { prefersReducedMotion } from "../../motion/reduced"
 import "./tool-call.css"
@@ -515,6 +515,11 @@ export interface ToolCallProps extends ToolCallData {
   onRetry?: () => void
   /** Custom result for a successful call inside the Output well. Return undefined for the built in view. */
   renderOutput?: (call: ToolCallData) => JSX.Element | undefined
+  /**
+   * Panacode: says whether renderOutput has a view for this call without building it, so a custom view that
+   * loads data (a file read) is only created while the row is open.
+   */
+  hasOutput?: (call: ToolCallData) => boolean
   labels?: Partial<ToolCallLabels>
   class?: string
 }
@@ -530,8 +535,13 @@ export function ToolCall(props: ToolCallProps) {
   const summary = () => (props.status === "success" ? (props.summary ?? deriveSummary(labels(), props.output)) : undefined)
   const duration = () => (props.status === "success" || props.status === "error" ? formatDuration(props.durationMs) : undefined)
   const sentence = () => labels().status(props.status, summary(), duration(), props.message)
-  const custom = () => (props.status === "success" && props.renderOutput ? props.renderOutput(props) : undefined)
-  const expandable = () => Boolean(props.input || props.output || custom() !== undefined)
+  const hasCustom = createMemo(() => {
+    if (props.status !== "success" || !props.renderOutput) return false
+    if (props.hasOutput) return props.hasOutput(props)
+    return untrack(() => props.renderOutput!(props)) !== undefined
+  })
+  const custom = () => (hasCustom() ? props.renderOutput!(props) : undefined)
+  const expandable = () => Boolean(props.input || props.output || hasCustom())
 
   const [openState, setOpenState] = createSignal(props.defaultOpen ?? false)
   const open = () => expandable() && (props.open ?? openState())
@@ -686,13 +696,13 @@ export function ToolCall(props: ToolCallProps) {
             <div class="pc-tc-section">
               <div class="pc-tc-sectionHead">
                 <span class="pc-tc-sectionLabel">{labels().output}</span>
-                <Show when={props.output && custom() === undefined && props.status !== "denied" && props.status !== "approval"}>
+                <Show when={props.output && !hasCustom() && props.status !== "denied" && props.status !== "approval"}>
                   <CopyButton text={outputText(props.output!)} what={labels().output.toLowerCase()} labels={labels()} announce={announce} />
                 </Show>
               </div>
               <div class="pc-tc-well">
                 <Show
-                  when={custom()}
+                  when={hasCustom()}
                   fallback={
                     <Show
                       when={props.output && props.status !== "denied" && props.status !== "approval" ? props.output : undefined}
@@ -702,7 +712,7 @@ export function ToolCall(props: ToolCallProps) {
                     </Show>
                   }
                 >
-                  {(view) => <div class="pc-tc-custom">{view()}</div>}
+                  <div class="pc-tc-custom">{custom()}</div>
                 </Show>
               </div>
             </div>
@@ -729,6 +739,7 @@ export interface ToolCallGroupProps {
   onDeny?: (call: ToolCallData) => void
   onRetry?: (call: ToolCallData) => void
   renderOutput?: (call: ToolCallData) => JSX.Element | undefined
+  hasOutput?: (call: ToolCallData) => boolean
   /** Panacode: a row in the group can be a different block (thinking, a code suggestion). */
   renderCall?: (call: ToolCallData) => JSX.Element | undefined
   /** Extra rows appended after the calls (events, notices). */
@@ -844,6 +855,7 @@ export function ToolCallGroup(props: ToolCallGroupProps) {
                     onDeny={props.onDeny ? () => props.onDeny!(call) : undefined}
                     onRetry={props.onRetry ? () => props.onRetry!(call) : undefined}
                     renderOutput={props.renderOutput}
+                    hasOutput={props.hasOutput}
                   />
                 )}
               </div>

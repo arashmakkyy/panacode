@@ -1,43 +1,571 @@
-[data-component="panacode-code-suggestion"] {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3, 0.75rem);
+/* Port of Arc Code Suggestion (code-suggestion.css). Mono face follows the brand (--font-mono). */
+.cs-root {
+  --cs-mono: var(--font-mono, ui-monospace, monospace);
+  --cs-inset: 6px;
+  --cs-gutter: 58px;
+  --cs-add: color-mix(in oklab, var(--success) 10%, var(--background));
+  --cs-add-strong: color-mix(in oklab, var(--success) 16%, var(--background));
+  --cs-del: color-mix(in oklab, var(--danger) 9%, var(--background));
+  --cs-del-strong: color-mix(in oklab, var(--danger) 15%, var(--background));
+  container-type: inline-size;
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 720px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  padding: var(--cs-inset);
+  background: var(--surface);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-body);
+  line-height: var(--leading-body);
 }
 
-[data-component="panacode-code-suggestion"] [data-slot="suggestion-header"] {
+.cs-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+/* ── Header ── */
+
+.cs-header {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  column-gap: 10px;
+  padding: 10px 12px 12px;
+}
+
+.cs-model-mark {
+  display: grid;
+  width: 16px;
+  height: 20px;
+  place-items: center;
+  color: var(--foreground);
+}
+
+.cs-model-mark svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.cs-instruction {
+  overflow: hidden;
+  margin: 0;
+  font-weight: 500;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cs-model {
+  grid-column: 2;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 18px;
+}
+
+/* ── Editor panel ── */
+
+.cs-editor {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius-panel) - var(--cs-inset));
+  background: var(--background);
+}
+
+.cs-tabs {
   display: flex;
+  height: 38px;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3, 0.75rem);
+  gap: 12px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-[data-component="panacode-code-suggestion"] [data-slot="suggestion-header"] h3 {
-  margin: 0;
-  font-family: var(--font-display, inherit);
-  letter-spacing: var(--tracking-display, -0.03em);
+.cs-tab {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-xs);
+  line-height: 18px;
 }
 
-[data-component="panacode-code-suggestion"] [data-slot="suggestion-hunk"] {
-  border: 1px solid var(--border, oklch(93.5% 0 0));
-  border-radius: var(--radius-panel, 1.625rem);
+.cs-file-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+}
+
+.cs-file-mark svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+}
+
+.cs-file-name {
   overflow: hidden;
-  background: var(--surface, oklch(100% 0 0));
+  color: var(--foreground);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-[data-component="panacode-code-suggestion"] [data-slot="suggestion-hunk"] > header {
+.cs-file-path {
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cs-stats {
+  display: inline-flex;
+  flex: none;
+  gap: 8px;
+  font-family: var(--cs-mono);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.cs-stat-add,
+.cs-stat-del {
+  min-width: 3ch;
+  text-align: right;
+  transition: color var(--duration-fast, 0.16s) var(--ease-standard);
+}
+
+.cs-stat-add {
+  color: var(--success);
+}
+
+.cs-stat-del {
+  color: var(--danger);
+}
+
+.cs-stat-add[data-zero],
+.cs-stat-del[data-zero] {
+  color: var(--text-muted);
+}
+
+/* ── Code ── */
+
+.cs-code {
+  --focus-outline-offset: -2px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 6px 0;
+  scrollbar-width: thin;
+  border-radius: 0 0 calc(var(--radius-panel) - var(--cs-inset) - 1px)
+    calc(var(--radius-panel) - var(--cs-inset) - 1px);
+}
+
+.cs-lines {
+  width: max-content;
+  min-width: 100%;
+  font-family: var(--cs-mono);
+  font-size: 12.5px;
+  letter-spacing: 0;
+  line-height: 20px;
+}
+
+/*
+ * Rows clip instead of hiding overflow: `clip` folds the row without turning it
+ * into a scroll container, so the sticky gutter keeps pinning to the code area.
+ */
+.cs-row {
+  --row-bg: var(--background);
+  --sign-bg: var(--background);
   display: flex;
+  overflow: hidden;
+  overflow: clip;
+  background: var(--row-bg);
+  white-space: pre;
+  transition: background-color var(--duration-standard, 0.24s) var(--ease-standard);
+}
+
+.cs-row[data-kind="del"][data-decision="pending"] {
+  --row-bg: var(--cs-del);
+  --sign-bg: var(--cs-del-strong);
+}
+
+.cs-row[data-kind="add"][data-decision="pending"] {
+  --row-bg: var(--cs-add);
+  --sign-bg: var(--cs-add-strong);
+}
+
+.cs-gutter {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  display: grid;
+  flex: none;
+  width: var(--cs-gutter);
+  height: 20px;
+  grid-template-columns: 40px 18px;
+  background: var(--sign-bg);
+  transition: background-color var(--duration-standard, 0.24s) var(--ease-standard);
+}
+
+.cs-num {
+  padding-right: 10px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  opacity: 0.8;
+}
+
+.cs-sign {
+  color: var(--text-muted);
+  text-align: center;
+  transition: opacity var(--duration-fast, 0.16s) var(--ease-standard);
+}
+
+.cs-row[data-kind="add"] .cs-sign {
+  color: var(--success);
+}
+
+.cs-row[data-kind="del"] .cs-sign {
+  color: var(--danger);
+}
+
+.cs-row[data-decision="accepted"] .cs-sign,
+.cs-row[data-decision="rejected"] .cs-sign {
+  opacity: 0;
+}
+
+.cs-text {
+  display: block;
+  flex: none;
+  height: 20px;
+  padding-right: 20px;
+  color: var(--foreground);
+}
+
+.cs-row[data-kind="del"][data-decision="pending"] .cs-text {
+  color: var(--text-secondary);
+}
+
+.cs-t-keyword {
+  color: color-mix(in oklab, var(--series-2) 78%, var(--foreground));
+}
+
+.cs-t-string {
+  color: color-mix(in oklab, var(--series-3) 70%, var(--foreground));
+}
+
+.cs-t-number {
+  color: color-mix(in oklab, var(--series-1) 70%, var(--foreground));
+}
+
+.cs-t-function {
+  color: color-mix(in oklab, var(--series-1) 82%, var(--foreground));
+}
+
+.cs-t-type {
+  color: color-mix(in oklab, var(--series-1) 45%, var(--foreground));
+}
+
+.cs-t-punct {
+  color: var(--text-secondary);
+}
+
+.cs-t-comment {
+  color: var(--text-muted);
+}
+
+.cs-row[data-kind="del"][data-decision="pending"] .cs-text span {
+  color: inherit;
+}
+
+/* ── Review bar under each hunk ── */
+
+.cs-bar-row {
+  overflow: hidden;
+  overflow: clip;
+}
+
+.cs-bar {
+  position: sticky;
+  left: 0;
+  display: flex;
+  box-sizing: border-box;
+  width: var(--cs-viewport, 100%);
+  height: 40px;
+  align-items: center;
   justify-content: space-between;
-  gap: var(--space-2, 0.5rem);
-  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
-  background: var(--surface-muted, oklch(97.8% 0 0));
+  gap: 12px;
+  padding: 0 8px 0 var(--cs-gutter);
+  font-family: var(--font-body);
+  letter-spacing: var(--tracking-body);
+  white-space: nowrap;
 }
 
-[data-component="panacode-code-suggestion"] [data-slot="hunk-actions"] {
+.cs-bar-summary {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 18px;
+  text-overflow: ellipsis;
+}
+
+.cs-bar-actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.cs-hunk-button.cs-hunk-button {
+  min-height: 28px;
+  height: 28px;
+  padding-inline: 11px;
+  border-radius: 10px;
+  font-size: var(--text-xs);
+}
+
+.cs-reject.cs-reject {
+  color: var(--text-secondary);
+}
+
+.cs-accept.cs-accept {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.cs-accept.cs-accept[data-pressing] {
+  opacity: 0.84;
+}
+
+.cs-reject.cs-reject[data-pressing] {
+  background: var(--surface-muted);
+  color: var(--foreground);
+}
+
+/* ── Footer ── */
+
+.cs-footer {
+  display: grid;
+  min-height: 48px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0 0 12px;
+}
+
+.cs-status {
   display: flex;
-  gap: var(--space-2, 0.5rem);
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  line-height: 20px;
 }
 
-[data-component="panacode-code-suggestion"] [data-slot="hunk-body"] {
-  padding: var(--space-3, 0.75rem);
-  overflow: auto;
+.cs-actions-slot,
+.cs-status-icon,
+.cs-status-label {
+  display: grid;
+}
+
+.cs-actions-slot > *,
+.cs-status-icon > *,
+.cs-status-label > * {
+  grid-area: 1 / 1;
+}
+
+.cs-status-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.cs-status-icon > * {
+  display: grid;
+  place-items: center;
+}
+
+.cs-status-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.cs-status-label > * {
+  min-width: 0;
+}
+
+.cs-status-icon > [data-tone="busy"],
+.cs-status-icon > [data-tone="muted"] {
+  color: var(--text-muted);
+}
+
+.cs-status-icon > [data-tone="review"] {
+  color: var(--accent);
+}
+
+.cs-status-icon > [data-tone="done"] {
+  color: var(--success);
+}
+
+.cs-status-icon > [data-tone="error"] {
+  color: var(--danger);
+}
+
+.cs-status-label > [data-tone="error"] {
+  color: var(--foreground);
+}
+
+.cs-status-text {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cs-actions-slot {
+  min-height: 36px;
+  align-items: center;
+  justify-items: end;
+}
+
+.cs-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cs-foot-button.cs-foot-button {
+  min-height: 36px;
+  height: 36px;
+  gap: 6px;
+  padding-inline: 14px;
+  border-radius: 14px;
+  font-size: var(--text-sm);
+}
+
+.cs-shortcut {
+  margin-left: 2px;
+  font-size: var(--text-xs);
+  letter-spacing: 0;
+  opacity: 0.7;
+}
+
+.cs-spinner {
+  animation: cs-spin 0.8s linear infinite;
+}
+
+@keyframes cs-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* ── Responsive: the card answers to its own width ── */
+
+@container (max-width: 520px) {
+  .cs-file-path {
+    display: none;
+  }
+}
+
+@container (max-width: 440px) {
+  .cs-gutter {
+    width: 46px;
+    grid-template-columns: 30px 16px;
+  }
+
+  .cs-num {
+    padding-right: 8px;
+  }
+
+  .cs-lines {
+    font-size: 12px;
+  }
+
+  .cs-footer {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    padding-right: 0;
+  }
+
+  .cs-actions-slot {
+    justify-items: stretch;
+  }
+
+  .cs-actions {
+    display: flex;
+  }
+
+  .cs-actions > * {
+    flex: 1;
+  }
+
+  .cs-bar-summary {
+    display: none;
+  }
+
+  .cs-bar {
+    justify-content: flex-end;
+    padding-left: 46px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-spinner {
+    animation-duration: 2.4s;
+  }
+
+  .cs-gutter,
+  .cs-row,
+  .cs-sign {
+    transition: none;
+  }
+}
+
+/* ---- Solid port motion (motion/react in the Arc source) ---- */
+.cs-enter-row { animation: cs-row-in .12s var(--ease-enter) both; }
+@keyframes cs-row-in { from { height: 0; opacity: 0; } to { height: 20px; opacity: 1; } }
+.cs-enter-bar { animation: cs-bar-in var(--spring-snappy-duration, 240ms) var(--spring-snappy, ease) both; }
+@keyframes cs-bar-in { from { height: 0; opacity: 0; } to { height: 40px; opacity: 1; } }
+.cs-row[data-leaving], .cs-bar-row[data-leaving] { animation: cs-fold-out var(--spring-snappy-duration, 260ms) var(--spring-snappy, ease) both; }
+@keyframes cs-fold-out { to { height: 0; opacity: 0; } }
+.cs-swap { animation: cs-swap var(--duration-fast) var(--ease-standard) both; display: inline-flex; align-items: center; gap: 6px; }
+@keyframes cs-swap { from { opacity: 0; transform: translateY(2px); } }
+.cs-fold-text { color: var(--text-muted); font-family: var(--font-body); font-size: var(--text-xs); }
+.cs-row { height: 20px; }
+.cs-bar-row { height: 40px; }
+@media (prefers-reduced-motion: reduce) {
+  .cs-enter-row, .cs-enter-bar, .cs-row[data-leaving], .cs-bar-row[data-leaving], .cs-swap { animation: none; }
+}
+
+/* Panacode: a blocked reject reads as unavailable, and the footer buttons keep icon and label on one line. */
+.cs-hunk-button.cs-hunk-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.cs-foot-button.cs-foot-button {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  white-space: nowrap;
+}
+.cs-blocked-note {
+  margin: 0;
+  padding: 8px 14px 0;
+  color: var(--text-weak, var(--cs-muted));
+  font-size: var(--text-xs);
+  line-height: 1.5;
 }

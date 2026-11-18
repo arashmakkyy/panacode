@@ -112,10 +112,8 @@ export function fromPermissionRequest(request: PermissionLike, copy: PermissionC
     risk: RISK[kind],
     icon: ICON[kind],
     source: copy.tool(request.action) ?? request.action,
-    sourceDetail:
-      copy.tool(request.action) && copy.tool(request.action)?.toLowerCase() !== request.action.toLowerCase()
-        ? request.action
-        : undefined,
+    // The tool title already names the source ("Bash"); repeating the raw action ("shell") reads as noise.
+    sourceDetail: undefined,
     requestedAt,
     args,
   }

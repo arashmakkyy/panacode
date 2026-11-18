@@ -54,7 +54,7 @@ import { noticeEvent, toolEvent } from "./events"
 import { trackNestedRails } from "./nested-rail"
 import { contentEntries, createNextTimelineProjection, resolveContent, workedDuration } from "./projection"
 import { contentOpens, diffOpens, goal as goalMessage, movedInPlace, thoughtOpens, toolRule } from "./rules"
-import { timelineOverride } from "./overrides"
+import { setToolTurn, timelineOverride } from "./overrides"
 import { Separator } from "./separator"
 import { timelineGaps } from "./spacing"
 import { AssistantContent } from "./tools/assistant-content"
@@ -343,6 +343,7 @@ export function createNextTimelineRowRenderer(input: {
 
           if (content?.type === "tool") {
             patchPartKeys.set(content, `${ref.messageID}:${ref.partID}`)
+            setToolTurn(content, row().userMessageID)
 
             return [content]
           }

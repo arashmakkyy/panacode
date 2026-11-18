@@ -25,7 +25,7 @@ export { AgentApprovals, RiskLabel, defaultApprovalLabels } from "./features/age
 export type { ApprovalDecision, ApprovalLabels, ApprovalRequest, ApprovalResolved, ApprovalRisk } from "./features/agent-approvals"
 export { ToolCall, ToolCallGroup, Shimmer, formatDuration, defaultToolCallLabels, type ToolCallData, type ToolCallLabels, type ToolCallOutput, type ToolCallStatus, type ToolCallTool, type ToolCallValue } from "./features/tool-call"
 export { ToolMark, type ToolMarkName } from "./features/tool-call/marks"
-export { CodeSuggestion } from "./features/code-suggestion"
+export { CodeSuggestion, applyDecisions, defaultCodeSuggestionLabels, type CodeSuggestionHunk, type CodeSuggestionDecision, type CodeSuggestionLabels, type CodeSuggestionProps, type CodeSuggestionStatus } from "./features/code-suggestion"
 export { McpServers } from "./features/mcp-servers"
 export { brand, BrandMark, BrandWordmark, BrandLockup } from "./brand"
 export { SidebarBrand, TitlebarBrand } from "./shell/brand-slot"

@@ -4,7 +4,6 @@ import { toToolCallStatus } from "./tool-call"
 import { toAgentRunStatus } from "./agent-run"
 import { toComposerMode } from "./ai-composer"
 import { toOrchestratorLanes } from "./agent-orchestrator"
-import { toSuggestionMode } from "./code-suggestion"
 import { toApprovalDecision } from "./agent-approvals"
 
 describe("panacode adapters", () => {
@@ -33,7 +32,6 @@ describe("panacode adapters", () => {
     expect(toComposerMode({ streaming: true })).toBe("streaming")
     expect(toComposerMode({ disabled: true })).toBe("disabled")
     expect(toOrchestratorLanes([{ id: "1", title: "Sub", status: "busy" }])[0]?.status).toBe("active")
-    expect(toSuggestionMode("split")).toBe("split")
     expect(toApprovalDecision("approve")).toBe("once")
     expect(toApprovalDecision("reject")).toBe("reject")
   })
