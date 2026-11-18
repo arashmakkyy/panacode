@@ -39,3 +39,6 @@ tsconfig.tsbuildinfo
 # Legal drafts pending review are kept outside the repository; never copy them in.
 legal-drafts-private/
 .panacode-ref/
+!/release/desktop/
+/release/desktop/*
+!/release/desktop/INSTALL.md

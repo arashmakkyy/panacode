@@ -36,7 +36,7 @@ if (app) {
   // The installer uses the channel's icons; the rest of the app is already built and signed.
   await $`bun ./script/copy-icons.ts ${resolveChannel()}`
   await $`bunx electron-builder ${flags} --prepackaged ${app}`
-  await cp(`dist/opencode-desktop-win-${cli.cpu}.exe`, path.join(out, `opencode-desktop-win-${cli.cpu}.exe`))
+  await cp(`dist/panacode-desktop-win-${cli.cpu}.exe`, path.join(out, `panacode-desktop-win-${cli.cpu}.exe`))
 }
 
 if (!app && os === "linux") {
@@ -52,14 +52,14 @@ if (!app && os === "mac") {
 
   if (bundles.length !== 1) throw new Error(`Expected one .app bundle in ${parent}, found ${bundles.join(", ")}`)
   await writeUpdateConfig(path.join(parent, bundles[0], "Contents", "Resources"))
-  await $`tar -cf ${path.join(out, `opencode-desktop-mac-${cli.cpu}.app.tar`)} -C ${parent} ${bundles[0]}`
+  await $`tar -cf ${path.join(out, `panacode-desktop-mac-${cli.cpu}.app.tar`)} -C ${parent} ${bundles[0]}`
 }
 
 if (!app && os === "win") {
-  await $`bunx electron-builder ${flags} --dir`
-  const unpacked = path.join("dist", cli.cpu === "arm64" ? "win-arm64-unpacked" : "win-unpacked")
-  await writeUpdateConfig(path.join(unpacked, "resources"))
-  await cp(unpacked, path.join(out, "app"), { recursive: true })
+  // Cross-pack from Linux (wine + NSIS) emits the installer directly for Panacode releases.
+  await $`bunx electron-builder ${flags}`
+  const exe = `panacode-desktop-win-${cli.cpu}.exe`
+  await cp(path.join("dist", exe), path.join(out, exe))
 }
 
 // electron-builder writes resources/app-update.yml only for dmg, zip and nsis targets, not for --dir builds.
