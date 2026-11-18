@@ -1,0 +1,119 @@
+/* Arc toast stack over the real toasts (solid-sonner, `.toast-v2`). Sonner keeps the stacking, swipe and timers;
+ * this gives the cards Arc's panel radius, raised surface, a quieter tucked card behind the front one, toned icons
+ * and pill actions. */
+
+[data-brand="panacode"] .toast-v2-region {
+  max-width: min(360px, calc(100vw - 48px));
+}
+
+[data-brand="panacode"] .toast-v2 {
+  width: 360px;
+  column-gap: 12px;
+  row-gap: 10px;
+  padding: 12px 12px 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+  color: var(--foreground);
+  box-shadow: var(--shadow-floating);
+  transition:
+    transform var(--duration-considered) var(--ease-enter),
+    opacity var(--duration-fast) var(--ease-standard),
+    height var(--duration-considered) var(--ease-enter),
+    background-color var(--duration-standard) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+[data-brand="panacode"] .toast-v2:has(> [data-icon]) {
+  grid-template-columns: 18px minmax(0, 1fr) 24px;
+}
+
+[data-brand="panacode"] .toast-v2:not(:has(> [data-icon])) {
+  grid-template-columns: minmax(0, 1fr) 24px;
+}
+
+/* Tucked toasts sit a step back in tone as well as scale. */
+[data-brand="panacode"] .toast-v2[data-expanded="false"][data-front="false"] {
+  background: var(--surface-muted);
+  box-shadow: var(--shadow-raised, var(--shadow-floating));
+}
+
+[data-brand="panacode"] .toast-v2:focus-visible {
+  box-shadow:
+    var(--shadow-floating),
+    0 0 0 2px color-mix(in oklab, var(--accent) 45%, transparent);
+}
+
+[data-brand="panacode"] .toast-v2 > [data-icon] {
+  width: 18px;
+  color: var(--text-muted);
+}
+
+[data-brand="panacode"] .toast-v2--success > [data-icon] {
+  color: var(--success);
+}
+
+[data-brand="panacode"] .toast-v2--error > [data-icon] {
+  color: var(--danger);
+}
+
+[data-brand="panacode"] .toast-v2 [data-title],
+[data-brand="panacode"] .toast-v2 [data-slot="toast-v2-title"] {
+  color: var(--foreground);
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+[data-brand="panacode"] .toast-v2 [data-title]:empty {
+  display: none;
+}
+
+[data-brand="panacode"] .toast-v2 [data-description],
+[data-brand="panacode"] .toast-v2 [data-slot="toast-v2-description"] {
+  color: var(--text-secondary);
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+[data-brand="panacode"] .toast-v2 [data-title]:empty + [data-description] {
+  color: var(--foreground);
+}
+
+[data-brand="panacode"] .toast-v2 > [data-close-button] {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  margin-top: -2px;
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+[data-brand="panacode"] .toast-v2 > [data-close-button]:hover {
+  background: var(--surface-muted);
+  color: var(--foreground);
+}
+
+[data-brand="panacode"] .toast-v2 [data-slot="toast-v2-actions"] [data-component="button-v2"] {
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+[data-brand="panacode"] .toast-v2 [data-slot="toast-v2-actions"] [data-action-variant="primary"] {
+  background: var(--foreground);
+  color: var(--background);
+}
+
+[data-brand="panacode"] .toast-v2 [data-slot="toast-v2-actions"] [data-action-variant="secondary"] {
+  background: transparent;
+  color: var(--text-secondary);
+}
