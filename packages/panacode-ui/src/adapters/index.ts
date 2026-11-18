@@ -1,6 +1,6 @@
 export { toMcpServerViews } from "./mcp-servers"
 export { defaultToolCallCopy, fromOpenCodeTool, toolKind, toolKindMark, toolSubject, toToolCallStatus, type OpenCodeToolLike, type ToolCallCopy, type ToolKind } from "./tool-call"
-export { toAgentRunStatus } from "./agent-run"
+export { changedFile, defaultRunStepCopy, patchToLines, runChecks, runSteps, runToolKind, runToolTarget, toAgentRunStatus, type RunContentLike, type RunStepCopy, type RunToolLike } from "./agent-run"
 export { toComposerMode } from "./ai-composer"
 export { fromPermissionRequest, permissionKind, permissionRisk, toPermissionReply, toApprovalDecision } from "./agent-approvals"
 export type { PermissionCopy, PermissionKind, PermissionLike } from "./agent-approvals"

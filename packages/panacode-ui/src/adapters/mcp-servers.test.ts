@@ -24,8 +24,8 @@ describe("panacode adapters", () => {
   test("normalizes tool and agent statuses", () => {
     expect(toToolCallStatus({ id: "a", name: "read", state: { status: "running", input: {} }, time: { created: 1 } })).toBe("running")
     expect(toToolCallStatus({ id: "b", name: "read", state: { status: "error", input: {}, error: { message: "boom" } }, time: { created: 1 } })).toBe("error")
-    expect(toAgentRunStatus("aborted")).toBe("cancelled")
-    expect(toAgentRunStatus("busy")).toBe("running")
+    expect(toAgentRunStatus("aborted")).toBe("stopped")
+    expect(toAgentRunStatus("busy")).toBe("working")
   })
 
   test("maps composer, orchestrator, review, and approval helpers", () => {

@@ -198,11 +198,11 @@ export function createSessionRequestModel() {
     return !!id && isPermissionResponding(replyState(id))
   })
 
-  const decide = (decision: PermissionDecision) => {
+  const decide = (decision: PermissionDecision, message?: string) => {
     const perm = permissionRequest()
 
     if (!perm) return
-    dispatch(perm.id, { type: "decide", sessionID: perm.sessionID, decision })
+    dispatch(perm.id, { type: "decide", sessionID: perm.sessionID, decision, message })
   }
 
   function dispatch(requestID: string, event: PermissionReplyEvent) {
@@ -241,7 +241,15 @@ export function createSessionRequestModel() {
     })
     // A request another client or the TUI already answered counts as replied.
     void serverSDK.api.permission
-      .reply({ sessionID: effect.sessionID, requestID, decision: effect.decision }, { signal: controller.signal })
+      .reply(
+        {
+          sessionID: effect.sessionID,
+          requestID,
+          decision: effect.decision,
+          ...(effect.message ? { message: effect.message } : {}),
+        },
+        { signal: controller.signal },
+      )
       .then(
         () => dispatch(requestID, { type: "reply.succeeded", attempt: effect.attempt }),
         (error) =>
