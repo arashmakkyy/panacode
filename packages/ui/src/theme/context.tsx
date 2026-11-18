@@ -168,6 +168,9 @@ function applyThemeCss(theme: DesktopTheme, themeId: string, mode: "light" | "da
   ensureThemeStyleElement().textContent = fullCss
   document.documentElement.dataset.theme = themeId
   document.documentElement.dataset.colorScheme = mode
+  // Preload writes an inline color-scheme from the OS preference. It outranks the
+  // stylesheet, so native inputs and buttons stay on the light palette until this matches.
+  document.documentElement.style.colorScheme = mode
   document.documentElement.style.backgroundColor = isDark ? "#080808" : "#fafafa"
 
   // Update theme-color meta tag to match light/dark mode

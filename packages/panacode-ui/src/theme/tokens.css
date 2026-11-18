@@ -12,6 +12,8 @@
  */
 
 [data-brand="panacode"] {
+  color-scheme: light;
+
   /* Neutral scale */
   --neutral-0: oklch(100% 0 0);
   --neutral-1: oklch(99% 0 0);
@@ -128,6 +130,29 @@
 }
 
 [data-brand="panacode"][data-color-scheme="dark"] {
+  /* Beats the preload inline color-scheme, which otherwise keeps native controls on the light palette. */
+  color-scheme: dark !important;
+
+  /* App surfaces and inputs. The dark grey ramp still starts at white, so these
+   * semantics are pinned to the dark end here instead of per component. */
+  --background-base: var(--v2-grey-1200);
+  --background-strong: var(--v2-grey-1100);
+  --background-stronger: var(--v2-grey-1100);
+  --background-weak: var(--v2-grey-1000);
+  --surface-base: var(--v2-grey-1000);
+  --input-base: var(--v2-grey-1000);
+  --v2-background-bg-base: var(--v2-grey-1100);
+  --v2-background-bg-deep: var(--v2-grey-1200);
+  --v2-background-bg-layer-01: var(--v2-grey-1000);
+  --v2-background-bg-layer-02: var(--v2-grey-900);
+  --v2-background-bg-layer-03: var(--v2-grey-800);
+  --v2-background-bg-layer-04: var(--v2-grey-700);
+  --v2-background-bg-button-neutral: var(--v2-grey-900);
+  --v2-background-bg-icon-button-contrast: var(--v2-grey-800);
+  --v2-text-text-inverse: var(--v2-grey-100);
+  /* Submit actions wash this alpha across the contrast fill. 60% white turns that fill into a white bar. */
+  --v2-alpha-light-60: #ffffff14;
+
   --background: oklch(19% 0 0);
   --surface: oklch(21.5% 0 0);
   --surface-raised: oklch(24% 0 0);
