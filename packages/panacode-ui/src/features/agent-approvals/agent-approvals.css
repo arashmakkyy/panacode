@@ -59,7 +59,7 @@
 
 [data-component="panacode-agent-approvals"] [data-slot="approval-focus-area"] {
   padding: 0 var(--approvals-pad) 18px;
-  animation: approvals-slide-in var(--duration-standard, 200ms) var(--ease-enter, ease-out) both;
+  animation: approvals-slide-in var(--spring-smooth-duration, 400ms) var(--spring-smooth, ease-out) both;
 }
 
 [data-component="panacode-agent-approvals"] [data-slot="approval"] {
@@ -388,7 +388,7 @@
 
 [data-component="panacode-agent-approvals"] .approvals-chevron {
   color: var(--text-muted);
-  transition: transform var(--duration-standard, 200ms) var(--ease-standard, ease);
+  transition: transform var(--spring-snappy-duration, 260ms) var(--spring-snappy, ease);
 }
 
 [data-component="panacode-agent-approvals"] [aria-expanded="true"] .approvals-chevron {
@@ -414,7 +414,7 @@
   display: grid;
   grid-template-rows: 0fr;
   overflow: hidden;
-  transition: grid-template-rows var(--duration-standard, 200ms) var(--ease-standard, ease);
+  transition: grid-template-rows var(--spring-smooth-duration, 400ms) var(--spring-smooth, ease);
 }
 
 [data-component="panacode-agent-approvals"] [data-slot="approvals-log-wrap"][data-open] {

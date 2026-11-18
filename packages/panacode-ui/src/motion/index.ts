@@ -17,3 +17,4 @@ export const switchMotion = {
   /** A press that just released should not add a second stretch on top of the glide. */
   pressReleaseMs: 250,
 } as const
+export { arcSpring, installMotionTokens, springEasing, springTo, type SpringPreset } from "./arc"
