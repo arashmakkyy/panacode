@@ -5,6 +5,8 @@
 ## فهرست تصمیم‌های جاری
 | شناسه | موضوع / محدودهٔ اثر فعلی |
 |---|---|
+| D-017 | updater و What's New دسکتاپ OpenCode در Panacode خاموش است (`PANACODE_UPSTREAM_UPDATES`) |
+| D-016 | پورت سرویس Panacode جدا از OpenCode: 28844 روی Windows، 49324 در macOS/Linux |
 | D-015 | تا اطلاع بعدی تست جدید اجرا نمی‌شود؛ پایان کار فقط اعلام می‌شود |
 | D-014 | بیلد Windows با GitHub Actions؛ فقط `release.yml` upstream حذف شد |
 | D-013 | کدنویسی، بیلد و تست روی box خود Agent؛ Agentهای ابری فعلاً نه |
@@ -20,6 +22,20 @@
 | D-003 | بدون دادهٔ دمو؛ نام ارائه‌دهندهٔ عمدهٔ پشت PanaAI هرگز نمایش داده نمی‌شود |
 | D-002 | فقط PanaAI به‌عنوان provider؛ مدل‌ها از `/v1/models`؛ فعلاً `stream:false` |
 | D-001 | Panacode = fork سبک و همگام‌پذیر با upstream OpenCode |
+
+## D-017 — حذف updater دسکتاپ OpenCode
+- تاریخ و وضعیت: 2026-11-18 | معتبر
+- زمینه: صفحهٔ خطا و اپ دکمهٔ «Update to 2.3.2» نشان می‌دادند. updater دسکتاپ (`packages/gui-plugins/src/updater`) از فید OpenCode (`opencode.ai/update/api/.../desktop/opencode`) و What's New از `opencode.ai/changelog.json` می‌خواند؛ یعنی نسخهٔ OpenCode پیشنهاد می‌شد، نه Panacode. Panacode فید آپدیت ندارد و از GitHub Releases (workflow `panacode-windows`) منتشر می‌شود.
+- تصمیم: پرچم `PANACODE_UPSTREAM_UPDATES = false` در `packages/gui-plugins/src/updater/panacode.ts`. با آن، main نه Ipc `Updater` را فراهم می‌کند نه آیتم منوی Check for Updates را؛ renderer هم What's New، بخش Updates تنظیمات، دکمهٔ تایتل‌بار و (چون Ipc وجود ندارد) دکمه‌های آپدیت صفحهٔ خطا را نشان نمی‌دهد. به‌روزرسانی service-worker نسخهٔ وب می‌ماند چون build خود سرور Panacode را بارگذاری می‌کند. روشن‌کردن پرچم فقط وقتی Panacode فید و changelog خودش را داشته باشد. commit `31d5c44587`.
+- دامنه: فقط اپ دسکتاپ. updater ترمینالی CLI (`packages/cli/src/services/updater.ts`) دست نخورده و سرویس دسکتاپ آن را اجرا نمی‌کند.
+- مبنا و منشأ: پیام Arash، 2026-11-18 («آره اینکار رو بکن و پوش کن»).
+
+## D-016 — پورت سرویس جدا از OpenCode
+- تاریخ و وضعیت: 2026-11-18 | معتبر
+- زمینه: Panacode روی Windows همان پورت سرویس OpenCode را می‌گرفت (`0x70de` = 28894، از commit upstream `e441dafb09` / #57428). با باز بودن OpenCode، Panacode با خطای «Managed service port 28894 ... already in use» بالا نمی‌آمد. در macOS/Linux هم هر دو 49374 (`0xc0de`) بودند.
+- بررسی و دلیل: همان طرح upstream حفظ شد (پورت پایه در 0xC000+، و روی Windows نگاشت به بلوک 0x7000 با حفظ ۱۲ بیت پایین) تا دلایل upstream برقرار بماند: زیر 32768، بیرون از بازهٔ پویای Windows (49152+) و رزروهای Hyper-V/WinNAT، و بیرون از بلوک WSL mirrored (معمولاً 44620–48715). فقط بایت پایین عوض شد: `0xC0AC` (49324) و روی Windows `0x70AC` (28844)؛ کانال `local` یکی بیشتر (49325 / 28845). با `0x0c0c` (پورت isolated) و پورت‌های OpenCode تداخل ندارد. fallback خودکار به پورت آزاد انتخاب نشد: upstream عمداً پورت ثابت را قفل انتخاب یک سرویس روی یک دیتابیس کرده است.
+- تصمیم: `ServiceConfig.PANACODE_SERVICE_PORT = 0xc0ac` در CLI و `--port 0x70ac` در دسکتاپ Windows. اگر پورت را پروسهٔ دیگری گرفته باشد، پیام خطا روی Windows هم نام و PID آن را می‌گوید (`netstat` + `tasklist`). commit `afae032e9a`.
+- مبنا و منشأ: پیام Arash، 2026-11-18.
 
 ## D-015 — توقف تست تا اعلام Arash
 - تاریخ و وضعیت: 2026-11-18 | معتبر

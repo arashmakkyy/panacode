@@ -167,6 +167,10 @@ Internal package names `@opencode/*` remain for upstream compatibility.
 | `packages/ui/src/icons/catalog.ts` | Shared integration boundary | `setIconArtwork(body, viewBox)` override registry; `getIcon` checks it first (lucide via `@panacode/ui/icons`) | Medium | Re-apply the 13-line hook if upstream rewrites the catalog; new upstream icon names need a MAP entry in `script/panacode-icons-generate.ts` (unmapped names fall back to upstream art) |
 | `packages/app/src/settings/model.tsx` | Shared integration boundary | Side-effect imports `@panacode/ui/icons` and `@panacode/ui/motion`; default `tabLayout` is `inbox` (workspace sidebar) | Medium | Re-apply the two imports and the default |
 | `packages/desktop/src/renderer/startup/splash.*` | Shared integration boundary | Splash uses the active brand pack | Medium | Keep the `SplashBrand` mount |
+| `packages/cli/src/services/service-config.ts` | Shared integration boundary | `PANACODE_SERVICE_PORT = 0xC0AC` replaces upstream's `0xC0DE` in `channelPort` (Windows maps it to `0x70AC` = 28844) so Panacode and OpenCode can run together (decisions D-016) | Medium | Keep the Panacode constant; take upstream changes to the Windows mapping in `defaultPort` and re-check `packages/cli/test/service.test.ts` |
+| `packages/desktop/src/main/service/background-service.ts` | Shared integration boundary | Packaged Windows passes `--port 0x70ac` (upstream `0x70de`) | Medium | Keep `0x70ac`; it must equal `ServiceConfig.defaultPort("latest", "win32")` |
+| `packages/cli/src/services/port-owner.ts` | Shared integration boundary | Windows branch (`netstat` + `tasklist`) names the process holding the port; upstream returns `undefined` on Windows | Low | Keep the Windows branch unless upstream adds its own |
+| `packages/gui-plugins/src/updater/panacode.ts`, `updater/main.ts`, `updater/renderer.tsx` | Panacode flag + two guarded hunks | `PANACODE_UPSTREAM_UPDATES = false`: no desktop updater (feed `opencode.ai/update/api/.../opencode`), no Check for Updates menu/settings/titlebar/error-page buttons, no What's New (`opencode.ai/changelog.json`) (decisions D-017) | Low | Keep the early return in `main.ts` and the two guards in `renderer.tsx`; set the flag to `true` only when Panacode has its own feed. The `publish` URLs in `packages/desktop/electron-builder.config.ts` are still upstream's but unused while the flag is off |
 | `script/panacode-icons-generate.ts`, `script/panacode-brand-apply.ts` | Panacode-owned | Generated lucide artwork; brand pack swap | Low | Keep ours |
 | `bun.lock` | Generated | Lockfile | Medium | Regenerate after resolving package.json |
 | `release/desktop/*.exe` | Generated output | Installers | None | Do not commit binaries |
@@ -339,7 +343,8 @@ Manual / product:
 - [ ] Light and dark schemes under Panacode theme
 - [ ] Keyboard shortcuts
 - [ ] Desktop packaging identity (`ai.panacode.desktop*`)
-- [ ] Updater channel does **not** silently install stock OpenCode builds
+- [ ] No update offer anywhere (error page, Settings → Updates, titlebar, app menu) while `PANACODE_UPSTREAM_UPDATES` is false; never an OpenCode release
+- [ ] Panacode starts while OpenCode desktop is open (service port 28844 on Windows, 49324 elsewhere)
 
 Platform notes: Windows NSIS installers live under `release/desktop/` (generated; not source of truth). Linux metainfo generation uses Panacode appIds in `packages/desktop/script/copy-metainfo.ts`.
 
@@ -400,7 +405,8 @@ Prefer non-destructive recovery. Destructive resets are last resort and never th
 - **Stage 1 only.** The shell (window, titlebar, sidebar, home, session empty/loading/error) is mounted. Chat, composer, tool call, code suggestion, agent run, and orchestrator are not. Approvals and MCP remain the earlier low-fidelity mounts.
 - **Brand scan.** `bun script/panacode-brand-scan.ts` fails on user-visible `opencode` in prose, docs/Discord/GitHub links, and `www.opencode.ai`. It allows internal ids, license lines (`Forked from OpenCode`, the trademark sentence), and the upstream product names OpenCode Go / Console / Zen / Free because those are the services a person actually signs into.
 - **Upstream tip.** Baseline is `cbe71595e1` on `origin/dev`. Fetch `upstream` before the next integration; it was not available in the stage 1 environment.
-- **Release channel:** Panacode must not consume OpenCode production update feeds. Packaging identity is Panacode; confirm updater endpoints on each release.
+- **Release channel:** Panacode must not consume OpenCode production update feeds. The desktop updater is off behind `PANACODE_UPSTREAM_UPDATES` (D-017). The terminal CLI still has upstream's own updater (`packages/cli/src/services/updater.ts`, opencode.ai feed); the desktop service never runs it, but a standalone `panacode` CLI could.
+- **Service port:** Panacode's managed service port is its own (D-016). If an upstream merge changes `channelPort` or the desktop `servicePort`, keep Panacode's value distinct from upstream's.
 - **No conflict-free guarantee:** Large upstream architectural changes can still require multi-day conflict resolution. This architecture reduces surface area and makes conflicts understandable; it does not eliminate them.
 - **Unverified in this agent environment:** full desktop GUI smoke, Windows NSIS install, SSH/WSL, and broad `bun typecheck` across the monorepo may be incomplete depending on VM resources — re-run section H before shipping.
 

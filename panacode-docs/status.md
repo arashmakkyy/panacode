@@ -1,8 +1,8 @@
 # وضعیت پروژه — Panacode
-آخرین به‌روزرسانی: 2026-11-18
+آخرین به‌روزرسانی: 2026-11-18 (20:45 PT)
 
 ## تصویر فعلی
-- **کدنویسی متوقف است.** آخرین commit کد: `07b4ccaa8a` (feat(shortcut-recorder)) روی `panacode/redesign-v2` در `arashmakkyy/panacode`. پورت Freeهای باقی‌مانده تمام نشده است (T-001). طبق D-015 تست جدید هم تا دستور Arash اجرا نمی‌شود.
+- **کدنویسی بازطراحی متوقف است.** آخرین commit بازطراحی: `07b4ccaa8a` (feat(shortcut-recorder)) روی `panacode/redesign-v2` در `arashmakkyy/panacode`. به دستور Arash فقط دو رفع کوچک بعد از آن push شد: پورت سرویس جدا از OpenCode (`afae032e9a`، D-016) و حذف updater دسکتاپ OpenCode (`31d5c44587`، D-017). هنوز در هیچ exe نیستند؛ بیلد r10 را Arash از Actions می‌زند (T-013). پورت Freeهای باقی‌مانده تمام نشده است (T-001). طبق D-015 تست جدید هم تا دستور Arash اجرا نمی‌شود.
 - **هر ۸ مرجع Arc منتقل و به state واقعی وصل شده‌اند** (کد commit شده؛ تأیید نهایی Arash هنوز نگرفته): Tool Call (`bc7350a7dd`)، Agent Approvals (`64afda0f07`)، Code Suggestion (`c547400640`)، AI Chat (`836bdc2d7f`)، AI Composer (`f409be2deb`، `77039b49c7`، `935d91ff84`)، Agent Run (`e1cd0362a5`)، Agent Orchestrator (`a3edd8ba63`)، MCP Servers (`975cc3c659`).
 - **پایه:** برند Firouzeh (موقت، قابل تعویض؛ `0f11cd5a05`)، shell با سایدبار ورک‌اسپیس و تاپ‌بار باریک (`c18a6764d7`، `a713a9a323`)، آیکون‌های lucide (`ca80b6487b`)، motion با springهای Arc (`8f35c335a2`)، PanaAI spotlight در Providers (`153f43a020`)، اصلاح dark mode و brand-scan در CI.
 - **Freeهای پورت‌شده (commit شده):** command-palette، dropdown/context menu، toast-stack، tooltip، dialog، search-field، tabs، theme-switch، card، select، resizable-panels، hover-card، shortcut-recorder. switch و segmented-control از قبل primitive دارند (وفاداری به Free پک بازبینی نشده).
@@ -17,13 +17,15 @@
 | T-002 | رفع خطاهای باز تست (۶ مورد طبق گزارش پیشرفت 2026-11-18) و سبز ماندن typecheck/تست‌ها | متوقف | گزارش‌شده؛ اینجا بررسی نشده. فهرست دقیق در خروجی QA روی box است. |
 | T-003 | بررسی کامل حالت روشن (light) همهٔ صفحه‌های جدید | متوقف | — |
 | T-004 | QA نهایی end-to-end + ویدیو و اسکرین‌شات برای تأیید Arash | منتظر بررسی | فقط با دستور Arash (D-015). باید شامل: Providers (PanaAI اول، کلید ماسک‌شده، لیست Popular خالی نباشد)، پنجرهٔ مجوز با فایل/الگو/دستور، thinking با مدل thinking‌دار، چت/ابزار/دیف، صفر خطای کنسول، صفر «OpenCode»، بدون نمایش کلید. |
-| T-005 | ریلیز Windows r9 از طریق `panacode-windows.yml` | در حال انجام | اجرای `44453296373` در 2026-11-18 حدود 19:42 PT شروع شده و هنگام این بازسازی in_progress بود؛ نتیجه اینجا بررسی نشده. |
+| T-005 | ریلیز Windows r9 از طریق `panacode-windows.yml` | تکمیل | اجرای `44453296373` موفق؛ ریلیز `panacode-desktop-win-x64-r9` (Latest). r9 هنوز پورت 28894 و updater OpenCode را دارد. |
 | T-006 | حذف متن فارسی از داده‌های برند | در صف | `packages/panacode-ui/src/brand/packs/firouzeh/brand.ts` فیلد `taglineFa` دارد و `index.tsx` آن را export می‌کند (D-009). رندر شدنش بررسی نشده؛ باید حذف یا تأیید شود که هیچ‌جا نمایش داده نمی‌شود. |
 | T-007 | ادغام کار در `dev` و همگام‌سازی با upstream | مسدود | نیازمند تأیید Arash. `dev` در 2026-11-18 هنوز upstream خالص و ۱۶۹ commit عقب‌تر از `anomalyco/opencode:dev` بود. روال: `UPSTREAM-MERGE.md` §E. |
 | T-008 | دریافت و یکپارچه‌سازی ۱۷ کامپوننت Arc Pro | منتظر بررسی | منتظر ساخت توسط Arash؛ جزئیات کامل در بخش بعدی. |
 | T-009 | مراحل ۳ تا ۵ برنامه: بقیهٔ صفحه‌ها (فاز ۲)، تست بصری خودکار، به‌روزرسانی `UPSTREAM-MERGE.md` و ریلیز | در صف | پس از تأیید مرحلهٔ فعلی. |
 | T-010 | بررسی دوبارهٔ پک Arc و پیشنهاد جایگزینی‌های بیشتر | در صف | Arash گفته پس از تأیید این فاز اعلام می‌کند. |
 | T-011 | تأیید PRD بازسازی‌شده توسط Arash | منتظر بررسی | `PRD.md` پیش‌نویس است. |
+| T-013 | بیلد Windows r10 با دو رفع D-016 و D-017 | منتظر بررسی | Arash خودش از تب Actions اجرا می‌کند: workflow `panacode-windows`، ref `panacode/redesign-v2`، release_tag `r10`. Agent بیلد/QA نمی‌زند (D-015). بعد از نصب: Panacode کنار OpenCode باز شود و هیچ‌جا «Update to …» دیده نشود. |
+| T-014 | نمایش نسخهٔ خود Panacode | در صف | صفحهٔ خطا «Version: 2.3.0» نشان می‌دهد: نسخهٔ `package.json` upstream (OpenCode 2.3.0). Panacode شمارهٔ نسخهٔ جدا ندارد و ریلیزها فقط برچسب rN دارند. رفع ساده و امن پیدا نشد: نسخه با نسخهٔ CLI سرویس مقایسه می‌شود (`cli-version.ts`) و workflow از `dev` اجرا می‌شود. پیشنهاد: یک ثابت build-time مثل `PANACODE_RELEASE` که workflow تزریق کند و فقط در UI نمایش داده شود. نیازمند تصمیم Arash. |
 
 ## ادامه از اینجا
 - قدم بعدی: منتظر دستور Arash بمان. اگر کدنویسی ادامه یافت → T-001 از `07b4ccaa8a`، بعد T-002/T-003، و فقط با دستور او T-004.
@@ -208,6 +210,10 @@
 
 ## تاریخچهٔ کارها
 ### 2026-11-18
+#### T-015 — پورت سرویس جدا و حذف updater OpenCode | تکمیل
+- انجام‌شده: `afae032e9a` پورت سرویس Panacode را 28844 (Windows) / 49324 (macOS، Linux) کرد و پیام تداخل پورت روی Windows نام پروسه را می‌گوید (D-016). `31d5c44587` updater، What's New و همهٔ دکمه‌های «Update to …» دسکتاپ را پشت `PANACODE_UPSTREAM_UPDATES = false` خاموش کرد (D-017). ثبت در `UPSTREAM-MERGE.md` §C، §H، §L و یادداشت در `release/desktop/INSTALL.md`.
+- بررسی: typecheck سبز برای `packages/cli`، `packages/desktop`، `packages/gui-plugins`؛ تست‌ها: `packages/cli/test/service.test.ts` (۳۰ پاس، ۱ skip چون lsof روی box نیست)، `service-lifecycle.test.ts` (۷ پاس؛ یک assertion کهنه که هنوز «opencode service set port» می‌خواست در `8d2d8b29f3` اصلاح شد)، `packages/gui-plugins` updater (۷۴ پاس)، `packages/desktop` (۵۲۶ پاس، ۴ skip)، دو تست app با URL پورت جدید (۷ پاس)؛ `script/panacode-brand-scan.ts` ok. QA و بیلد exe اجرا نشد (D-015، T-013).
+- باقی‌مانده / ارجاع: T-013 (بیلد r10 توسط Arash)، T-014 (نسخهٔ Panacode). کار نیمه‌تمام `tab.tsx` در `/workspace/pc-audit` دست نخورد و push نشد.
 #### T-012 — بازسازی اولیهٔ مستندات طبق how_to_update_docs.md | تکمیل
 - انجام‌شده: پوشهٔ موجود `panacode-docs/` حفظ شد؛ `PRD.md` (بازسازی‌شده، پیش‌نویس)، `decisions.md` (D-001…D-015)، `status.md` و کپی `how_to_update_docs.md` اضافه شدند. فهرست Proهای در انتظار در همین فایل آمد (به دستور Arash، نه فایل جدا). اسناد پشتیبان (`UPSTREAM-MERGE.md`، `redesign/*`) جابه‌جا نشدند چون `script/panacode-ui-ownership-check.ts` و `packages/panacode-ui/README.md` به مسیرشان ارجاع می‌دهند.
 - بررسی: Git log `panacode/redesign-v2` تا `07b4ccaa8a`، کد `packages/app` و `packages/panacode-ui`، `PANACODE.md`، `redesign/*`، پک Arc و بررسی آن روی box، گزارش QA روی box. تست اجرا نشد.
