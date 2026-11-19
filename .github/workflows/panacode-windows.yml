@@ -1,0 +1,184 @@
+name: panacode-windows
+run-name: "panacode windows ${{ inputs.release_tag || github.ref_name }} (${{ inputs.ref || github.ref_name }})"
+
+# Builds the Panacode desktop NSIS installer for Windows x64 on a GitHub-hosted runner and publishes it as the
+# GitHub release panacode-desktop-win-x64-<tag>. Unsigned (SmartScreen: More info -> Run anyway).
+#
+# Trigger:
+#   gh workflow run panacode-windows.yml -R arashmakkyy/panacode --ref dev -f ref=panacode/redesign-v2 -f release_tag=r10
+#   or push a tag: git tag panacode-desktop-win-x64-r10 <sha> && git push origin panacode-desktop-win-x64-r10
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or SHA to build"
+        required: true
+        default: panacode/redesign-v2
+        type: string
+      release_tag:
+        description: "Release suffix, e.g. r9 (publishes panacode-desktop-win-x64-r9). Empty = artifact only."
+        required: false
+        default: ""
+        type: string
+  push:
+    tags:
+      - "panacode-desktop-win-x64-r*"
+
+concurrency:
+  group: panacode-windows-${{ inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  windows-x64:
+    name: build windows x64 installer
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      OPENCODE_CHANNEL: prod
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      NODE_OPTIONS: --max-old-space-size=6144
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          persist-credentials: false
+
+      - name: Resolve release
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            tag="${GITHUB_REF_NAME}"
+          elif [ -n "${{ inputs.release_tag }}" ]; then
+            tag="panacode-desktop-win-x64-${{ inputs.release_tag }}"
+          else
+            tag=""
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "suffix=${tag#panacode-desktop-win-x64-}" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "short=$(git rev-parse --short=10 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Cache paths
+        id: paths
+        run: echo "bun=$(bun pm cache)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Bun packages
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ steps.paths.outputs.bun }}
+          key: win-x64-bun-${{ hashFiles('bun.lock', 'patches/**') }}
+          restore-keys: win-x64-bun-
+
+      - name: Cache node_modules
+        id: nm
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            node_modules
+            packages/*/node_modules
+          key: win-x64-nm-${{ hashFiles('bun.lock', 'patches/**', 'package.json', 'packages/*/package.json') }}
+
+      - name: Cache Electron downloads
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: win-x64-electron-${{ hashFiles('packages/desktop/package.json') }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install setuptools >/dev/null 2>&1 || true
+          bun install --frozen-lockfile
+
+      - name: Build CLI sidecar (windows-x64-baseline)
+        working-directory: packages/cli
+        run: bun run build
+        env:
+          OPENCODE_TARGET: windows-x64-baseline
+
+      - name: Build desktop
+        working-directory: packages/desktop
+        run: bun run build
+        env:
+          OPENCODE_TARGET: windows-x64
+
+      - name: Pack NSIS installer
+        working-directory: packages/desktop
+        run: bun run pack
+        env:
+          OPENCODE_TARGET: windows-x64
+
+      - name: Checksum
+        working-directory: dist/desktop
+        run: |
+          ls -la
+          test -s panacode-desktop-win-x64.exe
+          echo "$(sha256sum panacode-desktop-win-x64.exe | cut -d' ' -f1 | tr -d '\\*')  panacode-desktop-win-x64.exe" > panacode-desktop-win-x64.exe.sha256
+          cat panacode-desktop-win-x64.exe.sha256
+          echo "installer: $(stat -c %s panacode-desktop-win-x64.exe) bytes, sha256 $(cut -d' ' -f1 panacode-desktop-win-x64.exe.sha256)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: panacode-desktop-win-x64
+          path: |
+            dist/desktop/panacode-desktop-win-x64.exe
+            dist/desktop/panacode-desktop-win-x64.exe.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Publish release
+        if: steps.meta.outputs.tag != ''
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+          SUFFIX: ${{ steps.meta.outputs.suffix }}
+          SHA: ${{ steps.meta.outputs.sha }}
+          REF: ${{ inputs.ref || github.ref_name }}
+        run: |
+          sum=$(cut -d' ' -f1 dist/desktop/panacode-desktop-win-x64.exe.sha256)
+          cat > "$RUNNER_TEMP/notes.md" <<NOTES
+          ## Panacode Windows desktop (${SUFFIX})
+
+          Unsigned NSIS installer for Windows x64, built by GitHub Actions run [${GITHUB_RUN_ID}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}).
+
+          ### Install
+          1. Download \`panacode-desktop-win-x64.exe\`
+          2. Run it (SmartScreen: More info → Run anyway; the installer is unsigned)
+          3. Quit any old Panacode processes; delete \`%USERPROFILE%\\.local\\state\\panacode\\service*.json\` if upgrading from a hung install
+          4. Open Panacode → Sign in with PanaAI
+
+          Ref: \`${REF}\`
+          Commit: \`${SHA}\`
+          SHA256: \`${sum}\`
+          NOTES
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber \
+              dist/desktop/panacode-desktop-win-x64.exe dist/desktop/panacode-desktop-win-x64.exe.sha256
+            gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --latest --draft=false
+          else
+            gh release create "$TAG" -R "$GITHUB_REPOSITORY" --target "$SHA" --latest \
+              --title "Panacode Windows desktop (${SUFFIX})" --notes-file "$RUNNER_TEMP/notes.md" \
+              dist/desktop/panacode-desktop-win-x64.exe dist/desktop/panacode-desktop-win-x64.exe.sha256
+          fi
+          echo "release: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG}" >> "$GITHUB_STEP_SUMMARY"
