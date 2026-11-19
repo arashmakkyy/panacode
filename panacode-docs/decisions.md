@@ -5,6 +5,7 @@
 ## فهرست تصمیم‌های جاری
 | شناسه | موضوع / محدودهٔ اثر فعلی |
 |---|---|
+| D-018 | کانال `prod` (بیلد workflow ویندوز) کانال ریلیز است: ثبت سرویس در `service.json` و پورت 28844 |
 | D-017 | updater و What's New دسکتاپ OpenCode در Panacode خاموش است (`PANACODE_UPSTREAM_UPDATES`) |
 | D-016 | پورت سرویس Panacode جدا از OpenCode: 28844 روی Windows، 49324 در macOS/Linux |
 | D-015 | تا اطلاع بعدی تست جدید اجرا نمی‌شود؛ پایان کار فقط اعلام می‌شود |
@@ -22,6 +23,12 @@
 | D-003 | بدون دادهٔ دمو؛ نام ارائه‌دهندهٔ عمدهٔ پشت PanaAI هرگز نمایش داده نمی‌شود |
 | D-002 | فقط PanaAI به‌عنوان provider؛ مدل‌ها از `/v1/models`؛ فعلاً `stream:false` |
 | D-001 | Panacode = fork سبک و همگام‌پذیر با upstream OpenCode |
+
+## D-018 — کانال prod کانال ریلیز است
+- تاریخ و وضعیت: 2026-11-18 | معتبر
+- زمینه: workflow `panacode-windows` CLI را با `OPENCODE_CHANNEL=prod` می‌سازد (نسخه `0.0.0-prod-<run>`). `ServiceConfig.filename()` فقط latest/dev/beta/next را کانال ریلیز می‌دانست، پس CLI در `~/.local/state/panacode/service-prod.json` ثبت می‌شد ولی دسکتاپ `service.json` را poll می‌کرد. سرور بالا می‌آمد ولی پیدا نمی‌شد و هر اجرای r10 بعد از ۴ دقیقه «Timed out waiting for the background service to start» می‌داد. r9 همین باگ را داشت ولی زودتر با تداخل پورت 28894 شکست می‌خورد.
+- تصمیم: `ServiceConfig.releaseChannel()` شامل `prod` است (نام فایل ثبت و پورت پیش‌فرض). CLI کانال prod یک `service-prod.json` جامانده را به `service.json` منتقل می‌کند تا سرور یتیم r9/r10 پیدا و با نسخهٔ جدید جایگزین شود. `cliServiceRegistrationFile` دسکتاپ هم prod را ریلیز می‌داند و نسخه‌های preview با شمارهٔ run را می‌شناسد. خطای timeout حالا مسیر فایل ثبت و تعداد سرورهای در حال اجرا (با stderr) را می‌گوید. commit `21058b3855`.
+- مبنا و منشأ: لاگ‌های export‌شدهٔ Arash از r10 (2026-11-18) و پیام او.
 
 ## D-017 — حذف updater دسکتاپ OpenCode
 - تاریخ و وضعیت: 2026-11-18 | معتبر

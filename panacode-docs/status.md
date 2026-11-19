@@ -1,5 +1,5 @@
 # وضعیت پروژه — Panacode
-آخرین به‌روزرسانی: 2026-11-18 (20:45 PT)
+آخرین به‌روزرسانی: 2026-11-18 (21:50 PT)
 
 ## تصویر فعلی
 - **کدنویسی بازطراحی متوقف است.** آخرین commit بازطراحی: `07b4ccaa8a` (feat(shortcut-recorder)) روی `panacode/redesign-v2` در `arashmakkyy/panacode`. به دستور Arash فقط دو رفع کوچک بعد از آن push شد: پورت سرویس جدا از OpenCode (`afae032e9a`، D-016) و حذف updater دسکتاپ OpenCode (`31d5c44587`، D-017). هنوز در هیچ exe نیستند؛ بیلد r10 را Arash از Actions می‌زند (T-013). پورت Freeهای باقی‌مانده تمام نشده است (T-001). طبق D-015 تست جدید هم تا دستور Arash اجرا نمی‌شود.
@@ -24,7 +24,7 @@
 | T-009 | مراحل ۳ تا ۵ برنامه: بقیهٔ صفحه‌ها (فاز ۲)، تست بصری خودکار، به‌روزرسانی `UPSTREAM-MERGE.md` و ریلیز | در صف | پس از تأیید مرحلهٔ فعلی. |
 | T-010 | بررسی دوبارهٔ پک Arc و پیشنهاد جایگزینی‌های بیشتر | در صف | Arash گفته پس از تأیید این فاز اعلام می‌کند. |
 | T-011 | تأیید PRD بازسازی‌شده توسط Arash | منتظر بررسی | `PRD.md` پیش‌نویس است. |
-| T-013 | بیلد Windows r10 با دو رفع D-016 و D-017 | منتظر بررسی | Arash خودش از تب Actions اجرا می‌کند: workflow `panacode-windows`، ref `panacode/redesign-v2`، release_tag `r10`. Agent بیلد/QA نمی‌زند (D-015). بعد از نصب: Panacode کنار OpenCode باز شود و هیچ‌جا «Update to …» دیده نشود. |
+| T-013 | بیلد Windows با رفع‌های D-016، D-017 و D-018 | منتظر بررسی | r10 (`44461403354`، از `be0ba6cbd1`) ساخته شد ولی بعد از ۴ دقیقه timeout سرویس داد (علت: D-018). رفع در `21058b3855`؛ بیلد بعدی (مثلاً r11) را باید اجرا کرد. Agent بیلد/QA نمی‌زند (D-015). بعد از نصب: Panacode کنار OpenCode باز شود و هیچ‌جا «Update to …» دیده نشود. اگر سرور یتیم r10 (`opencode-cli.exe`) هنوز در Task Manager باشد، نسخهٔ جدید باید خودش آن را جایگزین کند. |
 | T-014 | نمایش نسخهٔ خود Panacode | در صف | صفحهٔ خطا «Version: 2.3.0» نشان می‌دهد: نسخهٔ `package.json` upstream (OpenCode 2.3.0). Panacode شمارهٔ نسخهٔ جدا ندارد و ریلیزها فقط برچسب rN دارند. رفع ساده و امن پیدا نشد: نسخه با نسخهٔ CLI سرویس مقایسه می‌شود (`cli-version.ts`) و workflow از `dev` اجرا می‌شود. پیشنهاد: یک ثابت build-time مثل `PANACODE_RELEASE` که workflow تزریق کند و فقط در UI نمایش داده شود. نیازمند تصمیم Arash. |
 
 ## ادامه از اینجا
@@ -210,6 +210,10 @@
 
 ## تاریخچهٔ کارها
 ### 2026-11-18
+#### T-016 — timeout سرویس پس‌زمینه در r10 ویندوز | تکمیل
+- انجام‌شده: علت از لاگ export‌شدهٔ Arash (`desktop/20261119T052051/main.log`) پیدا شد: CLI کانال prod در `service-prod.json` ثبت می‌شد و دسکتاپ `service.json` را می‌خواند (D-018). رفع در `21058b3855` (CLI، دسکتاپ و پیام timeout در `packages/client`).
+- بررسی: typecheck سبز برای `packages/client`، `packages/cli`، `packages/desktop`. تست‌ها: `packages/desktop/src/main/service` (۴۸ پاس)، `packages/client` (۲۶۲ پاس)، `packages/cli` شامل service/service-lifecycle/server-connection (۴۱ پاس، ۱ skip، ۱ شکست قدیمی و بی‌ربط در server-connection که بدون این تغییر هم شکست می‌خورد). روی Windows واقعی تست نشد.
+- باقی‌مانده / ارجاع: T-013 (بیلد بعدی).
 #### T-015 — پورت سرویس جدا و حذف updater OpenCode | تکمیل
 - انجام‌شده: `afae032e9a` پورت سرویس Panacode را 28844 (Windows) / 49324 (macOS، Linux) کرد و پیام تداخل پورت روی Windows نام پروسه را می‌گوید (D-016). `31d5c44587` updater، What's New و همهٔ دکمه‌های «Update to …» دسکتاپ را پشت `PANACODE_UPSTREAM_UPDATES = false` خاموش کرد (D-017). ثبت در `UPSTREAM-MERGE.md` §C، §H، §L و یادداشت در `release/desktop/INSTALL.md`.
 - بررسی: typecheck سبز برای `packages/cli`، `packages/desktop`، `packages/gui-plugins`؛ تست‌ها: `packages/cli/test/service.test.ts` (۳۰ پاس، ۱ skip چون lsof روی box نیست)، `service-lifecycle.test.ts` (۷ پاس؛ یک assertion کهنه که هنوز «opencode service set port» می‌خواست در `8d2d8b29f3` اصلاح شد)، `packages/gui-plugins` updater (۷۴ پاس)، `packages/desktop` (۵۲۶ پاس، ۴ skip)، دو تست app با URL پورت جدید (۷ پاس)؛ `script/panacode-brand-scan.ts` ok. QA و بیلد exe اجرا نشد (D-015، T-013).
