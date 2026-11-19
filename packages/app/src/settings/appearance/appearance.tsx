@@ -1,13 +1,12 @@
 import { Component, Show } from "solid-js"
 import { Select } from "@opencode/ui/select"
+import { ThemeSwitch } from "@panacode/ui"
 import { TextInput } from "@opencode/ui/text-input"
 import { useLanguage } from "@/runtime/i18n/language"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
 import { createAppearanceSettingsController, type AppearanceSettingsController } from "@/settings/general/controllers"
 import "@/settings/settings.css"
-
-const schemeOptions: ("system" | "light" | "dark")[] = ["system", "light", "dark"]
 
 const reduceMotionOptions = [
   { value: "system" as const, label: "settings.appearance.row.reduceMotion.system" as const },
@@ -90,21 +89,18 @@ export const SettingsAppearance: Component = () => {
               title={language.t("settings.general.row.colorScheme.title")}
               description={language.t("settings.general.row.colorScheme.description")}
             >
-              <Select
-                data-action="settings-color-scheme"
-                options={schemeOptions}
-                current={schemeOptions.find((option) => option === appearance.scheme.current())}
-                placement="bottom-end"
-                gutter={6}
-                label={(option) => {
-                  if (option === "system") return language.t("theme.scheme.system")
-
-                  if (option === "light") return language.t("theme.scheme.light")
-
-                  return language.t("theme.scheme.dark")
-                }}
-                onSelect={(option) => option && appearance.scheme.select(option)}
-              />
+              <div data-action="settings-color-scheme">
+                <ThemeSwitch
+                  aria-label={language.t("settings.general.row.colorScheme.title")}
+                  value={appearance.scheme.current() ?? "system"}
+                  labels={{
+                    system: language.t("theme.scheme.system"),
+                    light: language.t("theme.scheme.light"),
+                    dark: language.t("theme.scheme.dark"),
+                  }}
+                  onChange={(option) => appearance.scheme.select(option)}
+                />
+              </div>
             </SettingsRow>
 
             <SettingsRow

@@ -103,3 +103,14 @@
     transition: none;
   }
 }
+
+/* Theme switch: a glyph before each scheme label. */
+.pc-theme-switch-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pc-theme-switch-option svg {
+  flex: none;
+}
