@@ -2,6 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack }
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Button } from "@opencode/ui/button"
+import { ShortcutKeys } from "@panacode/ui"
 import { showToast } from "@/shell/notifications/toast"
 import fuzzysort from "fuzzysort"
 import { Predicate } from "effect"
@@ -551,7 +552,11 @@ function SettingsKeybindsView(props: {
                               >
                                 <Show
                                   when={props.active === id}
-                                  fallback={binding() || language.t("settings.shortcuts.unassigned")}
+                                  fallback={
+                                    <Show when={binding()} fallback={language.t("settings.shortcuts.unassigned")}>
+                                      {(value) => <ShortcutKeys binding={value()} />}
+                                    </Show>
+                                  }
                                 >
                                   {language.t("settings.shortcuts.pressKeys")}
                                 </Show>

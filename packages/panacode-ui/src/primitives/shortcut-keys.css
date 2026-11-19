@@ -1,0 +1,56 @@
+/* Arc shortcut recorder caps (settings shortcuts). */
+.pc-shortcut-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pc-shortcut-chord {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.pc-shortcut-keys kbd {
+  display: inline-grid;
+  min-width: 22px;
+  height: 22px;
+  place-items: center;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  box-shadow: 0 1px 0 var(--border);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+/* Recording: the trigger breathes until a chord lands. */
+[data-brand="panacode"] [data-keybind-id] {
+  border-radius: calc(var(--radius-control) - 6px);
+  transition:
+    box-shadow var(--duration-fast) var(--ease-standard),
+    background-color var(--duration-fast) var(--ease-standard);
+}
+
+[data-brand="panacode"] [data-keybind-id][data-expanded] {
+  background: var(--surface-muted);
+  color: var(--foreground);
+  box-shadow: 0 0 0 1px var(--foreground);
+  animation: pc-shortcut-listen 1.4s var(--ease-standard) infinite;
+}
+
+@keyframes pc-shortcut-listen {
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--foreground) 12%, transparent), 0 0 0 1px var(--foreground);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-brand="panacode"] [data-keybind-id][data-expanded] {
+    animation: none;
+  }
+}
