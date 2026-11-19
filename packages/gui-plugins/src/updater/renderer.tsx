@@ -20,12 +20,16 @@ import {
   type WhatsNewEffect,
   type WhatsNewEvent,
 } from "./whats-new-machine"
+import { PANACODE_UPSTREAM_UPDATES } from "./panacode"
 import type definition from "./index"
 
 const setup: Plugin.Setup<typeof definition> = (ctx) => {
-  whatsNew(ctx)
+  // Panacode: What's New reads OpenCode's changelog and the desktop updater OpenCode's feed (see ./panacode). The web
+  // build's service-worker updates reload Panacode's own server build, so they stay.
+  if (PANACODE_UPSTREAM_UPDATES) whatsNew(ctx)
 
   if (!ctx.desktop) return webUpdates(ctx)
+  if (!PANACODE_UPSTREAM_UPDATES) return
   const updater = ctx.main(Updater)
   // Undefined until main's updater is up and has sent its state, and again while it is gone.
   const state = () => updater.state()

@@ -5,8 +5,11 @@ import { MenubarItem, type Plugin } from "@opencode/plugin/gui/main"
 import { Updater } from "@opencode/plugin/gui/updater"
 import { logContext } from "./log"
 import { make } from "./machine"
+import { PANACODE_UPSTREAM_UPDATES } from "./panacode"
 
 const setup: Plugin.MainSetup = async (ctx) => {
+  // Panacode: without the Updater provider, nothing offers or installs an OpenCode release (see ./panacode).
+  if (!PANACODE_UPSTREAM_UPDATES) return
   const builtin = builtinMainContext(ctx)
   const build = ctx.app
   const lifecycle = builtin.lifecycle
