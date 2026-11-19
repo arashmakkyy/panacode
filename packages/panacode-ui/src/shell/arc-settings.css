@@ -1,0 +1,89 @@
+/* Arc card, select and input over the real settings surfaces: each settings list is an Arc card (panel radius,
+ * hairline border, raised surface), select triggers are Arc dropdown triggers, text inputs are Arc fields, and the
+ * select menus take the Arc menu frame (arc-menu.css) at full strength over the select defaults. */
+
+[data-brand="panacode"] [data-component="settings-list"] {
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius-control) + 2px);
+  background-color: var(--surface-raised);
+  box-shadow: var(--shadow-resting);
+}
+
+/* Select trigger: bordered control, darkens on hover, chevron turns when open. */
+[data-brand="panacode"] [data-component="select-v2"] {
+  height: 34px;
+  padding-inline: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius-control) - 4px);
+  outline: 0;
+  background: var(--surface);
+  box-shadow: none;
+  color: var(--foreground);
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+[data-brand="panacode"] [data-component="select-v2"] [data-slot="select-v2-value"] {
+  padding-inline-start: 12px;
+}
+
+[data-brand="panacode"] [data-component="select-v2"] [data-slot="select-v2-value-text"] {
+  color: var(--foreground);
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+[data-brand="panacode"] [data-component="select-v2"] [data-slot="select-v2-chevron"] {
+  color: var(--text-muted);
+  transition: transform var(--duration-spring) var(--ease-spring);
+}
+
+[data-brand="panacode"] [data-component="select-v2"][data-expanded] [data-slot="select-v2-chevron"] {
+  transform: rotate(180deg);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-brand="panacode"] [data-component="select-v2"]:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-muted);
+    box-shadow: var(--shadow-resting);
+  }
+}
+
+[data-brand="panacode"] [data-component="select-v2"][data-expanded] {
+  border-color: var(--border-strong);
+  background: var(--surface-muted);
+}
+
+[data-brand="panacode"] [data-component="menu-v2-content"][data-slot="select-v2-content"] {
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius-control) + 2px);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-floating);
+}
+
+/* Text inputs in settings: Arc fields. Focus darkens the border; the field never changes size. */
+[data-brand="panacode"] .settings-tab-body [data-component="text-input-v2"],
+[data-brand="panacode"] [data-component="settings-list"] [data-component="text-input-v2"] {
+  border: 1px solid var(--border-strong);
+  border-radius: calc(var(--radius-control) - 4px);
+  outline: 0;
+  background: var(--surface);
+  box-shadow: none;
+  transition: border-color var(--duration-fast) var(--ease-standard);
+}
+
+[data-brand="panacode"] .settings-tab-body [data-component="text-input-v2"]:focus-within,
+[data-brand="panacode"] [data-component="settings-list"] [data-component="text-input-v2"]:focus-within {
+  border-color: var(--foreground);
+  box-shadow: none;
+}
+
+[data-brand="panacode"] [data-component="settings-list"] [data-slot="text-input-v2-input"] {
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--foreground);
+}
