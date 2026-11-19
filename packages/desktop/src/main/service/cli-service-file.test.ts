@@ -12,6 +12,20 @@ test.each([
     expected: path.join("/home/ali", ".local", "state", "panacode", "service.json"),
   },
   {
+    // panacode-windows workflow builds: OPENCODE_CHANNEL=prod with the run number. The CLI treats prod as a release
+    // channel, so Desktop must poll service.json too (r9/r10 timed out polling the wrong file).
+    version: "0.0.0-prod-3",
+    expected: path.join("/home/ali", ".local", "state", "panacode", "service.json"),
+  },
+  {
+    version: "0.0.0-prod-12.2",
+    expected: path.join("/home/ali", ".local", "state", "panacode", "service.json"),
+  },
+  {
+    version: "0.0.0-feature-x-7",
+    expected: path.join("/home/ali", ".local", "state", "panacode", "service-feature-x.json"),
+  },
+  {
     version: "0.0.0-cursor-panacode-install-isolate-58f9-202611150802",
     expected: path.join(
       "/home/ali",

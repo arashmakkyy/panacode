@@ -31,6 +31,17 @@ test("managed service ports are stable per installation channel", () => {
   expect(ServiceConfig.defaultPort("preview-a", "linux")).not.toBe(ServiceConfig.defaultPort("preview-b", "linux"))
 })
 
+test("prod CLIs, as built by the panacode-windows workflow, register where Desktop looks", () => {
+  // Desktop polls service.json (packages/desktop/src/main/service/cli-service-file.ts). A prod CLI that registered in
+  // service-prod.json left every packaged Windows launch waiting until the startup timeout.
+  expect(ServiceConfig.releaseChannel("prod")).toBe(true)
+  expect(ServiceConfig.filename("prod")).toBe("service.json")
+  expect(ServiceConfig.filename("latest")).toBe("service.json")
+  expect(ServiceConfig.filename("preview-a")).toBe("service-preview-a.json")
+  expect(ServiceConfig.defaultPort("prod", "win32")).toBe(0x70ac)
+  expect(ServiceConfig.defaultPort("prod", "linux")).toBe(0xc0ac)
+})
+
 test("managed service ports on Windows stay below the ranges Windows and WSL reserve", () => {
   expect(ServiceConfig.defaultPort("latest", "win32")).toBe(0x70ac)
   expect(ServiceConfig.defaultPort("dev", "win32")).toBe(0x70ac)
@@ -48,7 +59,7 @@ test("Panacode's managed service port never matches upstream OpenCode's", () => 
   // OpenCode listens on 0xC0DE (49374) and 0x70DE (28894) on Windows; sharing either made Panacode fail to start
   // while OpenCode was open.
   for (const platform of ["linux", "darwin", "win32"] as const)
-    for (const channel of ["latest", "dev", "beta", "next", "local"]) {
+    for (const channel of ["latest", "prod", "dev", "beta", "next", "local"]) {
       const port = ServiceConfig.defaultPort(channel, platform)
       expect([0xc0de, 0xc0df, 0x70de, 0x70df, 0x0c0c]).not.toContain(port)
     }

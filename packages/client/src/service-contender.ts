@@ -111,6 +111,21 @@ export function contenderPool(timing: EnsureTiming) {
       contenders.add(contender)
       lastSpawn = Date.now()
     },
+    /**
+     * Startup timeout. Names the registration file that never appeared and keeps the stderr of any attempt still
+     * running, so a server that started but registered somewhere else (or hung before listening) is diagnosable from
+     * the error alone instead of only "timed out".
+     */
+    timeout(file: string) {
+      const alive = [...contenders].filter((item) => !contenderFinished(item))
+      const lines = [
+        "Timed out waiting for the background service to start",
+        `No ready service registered at ${file}` +
+          (alive.length > 0 ? `; ${alive.length} server process(es) still running without registering there.` : "."),
+        ...alive.map((item) => item.stderr()).filter((text) => text.length > 0),
+      ]
+      return new Error(lines.join("\n"))
+    },
     releaseAll() {
       contenders.forEach((contender) => contender.release())
     },

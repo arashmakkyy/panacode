@@ -122,7 +122,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     Effect.ensuring(Effect.sync(() => pool.releaseAll())),
   )
   if (Option.isNone(found))
-    return yield* Effect.fail(pool.failure() ?? new Error("Timed out waiting for the background service to start"))
+    return yield* Effect.fail(pool.failure() ?? pool.timeout(options.file ?? fallback()))
   return found.value.endpoint
 })
 

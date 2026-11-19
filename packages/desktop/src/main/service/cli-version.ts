@@ -24,9 +24,10 @@ export function serviceVersion(input: {
 export function shouldRetryEnsure(version: string | undefined, message: string) {
   if (version !== undefined) return false
 
+  // The timeout error carries diagnostics after its first line.
+  const first = message.split("\n", 1)[0]
   return (
-    message === "Background service failed to start" ||
-    message === "Timed out waiting for the background service to start"
+    first === "Background service failed to start" || first === "Timed out waiting for the background service to start"
   )
 }
 

@@ -17,14 +17,22 @@ export function cliServiceRegistrationFile(input: {
   const state = input.stateHome ?? input.join(input.home, ".local", "state")
   const dir = input.join(state, input.productSlug ?? "panacode")
   const channel = previewChannel(input.cliVersion)
-  if (!channel || channel === "latest" || channel === "dev" || channel === "beta" || channel === "next") {
+  if (
+    !channel ||
+    channel === "latest" ||
+    channel === "prod" ||
+    channel === "dev" ||
+    channel === "beta" ||
+    channel === "next"
+  ) {
     return input.join(dir, "service.json")
   }
   return input.join(dir, `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`)
 }
 
 function previewChannel(version: string) {
-  // Script.version for preview builds: 0.0.0-<channel>-<YYYYMMDDHHmm[ss]>
-  const match = /^0\.0\.0-(.+)-(\d{12,14})$/.exec(version)
+  // Script.version for preview builds: 0.0.0-<channel>-<YYYYMMDDHHmm> locally, 0.0.0-<channel>-<run>[.<attempt>] on
+  // GitHub Actions (for example 0.0.0-prod-3 from the panacode-windows workflow).
+  const match = /^0\.0\.0-(.+)-(\d+(?:\.\d+)?)$/.exec(version)
   return match?.[1]
 }

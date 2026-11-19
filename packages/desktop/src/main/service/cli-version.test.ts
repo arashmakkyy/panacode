@@ -23,6 +23,11 @@ describe("cli-version", () => {
     { version: undefined, message: "Timed out waiting for the background service to start", expected: true },
     {
       version: undefined,
+      message: "Timed out waiting for the background service to start\nNo ready service registered at /state/service.json.",
+      expected: true,
+    },
+    {
+      version: undefined,
       message: "Background service uses an incompatible health protocol. Update this client or explicitly restart the service.",
       expected: false,
     },

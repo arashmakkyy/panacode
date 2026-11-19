@@ -38,8 +38,15 @@ const decodeLegacy = Schema.decodeUnknownOption(
 )
 const decodeRegistration = Schema.decodeUnknownEffect(Schema.fromJsonString(Service.Info))
 
+// Panacode: the Windows release workflow builds the CLI with OPENCODE_CHANNEL=prod (the desktop's release channel), so
+// "prod" is a release channel like "latest". Before this, a prod CLI registered in service-prod.json while Desktop
+// polled service.json, and every packaged Windows launch timed out (panacode-docs/decisions.md D-018).
+export function releaseChannel(channel: string) {
+  return channel === "latest" || channel === "prod" || channel === "dev" || channel === "beta" || channel === "next"
+}
+
 export function filename(channel = OPENCODE_CHANNEL) {
-  if (channel === "latest" || channel === "dev" || channel === "beta" || channel === "next") return "service.json"
+  if (releaseChannel(channel)) return "service.json"
   return `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
 }
 
@@ -59,7 +66,7 @@ export function defaultPort(channel = OPENCODE_CHANNEL, platform = process.platf
 export const PANACODE_SERVICE_PORT = 0xc0ac
 
 function channelPort(channel: string) {
-  if (channel === "latest" || channel === "dev" || channel === "beta" || channel === "next") return PANACODE_SERVICE_PORT
+  if (releaseChannel(channel)) return PANACODE_SERVICE_PORT
   if (channel === "local") return PANACODE_SERVICE_PORT + 1
   return 10_000 + (Number.parseInt(Hash.fast(channel).slice(0, 8), 16) % 50_000)
 }
@@ -130,6 +137,9 @@ const paths = Effect.gen(function* () {
     legacyConfigFile: legacy ? path.join(global.config, legacy) : undefined,
     legacyRegistrationFiles: [
       ...(legacy ? [path.join(global.state, legacy)] : []),
+      // Panacode r9/r10 prod CLIs registered here; adopting it lets Desktop find (and replace) such a service still
+      // running in the background instead of failing to bind its port.
+      ...(OPENCODE_CHANNEL === "prod" ? [path.join(global.state, "service-prod.json")] : []),
       ...(name !== "service.json" && OPENCODE_CHANNEL !== "local" ? [path.join(global.state, "service.json")] : []),
     ],
     configFile: path.join(global.config, name),
