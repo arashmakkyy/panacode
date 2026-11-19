@@ -7,6 +7,8 @@
 @import "./arc-search.css";
 @import "./arc-tabs.css";
 @import "./arc-settings.css";
+@import "./arc-resize.css";
+@import "./arc-hover-card.css";
 /* Stage 1 shell. Selectors are the real slots the app renders
  * (titlebar-v2, vertical-tabs-sidebar, home-panel, home-session-row).
  * Arc tokens come from [data-brand="panacode"] and follow data-color-scheme.

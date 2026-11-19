@@ -201,6 +201,8 @@ Status, stated honestly. Rows marked Ported are full Arc ports wired to real ses
 | Tabs | `@opencode/ui/tabs` (tabs-v2 `pill` and `settings`) | `shell/arc-tabs.css`, `motion/glide.ts` | none | `menuGlide` also attaches to pill and settings tab lists | Ported (free) |
 | Theme switch | `settings/appearance/appearance.tsx` (color scheme `Select`) | `primitives/theme-switch.tsx` (on `SegmentedControl`) | none | `appearance.tsx` renders `ThemeSwitch` inside `[data-action=settings-color-scheme]` | Ported (free). Re-apply the swap if upstream changes the row |
 | Card / select / input | settings lists, `@opencode/ui/select`, `@opencode/ui/text-input` | `shell/arc-settings.css` | none | CSS over settings cards, select triggers and menus, settings inputs | Ported (free) |
+| Resizable panels | `@opencode/ui/resize-handle` | `shell/arc-resize.css` | none | CSS over every resize handle; sizes and limits stay upstream | Ported (free) |
+| Hover card | `@opencode/ui/hover-card` (tab popover) | `shell/arc-hover-card.css` | none | CSS over hover-card-content | Ported (free) |
 | Switch | `@opencode/ui/switch` | `primitives/switch.tsx` | — | primitive has the Arc spring; CSS bridge matches geometry for existing call sites | Stage 1 |
 
 External deps of `@panacode/ui`: `@kobalte/core`, `@opencode/ui` (workspace), `solid-js` peer. **No React.**
