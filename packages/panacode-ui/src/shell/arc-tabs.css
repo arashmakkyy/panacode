@@ -1,0 +1,138 @@
+/* Arc tabs over the real tab lists (tabs-v2). Pill tabs become Arc's segmented track: a muted rail with one raised
+ * selection that glides between labels; the settings nav gets the same single gliding highlight. The glide is
+ * motion/glide.ts (`menuGlide`, attached by WindowFrame). Labels never change weight; only their color follows. */
+
+[data-brand="panacode"] [data-component="tabs-v2"][data-variant="pill"] > [data-slot="tabs-v2-list"] {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  width: fit-content !important;
+  max-width: 100%;
+  height: auto;
+  gap: 2px;
+  padding: 3px !important;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-muted);
+}
+
+[data-brand="panacode"] [data-component="tabs-v2"][data-variant="pill"] > [data-slot="tabs-v2-list"]::before,
+[data-brand="panacode"] [data-component="tabs-v2"][data-variant="pill"] > [data-slot="tabs-v2-list"]::after {
+  display: none;
+}
+
+[data-brand="panacode"] [data-component="tabs-v2"][data-variant="pill"] > [data-slot="tabs-v2-list"] [data-slot="tabs-v2-trigger-wrapper"] {
+  position: relative;
+  z-index: 1;
+  height: 30px;
+  border: 0;
+  border-radius: calc(var(--radius-control) - 4px);
+  background: transparent !important;
+  color: var(--text-muted);
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 500;
+  letter-spacing: 0;
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+
+[data-brand="panacode"] [data-component="tabs-v2"][data-variant="pill"] > [data-slot="tabs-v2-list"] [data-slot="tabs-v2-trigger"] {
+  padding-inline: 14px;
+  background: transparent;
+  color: inherit;
+  font-weight: 500;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-brand="panacode"] [data-component="tabs-v2"][data-variant="pill"] [data-slot="tabs-v2-trigger-wrapper"]:hover {
+    color: var(--foreground);
+  }
+}
+
+[data-brand="panacode"] [data-component="tabs-v2"][data-variant="pill"] [data-slot="tabs-v2-trigger-wrapper"]:has([data-selected]) {
+  color: var(--foreground);
+}
+
+[data-brand="panacode"] .pc-tab-glide {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  transition:
+    transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    width 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    height 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 120ms linear;
+}
+
+[data-brand="panacode"] [data-variant="pill"] > [data-slot="tabs-v2-list"] > .pc-tab-glide {
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius-control) - 4px);
+  background: var(--surface);
+  box-shadow: var(--shadow-resting, var(--shadow-raised));
+}
+
+/* Without the glide (it attaches a frame later) the selected tab still shows. */
+[data-brand="panacode"] [data-variant="pill"] > [data-slot="tabs-v2-list"]:not(:has(> .pc-tab-glide)) [data-slot="tabs-v2-trigger-wrapper"]:has([data-selected]) {
+  background: var(--surface) !important;
+  box-shadow: var(--shadow-resting, var(--shadow-raised));
+}
+
+/* Settings nav: Arc rows with one gliding highlight. */
+[data-brand="panacode"] .settings-nav-groups[data-slot="tabs-v2-list"] {
+  position: relative;
+  isolation: isolate;
+}
+
+[data-brand="panacode"] .settings-nav-groups [data-slot="tabs-v2-trigger-wrapper"] {
+  position: relative;
+  z-index: 1;
+  height: 34px;
+  border-radius: 12px;
+  color: var(--text-secondary);
+  background: transparent;
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+
+[data-brand="panacode"] .settings-nav-groups [data-slot="tabs-v2-trigger"] {
+  gap: 10px;
+  padding: 0 10px;
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 400;
+}
+
+[data-brand="panacode"] .settings-nav-groups:has(> .pc-tab-glide) [data-slot="tabs-v2-trigger-wrapper"]:has([data-selected]),
+[data-brand="panacode"] .settings-nav-groups [data-slot="tabs-v2-trigger-wrapper"]:not(:has([data-selected])):hover {
+  background: transparent;
+}
+
+[data-brand="panacode"] .settings-nav-groups [data-slot="tabs-v2-trigger-wrapper"]:has([data-selected]) {
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+[data-brand="panacode"] .settings-nav-groups [data-slot="tabs-v2-trigger-wrapper"]:has([data-selected]) [data-slot="tabs-v2-trigger"] {
+  font-weight: 500;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-brand="panacode"] .settings-nav-groups [data-slot="tabs-v2-trigger-wrapper"]:hover {
+    color: var(--foreground);
+  }
+}
+
+[data-brand="panacode"] .settings-nav-groups > .pc-tab-glide {
+  border-radius: 12px;
+  background: var(--surface-muted);
+}
+
+[data-brand="panacode"][data-color-scheme="dark"] .settings-nav-groups > .pc-tab-glide,
+[data-color-scheme="dark"] [data-brand="panacode"] .settings-nav-groups > .pc-tab-glide {
+  background: color-mix(in oklab, var(--foreground) 8%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-brand="panacode"] .pc-tab-glide {
+    transition: opacity 120ms linear;
+  }
+}

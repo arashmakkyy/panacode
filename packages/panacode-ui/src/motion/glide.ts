@@ -73,28 +73,43 @@ function attach(layer: HTMLElement, options: { active: string; class?: string })
   }
 }
 
-const MENU_SURFACES = '[data-component="menu-v2-content"], [data-component="context-menu-content"], [data-component="context-menu-sub-content"]'
+/** Lists that get one gliding highlight: the selector of the layer, the attribute that marks its active row, the class. */
+const GLIDE_TARGETS: { layer: string; active: string; class: string }[] = [
+  {
+    layer: '[data-component="menu-v2-content"], [data-component="context-menu-content"], [data-component="context-menu-sub-content"]',
+    active: "data-highlighted",
+    class: "pc-menu-glide",
+  },
+  {
+    layer: '[data-component="tabs-v2"]:is([data-variant="pill"], [data-variant="settings"]) [data-slot="tabs-v2-list"]',
+    active: "data-selected",
+    class: "pc-tab-glide",
+  },
+]
 
 /**
- * Gives every dropdown and context menu the gliding highlight. Menus portal into `root` (the body) when they open,
- * so this watches for their surfaces and attaches to each one, and lets go when the menu closes.
+ * Gives every dropdown and context menu, and the pill and settings tab lists, the gliding highlight. They mount
+ * anywhere under `root` (menus portal into the body when they open), so this watches for them, attaches to each
+ * one, and lets go when it leaves the page.
  */
 export function menuGlide(root: HTMLElement = document.body) {
   const live = new Map<HTMLElement, () => void>()
   const scan = (node: Node) => {
     if (!(node instanceof HTMLElement)) return
-    const found = node.matches(MENU_SURFACES) ? [node] : [...node.querySelectorAll<HTMLElement>(MENU_SURFACES)]
-    for (const menu of found) {
-      if (live.has(menu)) continue
-      live.set(menu, attach(menu, { active: "data-highlighted", class: "pc-menu-glide" }))
+    for (const target of GLIDE_TARGETS) {
+      const found = node.matches(target.layer) ? [node] : [...node.querySelectorAll<HTMLElement>(target.layer)]
+      for (const layer of found) {
+        if (live.has(layer)) continue
+        live.set(layer, attach(layer, { active: target.active, class: target.class }))
+      }
     }
   }
   const observer = new MutationObserver((records) => {
     for (const record of records) record.addedNodes.forEach(scan)
-    for (const [menu, stop] of live) {
-      if (menu.isConnected) continue
+    for (const [layer, stop] of live) {
+      if (layer.isConnected) continue
       stop()
-      live.delete(menu)
+      live.delete(layer)
     }
   })
   observer.observe(root, { childList: true, subtree: true })

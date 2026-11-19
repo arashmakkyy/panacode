@@ -198,6 +198,7 @@ Status, stated honestly. Rows marked Ported are full Arc ports wired to real ses
 | Tooltip | `@opencode/ui/tooltip` (tooltip-v2) | `shell/arc-tooltip.css` | none | CSS over every tooltip | Ported (free) |
 | Dialog | `@opencode/ui/dialog` (dialog-v2, `fit`) | `shell/arc-dialog.css` | none | CSS over confirm/form dialogs; palette and model menu excluded | Ported (free) |
 | Search field | `home/sessions/view.tsx` (home session search) | `shell/arc-search.css` | none | CSS over the search label and results panel | Ported (free) |
+| Tabs | `@opencode/ui/tabs` (tabs-v2 `pill` and `settings`) | `shell/arc-tabs.css`, `motion/glide.ts` | none | `menuGlide` also attaches to pill and settings tab lists | Ported (free) |
 | Switch | `@opencode/ui/switch` | `primitives/switch.tsx` | — | primitive has the Arc spring; CSS bridge matches geometry for existing call sites | Stage 1 |
 
 External deps of `@panacode/ui`: `@kobalte/core`, `@opencode/ui` (workspace), `solid-js` peer. **No React.**
