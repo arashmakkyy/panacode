@@ -13,7 +13,7 @@ $ opencode pair
 
   Open a link to connect. Links work once and expire in 5 minutes.
 
-  http://127.0.0.1:49374/auth/connect/...
+  http://127.0.0.1:49324/auth/connect/...
 
   █▀▀▀▀▀█ ...
 ```
@@ -29,7 +29,7 @@ When the server listens only on localhost, forward its port from your machine
 and open the printed link locally:
 
 ```bash
-$ ssh -L 49374:127.0.0.1:49374 my-server
+$ ssh -L 49324:127.0.0.1:49324 my-server
 ```
 
 By default the server listens only on localhost. Its port depends on the
@@ -37,8 +37,8 @@ platform:
 
 | Platform              | Default port |
 | --------------------- | ------------ |
-| macOS, Linux, and WSL | 49374        |
-| Windows               | 28894        |
+| macOS, Linux, and WSL | 49324        |
+| Windows               | 28844        |
 
 Windows reserves ports from 49152 up, and WSL mirrored networking reserves
 another block below that. Print the current address with
@@ -46,7 +46,7 @@ another block below that. Print the current address with
 
 ```bash
 $ opencode service status
-http://127.0.0.1:49374
+http://127.0.0.1:49324
 ```
 
 You can change this config with the `opencode service` command.
@@ -84,7 +84,7 @@ Set any option with `opencode service set`:
 $ opencode service set hostname 0.0.0.0
 
 # Use a fixed port instead of the channel default
-$ opencode service set port 49374
+$ opencode service set port 49324
 
 # Replace the generated password
 $ opencode service set password "a-long-secret"

@@ -21,20 +21,20 @@ import { testEffect } from "../../core/test/lib/effect"
 const it = testEffect(NodeFileSystem.layer)
 
 test("managed service ports are stable per installation channel", () => {
-  expect(ServiceConfig.defaultPort("latest", "linux")).toBe(0xc0de)
-  expect(ServiceConfig.defaultPort("dev", "linux")).toBe(0xc0de)
-  expect(ServiceConfig.defaultPort("beta", "linux")).toBe(0xc0de)
-  expect(ServiceConfig.defaultPort("next", "linux")).toBe(0xc0de)
-  expect(ServiceConfig.defaultPort("local", "linux")).toBe(0xc0df)
-  expect(ServiceConfig.defaultPort("latest", "darwin")).toBe(0xc0de)
+  expect(ServiceConfig.defaultPort("latest", "linux")).toBe(0xc0ac)
+  expect(ServiceConfig.defaultPort("dev", "linux")).toBe(0xc0ac)
+  expect(ServiceConfig.defaultPort("beta", "linux")).toBe(0xc0ac)
+  expect(ServiceConfig.defaultPort("next", "linux")).toBe(0xc0ac)
+  expect(ServiceConfig.defaultPort("local", "linux")).toBe(0xc0ad)
+  expect(ServiceConfig.defaultPort("latest", "darwin")).toBe(0xc0ac)
   expect(ServiceConfig.defaultPort("preview-a", "linux")).toBe(ServiceConfig.defaultPort("preview-a", "linux"))
   expect(ServiceConfig.defaultPort("preview-a", "linux")).not.toBe(ServiceConfig.defaultPort("preview-b", "linux"))
 })
 
 test("managed service ports on Windows stay below the ranges Windows and WSL reserve", () => {
-  expect(ServiceConfig.defaultPort("latest", "win32")).toBe(0x70de)
-  expect(ServiceConfig.defaultPort("dev", "win32")).toBe(0x70de)
-  expect(ServiceConfig.defaultPort("local", "win32")).toBe(0x70df)
+  expect(ServiceConfig.defaultPort("latest", "win32")).toBe(0x70ac)
+  expect(ServiceConfig.defaultPort("dev", "win32")).toBe(0x70ac)
+  expect(ServiceConfig.defaultPort("local", "win32")).toBe(0x70ad)
   const ports = Array.from({ length: 200 }, (_, index) => ({
     windows: ServiceConfig.defaultPort(`preview-${index}`, "win32"),
     linux: ServiceConfig.defaultPort(`preview-${index}`, "linux"),
@@ -42,6 +42,21 @@ test("managed service ports on Windows stay below the ranges Windows and WSL res
   expect(ports.some((port) => port.linux >= 0x8000)).toBe(true)
   expect(ports.every((port) => port.windows >= 10_000 && port.windows < 0x8000)).toBe(true)
   expect(ports.filter((port) => port.linux < 0x8000 && port.windows !== port.linux)).toEqual([])
+})
+
+test("Panacode's managed service port never matches upstream OpenCode's", () => {
+  // OpenCode listens on 0xC0DE (49374) and 0x70DE (28894) on Windows; sharing either made Panacode fail to start
+  // while OpenCode was open.
+  for (const platform of ["linux", "darwin", "win32"] as const)
+    for (const channel of ["latest", "dev", "beta", "next", "local"]) {
+      const port = ServiceConfig.defaultPort(channel, platform)
+      expect([0xc0de, 0xc0df, 0x70de, 0x70df, 0x0c0c]).not.toContain(port)
+    }
+  const windows = ServiceConfig.defaultPort("latest", "win32")
+  expect(windows).toBe(28844)
+  // Outside the WSL mirrored block and the Windows dynamic range.
+  expect(windows < 44620 || windows > 48715).toBe(true)
+  expect(windows).toBeLessThan(0xc000)
 })
 
 test("service disabled accepts only booleans without changing configuration on invalid input", async () => {
@@ -218,6 +233,25 @@ test("saved service environment cannot move the registration's state directory",
   } finally {
     await fs.rm(root, { recursive: true, force: true })
   }
+})
+
+test("port owner reads Windows netstat and tasklist output", () => {
+  const netstat = [
+    "",
+    "Active Connections",
+    "",
+    "  Proto  Local Address          Foreign Address        State           PID",
+    "  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING       1100",
+    "  TCP    127.0.0.1:28894        0.0.0.0:0              ABHÖREN         4242",
+    "  TCP    127.0.0.1:28894        127.0.0.1:50123        ESTABLISHED     4242",
+    "  TCP    127.0.0.1:50123        127.0.0.1:28894        ESTABLISHED     9999",
+    "  TCP    [::]:28844             [::]:0                 LISTENING       5151",
+  ].join("\r\n")
+  expect(PortOwner.windowsListeners(netstat, 28894)).toEqual([{ pid: "4242", address: "127.0.0.1" }])
+  expect(PortOwner.windowsListeners(netstat, 28844)).toEqual([{ pid: "5151", address: "::" }])
+  expect(PortOwner.windowsListeners(netstat, 1)).toEqual([])
+  expect(PortOwner.windowsImageName('"opencode-cli.exe","4242","Console","1","81,234 K"\r\n')).toBe("opencode-cli.exe")
+  expect(PortOwner.windowsImageName("INFO: No tasks are running which match the specified criteria.")).toBeUndefined()
 })
 
 test.skipIf(process.platform === "win32" || !Bun.which("lsof"))("port owner names the listening process", async () => {

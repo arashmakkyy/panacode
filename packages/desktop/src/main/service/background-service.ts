@@ -63,7 +63,9 @@ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: Background
   // health probe; the ensure loop then kills a still-starting server. Use a safer port, longer
   // probes, and skip the models.dev fetch so packaged Windows reaches /api/info ready in time.
   const windowsPackaged = app.isPackaged && process.platform === "win32"
-  const servicePort = setup.isolated ? 0x0c0c : windowsPackaged ? 0x70de : undefined
+  // Panacode: 0x70AC (28844) matches the CLI's Windows `defaultPort` (ServiceConfig.PANACODE_SERVICE_PORT). Upstream
+  // OpenCode uses 0x70DE (28894); sharing it made Panacode fail to start while OpenCode was open.
+  const servicePort = setup.isolated ? 0x0c0c : windowsPackaged ? 0x70ac : undefined
 
   const run = (version = setup.version) => {
     const options = {

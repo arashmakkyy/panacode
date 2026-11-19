@@ -60,7 +60,7 @@ test("startup auth_token credentials override a persisted same-url server; witho
 })
 
 test("treats WSL and mismatched-port loopback servers as remote connections", () => {
-  const windowsSidecar = "http://127.0.0.1:28894"
+  const windowsSidecar = "http://127.0.0.1:28844"
 
   expect(
     ServerConnection.local(
@@ -76,8 +76,8 @@ test("treats WSL and mismatched-port loopback servers as remote connections", ()
     ),
   ).toBe(false)
   expect(ServerConnection.local({ type: "sidecar", variant: "base", http: { url: windowsSidecar } })).toBe(true)
-  expect(ServerConnection.local({ type: "http", http: { url: "http://localhost:28894" } }, windowsSidecar)).toBe(true)
-  expect(ServerConnection.local({ type: "http", http: { url: "http://[::1]:28894" } }, windowsSidecar)).toBe(true)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://localhost:28844" } }, windowsSidecar)).toBe(true)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://[::1]:28844" } }, windowsSidecar)).toBe(true)
   expect(ServerConnection.local({ type: "http", http: { url: "http://localhost:4096" } }, windowsSidecar)).toBe(false)
   expect(ServerConnection.local({ type: "http", http: { url: "http://127.0.0.1:4096" } }, windowsSidecar)).toBe(false)
   expect(ServerConnection.local({ type: "http", http: { url: "http://localhost:49374" } }, windowsSidecar)).toBe(false)

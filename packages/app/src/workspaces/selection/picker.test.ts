@@ -4,7 +4,7 @@ import { directoryPickerKind } from "./policy"
 const local = {
   type: "sidecar",
   variant: "base",
-  http: { url: "http://127.0.0.1:28894" },
+  http: { url: "http://127.0.0.1:28844" },
 } as const
 
 const remote = {
@@ -20,7 +20,7 @@ describe("directoryPickerKind", () => {
   test("uses the native picker only for local desktop projects", () => {
     expect(directoryPickerKind("desktop", local, local.http.url)).toBe("native")
     expect(
-      directoryPickerKind("desktop", { type: "http", http: { url: "http://localhost:28894" } }, local.http.url),
+      directoryPickerKind("desktop", { type: "http", http: { url: "http://localhost:28844" } }, local.http.url),
     ).toBe("native")
     expect(
       directoryPickerKind("desktop", { type: "http", http: { url: "http://localhost:4096" } }, local.http.url),

@@ -48,14 +48,19 @@ export function defaultPort(channel = OPENCODE_CHANNEL, platform = process.platf
   // Windows hands out 0xC000-0xFFFF for outgoing connections, Hyper-V and WinNAT reserve blocks of that range at boot,
   // and WSL mirrored networking reserves a 4096-port block that usually covers 44620-48715. A reserved port fails as in
   // use while nothing listens on it. Moving into the 0x7000 block, below 32768, avoids all of them and keeps the low
-  // 12 bits: 0xC0DE becomes 0x70DE.
+  // 12 bits: 0xC0AC becomes 0x70AC (28844).
   if (platform === "win32" && port >= 0x8000) return 0x7000 | (port & 0xfff)
   return port
 }
 
+// Panacode: upstream OpenCode's managed service listens on 0xC0DE (49374; 0x70DE = 28894 on Windows). Panacode keeps
+// the same scheme with its own low byte so both apps can run side by side: 0xC0AC (49324) on macOS and Linux, 0x70AC
+// (28844) on Windows. See panacode-docs/decisions.md D-016.
+export const PANACODE_SERVICE_PORT = 0xc0ac
+
 function channelPort(channel: string) {
-  if (channel === "latest" || channel === "dev" || channel === "beta" || channel === "next") return 0xc0de
-  if (channel === "local") return 0xc0df
+  if (channel === "latest" || channel === "dev" || channel === "beta" || channel === "next") return PANACODE_SERVICE_PORT
+  if (channel === "local") return PANACODE_SERVICE_PORT + 1
   return 10_000 + (Number.parseInt(Hash.fast(channel).slice(0, 8), 16) % 50_000)
 }
 
