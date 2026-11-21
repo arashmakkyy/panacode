@@ -2,7 +2,6 @@
 import { $ } from "bun"
 import { cp, mkdir, readdir, rm } from "node:fs/promises"
 import path from "node:path"
-import { getConfig } from "../electron-builder.config"
 import { getCurrentCli, resolveChannel } from "./utils"
 
 // Packages the built app (out/) for OPENCODE_TARGET into dist/desktop at the repository root, unsigned:
@@ -51,7 +50,6 @@ if (!app && os === "mac") {
   const bundles = (await readdir(parent)).filter((file) => file.endsWith(".app"))
 
   if (bundles.length !== 1) throw new Error(`Expected one .app bundle in ${parent}, found ${bundles.join(", ")}`)
-  await writeUpdateConfig(path.join(parent, bundles[0], "Contents", "Resources"))
   await $`tar -cf ${path.join(out, `panacode-desktop-mac-${cli.cpu}.app.tar`)} -C ${parent} ${bundles[0]}`
 }
 
@@ -60,20 +58,4 @@ if (!app && os === "win") {
   await $`bunx electron-builder ${flags}`
   const exe = `panacode-desktop-win-${cli.cpu}.exe`
   await cp(path.join("dist", exe), path.join(out, exe))
-}
-
-// electron-builder writes resources/app-update.yml only for dmg, zip and nsis targets, not for --dir builds.
-// electron-updater reads its feed from that file, so write the one those targets would.
-async function writeUpdateConfig(resources: string) {
-  const publish = getConfig().publish
-  const name: string = (await Bun.file("package.json").json()).name
-  await Bun.write(
-    path.join(resources, "app-update.yml"),
-    [
-      `provider: ${publish.provider}`,
-      `url: ${publish.url}`,
-      `channel: ${publish.channel}`,
-      `updaterCacheDirName: '${name.replace(/[/\\:*?"<>|]/g, "").toLowerCase()}-updater'`,
-    ].join("\n") + "\n",
-  )
 }

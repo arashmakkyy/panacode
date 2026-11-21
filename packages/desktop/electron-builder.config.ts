@@ -5,16 +5,10 @@ import { fileURLToPath } from "node:url"
 import { Arch, type Configuration } from "electron-builder"
 import { NativeArch } from "../../script/native-arch"
 import { DESKTOP_NATIVE_ENGLISH } from "@opencode/app/i18n/desktop-native"
+import { ProductIdentity } from "@opencode/util/product-identity"
 import { CLI_BINARIES, getCurrentCli, nodePtyPackage } from "./script/utils"
 
 const packageDir = path.dirname(fileURLToPath(import.meta.url))
-
-// The Electron 42 packaging update briefly installed Linux launchers/icons under
-// "opencode-desktop". Keep that hidden desktop entry around so existing GNOME/KDE
-// pins still resolve after the canonical app id changes back to ai.opencode.desktop.
-const legacyDesktopEntry = path.join(packageDir, "resources", "linux", "opencode-desktop.desktop")
-
-const legacyDesktopEntryFpm = `${legacyDesktopEntry}=/usr/share/applications/opencode-desktop.desktop`
 
 // rpmbuild adds /usr/lib/.build-id links for every ELF file. The bundled Electron
 // binaries are byte-identical across apps on the same Electron version, so those
@@ -81,7 +75,7 @@ const getBase = (appId: string): Configuration => {
     files: [
       "out/**/*",
       "resources/**/*",
-      "!resources/opencode-cli*",
+      `!resources/${ProductIdentity.cli}-cli*`,
       // Keep only the target platform's node-pty prebuild when cross-packaging with --cpu=*.
       ...CLI_BINARIES.filter((item) => item.os !== target.os || item.cpu !== target.cpu).map(
         (item) => `!**/node_modules/@lydell/node-pty-${item.os}-${item.cpu}{,/**/*}`,
@@ -105,7 +99,7 @@ const getBase = (appId: string): Configuration => {
       {
         from: "resources/",
         to: "",
-        filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"],
+        filter: [`${ProductIdentity.cli}-cli`, `${ProductIdentity.cli}-cli.exe`, `${ProductIdentity.cli}-cli.version`],
       },
     ],
     afterPack: async (context) => {
@@ -116,13 +110,19 @@ const getBase = (appId: string): Configuration => {
 
       if (arch !== target.cpu) throw new Error(`Packaging ${arch} Electron with the ${target.target} CLI`)
       const resources = context.packager.getResourcesDir(context.appOutDir)
-      const cli = path.join(resources, context.electronPlatformName === "win32" ? "opencode-cli.exe" : "opencode-cli")
+
+      const cli = path.join(
+        resources,
+        context.electronPlatformName === "win32"
+          ? `${ProductIdentity.cli}-cli.exe`
+          : `${ProductIdentity.cli}-cli`,
+      )
 
       const file = await stat(cli)
 
       if (!file.isFile() || file.size === 0) throw new Error(`Bundled CLI must be a non-empty file: ${cli}`)
       await NativeArch.verify(cli, arch)
-      const version = path.join(path.dirname(cli), "opencode-cli.version")
+      const version = path.join(path.dirname(cli), `${ProductIdentity.cli}-cli.version`)
 
       if ((await stat(version)).size === 0) throw new Error(`Bundled CLI version must be a non-empty file: ${version}`)
 
@@ -219,11 +219,6 @@ export function getConfig() {
         ...base,
         appId,
         productName: "Panacode Dev",
-        publish: {
-          provider: "generic",
-          url: "https://opencode.ai/update/api/dev/desktop/opencode/",
-          channel: "latest",
-        },
         deb: { fpm: [...previewCompressionFpm("deb"), metainfoFpm(appId)] },
         rpm: {
           packageName: "panacode-dev",
@@ -238,11 +233,6 @@ export function getConfig() {
         appId,
         productName: "Panacode Beta",
         protocols: { name: "Panacode Beta", schemes: ["panacode"] },
-        publish: {
-          provider: "generic",
-          url: "https://opencode.ai/update/api/beta/desktop/opencode/",
-          channel: "latest",
-        },
         deb: { fpm: [...previewCompressionFpm("deb"), metainfoFpm(appId)] },
         rpm: {
           packageName: "panacode-beta",
@@ -262,13 +252,8 @@ export function getConfig() {
         mac: { ...base.mac, icon: "resources/icons/icon.icon" },
         // The DMG volume icon would otherwise use the same actool-generated ICNS.
         dmg: { icon: "resources/icons/icon.icns" },
-        publish: {
-          provider: "generic",
-          url: "https://opencode.ai/update/api/latest/desktop/opencode/",
-          channel: "latest",
-        },
-        deb: { fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
-        rpm: { packageName: "panacode", fpm: [rpmNoBuildIdLinksFpm, metainfoFpm(appId), legacyDesktopEntryFpm] },
+        deb: { fpm: [metainfoFpm(appId)] },
+        rpm: { packageName: "panacode", fpm: [rpmNoBuildIdLinksFpm, metainfoFpm(appId)] },
       }
     }
   }

@@ -64,13 +64,13 @@ export default bench({
     dev: command("bun dev:desktop", {
       unset: ["OPENCODE_*", "OTEL_*", "SENTRY_*"],
       env: {
-        OPENCODE_CONFIG_DIR: "{home}/config",
-        OPENCODE_DB: "{home}/data/opencode.db",
-        OPENCODE_TEST_HOME: "{home}/home",
-        OPENCODE_TEST_ONBOARDING: "0",
-        OPENCODE_DESKTOP_TEST_ROOT: "{home}",
-        OPENCODE_DESKTOP_REMOTE_DEBUGGING_PORT: "0",
-        OPENCODE_DESKTOP_DISABLE_PROTOCOL_REGISTRATION: "1",
+        PANACODE_CONFIG_DIR: "{home}/config",
+        PANACODE_DB: "{home}/data/panacode.db",
+        PANACODE_TEST_HOME: "{home}/home",
+        PANACODE_TEST_ONBOARDING: "0",
+        PANACODE_DESKTOP_TEST_ROOT: "{home}",
+        PANACODE_DESKTOP_REMOTE_DEBUGGING_PORT: "0",
+        PANACODE_DESKTOP_DISABLE_PROTOCOL_REGISTRATION: "1",
         // The test root moves XDG_CACHE_HOME, which would make every start transpile the source CLI
         // from scratch; a contributor's dev start reuses Bun's own cache.
         BUN_RUNTIME_TRANSPILER_CACHE_PATH: process.env.BUN_RUNTIME_TRANSPILER_CACHE_PATH ?? bunTranspilerCache(),

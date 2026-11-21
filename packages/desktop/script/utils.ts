@@ -2,6 +2,7 @@ import { chmod, copyFile, mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { Option, Schema } from "effect"
+import { ProductIdentity } from "@opencode/util/product-identity"
 
 const CLI_VERSION = "dev"
 
@@ -86,7 +87,7 @@ export function nodePtyPackage(target?: string) {
 export async function downloadCliToResources(version = CLI_VERSION, dest?: string) {
   const { $ } = await import("bun")
   const cli = getCurrentCli()
-  const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))
+  const directory = await mkdtemp(join(tmpdir(), `${ProductIdentity.cli}-cli-`))
   const target = dest ?? resourceCliPath(cli.os)
 
   try {
@@ -106,7 +107,7 @@ export async function copyBuiltCliToResources(root: string, dest?: string) {
 }
 
 function resourceCliPath(os: string) {
-  return os === "win32" ? "resources/opencode-cli.exe" : "resources/opencode-cli"
+  return os === "win32" ? `resources/${ProductIdentity.cli}-cli.exe` : `resources/${ProductIdentity.cli}-cli`
 }
 
 // The package directory is an npm package: its package.json version is the string the executable
@@ -114,7 +115,7 @@ function resourceCliPath(os: string) {
 // 200 MB binary on first launch.
 async function copyCliToResources(pkg: string, dest: string) {
   const cli = getCurrentCli()
-  await copyFile(join(pkg, "bin", cli.os === "win32" ? "panacode.exe" : "panacode"), dest)
+  await copyFile(join(pkg, "bin", cli.os === "win32" ? `${ProductIdentity.cli}.exe` : ProductIdentity.cli), dest)
   await prepareCli(dest)
 
   const manifest = Option.getOrUndefined(
@@ -126,7 +127,7 @@ async function copyCliToResources(pkg: string, dest: string) {
 }
 
 export function versionFile(cli: string) {
-  return join(dirname(cli), "opencode-cli.version")
+  return join(dirname(cli), `${ProductIdentity.cli}-cli.version`)
 }
 
 async function prepareCli(dest: string) {

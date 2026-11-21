@@ -41,7 +41,10 @@
     Delete "$sharedInstallDir\${APP_EXECUTABLE_FILENAME}"
     Delete "$sharedInstallDir\${UNINSTALL_FILENAME}"
     !insertmacro removeStagedUpdates $sharedInstallDir
-    FindFirst $R0 $R1 "$sharedInstallDir\Uninstall *.exe"
+    ; Only remove the whole directory when no other executable is left in it. A channel's uninstaller
+    ; can be missing while its app is still installed, and deleting by the uninstaller alone would
+    ; then erase that other channel's files.
+    FindFirst $R0 $R1 "$sharedInstallDir\*.exe"
     FindClose $R0
     ${If} $R1 == ""
       RMDir /r $sharedInstallDir

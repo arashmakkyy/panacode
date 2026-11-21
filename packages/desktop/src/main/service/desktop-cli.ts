@@ -6,6 +6,7 @@ import { promisify } from "node:util"
 import { app } from "electron"
 import { Context, Effect, FileSystem, Layer, Option, Path, Schema } from "effect"
 import installer from "../../../../../install?raw"
+import { ProductIdentity } from "@opencode/util/product-identity"
 import { DesktopPaths } from "../paths"
 import { BUNDLED_CLI_VERSION_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
@@ -48,7 +49,7 @@ export const layer = Layer.effect(
       const home = app.getPath("home")
       yield* runInstaller(cli.binary, home)
 
-      return path.join(home, ".opencode", "bin", "opencode")
+      return path.join(home, ProductIdentity.installDir, "bin", ProductIdentity.cli)
     })
 
     return Service.of({ resolve, install })
@@ -56,8 +57,8 @@ export const layer = Layer.effect(
 )
 
 const make = Effect.fn("DesktopCli.resolve")(function* () {
-  const development = !app.isPackaged && process.env.OPENCODE_DESKTOP_CLI_DEV
-  const version = process.env.OPENCODE_VERSION ?? "local"
+  const development = !app.isPackaged && process.env.PANACODE_DESKTOP_CLI_DEV
+  const version = process.env.PANACODE_VERSION ?? "local"
 
   const cli = development
     ? {
@@ -69,12 +70,12 @@ const make = Effect.fn("DesktopCli.resolve")(function* () {
           "run",
           "--cwd",
           development,
-          "--define=OPENCODE_VERSION=process.env.OPENCODE_VERSION",
+          "--define=OPENCODE_VERSION=process.env.PANACODE_VERSION",
           "src/index.ts",
         ],
         binary: undefined,
       }
-    : yield* resolveBundledCli(!app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1")
+    : yield* resolveBundledCli(!app.isPackaged && process.env.PANACODE_DESKTOP_ISOLATED_SERVER === "1")
 
   return cli satisfies Resolved
 })
@@ -106,7 +107,7 @@ const bundledVersion = Effect.fn("DesktopCli.bundledVersion")(function* (bundled
   // async read waits behind everything else the main thread is doing at that moment.
   const shipped = yield* Effect.sync(() => {
     try {
-      return readFileSync(path.join(path.dirname(bundled), "opencode-cli.version"), "utf8").trim()
+      return readFileSync(path.join(path.dirname(bundled), `${ProductIdentity.cli}-cli.version`), "utf8").trim()
     } catch {
       return ""
     }
@@ -227,9 +228,9 @@ const runInstaller = Effect.fn("DesktopCli.installForUser")(function* (binary: s
 })
 
 function executableName() {
-  return process.platform === "win32" ? "opencode-cli.exe" : "opencode-cli"
+  return process.platform === "win32" ? `${ProductIdentity.cli}-cli.exe` : `${ProductIdentity.cli}-cli`
 }
 
 function developmentExecutableName() {
-  return process.platform === "win32" ? "opencode-cli-dev.exe" : "opencode-cli-dev"
+  return process.platform === "win32" ? `${ProductIdentity.cli}-cli-dev.exe` : `${ProductIdentity.cli}-cli-dev`
 }

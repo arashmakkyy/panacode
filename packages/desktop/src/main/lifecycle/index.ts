@@ -103,7 +103,7 @@ const runtime = Layer.effect(
     const deepLinks = yield* DeepLinks.make(focusWindow)
 
     const secondInstance = (_event: Event, argv: string[]) => {
-      const urls = argv.filter((arg) => arg.startsWith("panacode://") || arg.startsWith("opencode://"))
+      const urls = argv.filter((arg) => arg.startsWith("panacode://"))
 
       if (urls.length) {
         runFork(Effect.logInfo("deep link received via second-instance", { urls }))
@@ -115,6 +115,8 @@ const runtime = Layer.effect(
 
     const openUrl = (event: Event, url: string) => {
       event.preventDefault()
+      // Foreign schemes never reach the renderer: a Panacode window cannot handle OpenCode links.
+      if (!url.startsWith("panacode://")) return
       runFork(Effect.logInfo("deep link received via open-url", { url }))
       deepLinks.receive([url])
     }

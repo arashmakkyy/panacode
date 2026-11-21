@@ -12,11 +12,11 @@ type DevOptions = { server: ServerSource; electron: string[] }
 async function main() {
   process.env.OPENCODE_CHANNEL = "local"
   process.env.OPENCODE_VERSION ??= `2.0.0-local-${Date.now()}`
-  process.env.OPENCODE_DISABLE_CHANNEL_DB = "0"
+  process.env.PANACODE_DISABLE_CHANNEL_DB = "0"
   const options = selectOptions()
 
-  if (options.server.type === "build") process.env.OPENCODE_DESKTOP_SERVER_CHANNEL = "local"
-  process.env.OPENCODE_DESKTOP_ISOLATED_SERVER ??= "1"
+  if (options.server.type === "build") process.env.PANACODE_DESKTOP_SERVER_CHANNEL = "local"
+  process.env.PANACODE_DESKTOP_ISOLATED_SERVER ??= "1"
   await prepareDesktop()
   await prepareServer(options.server)
   await startDesktop(options.electron)
@@ -51,13 +51,13 @@ function selectOptions(): DevOptions {
 
 async function prepareServer(source: ServerSource) {
   if (source.type === "download")
-    return downloadCliToResources(source.version, windowsify("resources/opencode-cli-dev"))
+    return downloadCliToResources(source.version, windowsify("resources/panacode-cli-dev"))
   buildWebUi()
-  process.env.OPENCODE_DESKTOP_CLI_DEV = join(import.meta.dirname, "../../cli")
+  process.env.PANACODE_DESKTOP_CLI_DEV = join(import.meta.dirname, "../../cli")
 
   if (process.platform !== "win32") return
-  process.env.OPENCODE_DESKTOP_WSL_CLI_BUILD = join(import.meta.dirname, "../../cli/script/build.ts")
-  process.env.OPENCODE_DESKTOP_WSL_CLI_OUTPUT = join(import.meta.dirname, "../resources/opencode-cli-wsl")
+  process.env.PANACODE_DESKTOP_WSL_CLI_BUILD = join(import.meta.dirname, "../../cli/script/build.ts")
+  process.env.PANACODE_DESKTOP_WSL_CLI_OUTPUT = join(import.meta.dirname, "../resources/panacode-cli-wsl")
 }
 
 // The source CLI serves packages/app/dist only to paired devices, and nothing on the way to the

@@ -62,7 +62,7 @@ const serviceLayer = Layer.effect(
     yield* Effect.logInfo("app starting", {
       version: VERSION,
       packaged: app.isPackaged,
-      onboardingTest: process.env.OPENCODE_TEST_ONBOARDING === "1",
+      onboardingTest: process.env.PANACODE_TEST_ONBOARDING === "1",
       marks,
     })
     const fibers = yield* FiberSet.make()
@@ -266,7 +266,7 @@ function initCrashReporter(fs: FileSystem.FileSystem, path: Path.Path) {
 
 function writeDebugArchive(fs: FileSystem.FileSystem, path: Path.Path, netLogPath: string | undefined) {
   return Effect.gen(function* () {
-    const output = path.join(app.getPath("downloads"), `opencode-debug-${stamp()}.zip`)
+    const output = path.join(app.getPath("downloads"), `panacode-debug-${stamp()}.zip`)
     yield* Effect.logInfo("exporting debug logs", { output })
 
     const files = [
@@ -350,10 +350,29 @@ function manifest(path: Path.Path, netLogPath: string | undefined) {
 function serverLogRoots(path: Path.Path) {
   const xdgData = process.env.XDG_DATA_HOME || path.join(homedir(), ".local", "share")
 
-  return [...new Set([path.join(xdgData, "opencode", "log"), path.join(app.getPath("userData"), "opencode", "log")])]
+  // Panacode only: an OpenCode log directory can hold another product's prompts and credentials.
+  return [
+    ...new Set([path.join(xdgData, "panacode", "log"), path.join(app.getPath("userData"), "panacode", "log")]),
+  ]
 }
 
 type Entry = { name: string; path: string; offset: number } | { name: string; data: Uint8Array }
+
+function isSensitiveName(name: string) {
+  const lower = name.toLowerCase()
+
+  return (
+    lower === ".env" ||
+    lower === "auth.json" ||
+    lower === "opencode.json" ||
+    lower === "opencode.jsonc" ||
+    lower === "panacode.json" ||
+    lower === "panacode.jsonc" ||
+    lower.includes("credential") ||
+    lower.includes("secret") ||
+    /^service(?:-[a-z0-9._-]+)?\.json$/.test(lower)
+  )
+}
 
 function collect(fs: FileSystem.FileSystem, path: Path.Path, dir: string, prefix: string) {
   return Effect.gen(function* () {
@@ -371,6 +390,9 @@ function collect(fs: FileSystem.FileSystem, path: Path.Path, dir: string, prefix
         if (Option.getOrElse(info.mtime, () => new Date(0)).getTime() < cutoff) return null
 
         if (file.endsWith(".heapsnapshot")) return null
+
+        // Never bundle another product's registration or a credential file, even if a log root contains one.
+        if (isSensitiveName(path.basename(file))) return null
         // Server logs append forever without rotation, so the active log is often the largest
         // file. Export its tail rather than dropping the most relevant file from the bundle.
         const offset = Math.max(0, Number(info.size) - MAX_EXPORT_FILE_SIZE)

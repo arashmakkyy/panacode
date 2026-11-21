@@ -12,6 +12,7 @@ import { DesktopCli } from "./desktop-cli"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { takeSidecarProbe } from "./sidecar-probe"
 import { withEnsureTiming } from "@opencode/client/service"
+import { ProductIdentity } from "@opencode/util/product-identity"
 import { cliServiceRegistrationFile } from "./cli-service-file"
 
 export * as BackgroundService from "./background-service"
@@ -63,9 +64,11 @@ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: Background
   // health probe; the ensure loop then kills a still-starting server. Use a safer port, longer
   // probes, and skip the models.dev fetch so packaged Windows reaches /api/info ready in time.
   const windowsPackaged = app.isPackaged && process.platform === "win32"
-  // Panacode: 0x70AC (28844) matches the CLI's Windows `defaultPort` (ServiceConfig.PANACODE_SERVICE_PORT). Upstream
-  // OpenCode uses 0x70DE (28894); sharing it made Panacode fail to start while OpenCode was open.
-  const servicePort = setup.isolated ? 0x0c0c : windowsPackaged ? 0x70ac : undefined
+  // Panacode: the CLI's Windows default is 0x70AC (28844). Upstream OpenCode uses 0x70DE (28894);
+  // sharing it made Panacode fail to start while OpenCode was open.
+  // The CLI owns port precedence: a saved `panacode service set port` wins over its default.
+  // Only the isolated dev bench pins a port so it cannot collide with an installed service.
+  const servicePort = setup.isolated ? 0x0c0c : undefined
 
   const run = (version = setup.version) => {
     const options = {
@@ -82,9 +85,7 @@ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: Background
       ],
       env: windowsPackaged
         ? {
-            OPENCODE_DISABLE_MODELS_FETCH: "1",
             PANACODE_DISABLE_MODELS_FETCH: "1",
-            OPENCODE_DISABLE_FILEWATCHER: "1",
             PANACODE_DISABLE_FILEWATCHER: "1",
           }
         : undefined,
@@ -130,7 +131,7 @@ const prepare = Effect.fn("BackgroundService.prepare")(function* (mode: Backgrou
   yield* Effect.logInfo("starting v2 background service")
   const path = yield* Path.Path
   const desktopCli = yield* DesktopCli.Service
-  const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
+  const isolated = !app.isPackaged && process.env.PANACODE_DESKTOP_ISOLATED_SERVER === "1"
   const cli = yield* desktopCli.resolve
   const version = serviceVersion({ channel: CHANNEL, isolated, mode, version: cli.version })
 
@@ -138,10 +139,10 @@ const prepare = Effect.fn("BackgroundService.prepare")(function* (mode: Backgrou
   const client = yield* Effect.promise(() => import("@opencode/client/service"))
 
   const file =
-    process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
+    process.env.PANACODE_DESKTOP_SERVER_CHANNEL === "local"
       ? path.join(
           process.env.XDG_STATE_HOME ?? path.join(app.getPath("home"), ".local", "state"),
-          "panacode",
+          ProductIdentity.slug,
           "service-local.json",
         )
       : cliServiceRegistrationFile({

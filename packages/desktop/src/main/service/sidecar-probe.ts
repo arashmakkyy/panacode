@@ -36,7 +36,7 @@ export function takeSidecarProbe() {
 }
 
 function bundledVersion() {
-  for (const name of ["panacode-cli.version", "opencode-cli.version"]) {
+  for (const name of ["panacode-cli.version"]) {
     try {
       const value = readFileSync(path.join(process.resourcesPath, name), "utf8").trim()
       if (value) return value
