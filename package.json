@@ -9,9 +9,9 @@
   "scripts": {
     "install:local": "bun run script/install-local.ts",
     "dev": "bun run --cwd packages/cli src/index.ts",
-    "dev:live": "sh -c 'OPENCODE_TUI_CHANNEL=dev OPENCODE_PASSWORD=\"$(opencode service get password)\" exec bun run dev \"$@\" --server \"$(opencode service status)\"' --",
+    "dev:live": "sh -c 'PANACODE_TUI_CHANNEL=dev PANACODE_PASSWORD=\"$(panacode service get password)\" exec bun run dev \"$@\" --server \"$(panacode service status)\"' --",
     "dev:vite": "bun run --cwd packages/cli --conditions=browser dev/vite.ts",
-    "dev:vite:live": "sh -c 'OPENCODE_TUI_CHANNEL=dev OPENCODE_PASSWORD=\"$(opencode service get password)\" exec bun run dev:vite \"$@\" --server \"$(opencode service status)\"' --",
+    "dev:vite:live": "sh -c 'PANACODE_TUI_CHANNEL=dev PANACODE_PASSWORD=\"$(panacode service get password)\" exec bun run dev:vite \"$@\" --server \"$(panacode service status)\"' --",
     "dev:desktop": "bun --cwd packages/desktop dev",
     "dev:web": "bun --cwd packages/app dev",
     "dev:site": "bun run --cwd services/site dev",
