@@ -13,6 +13,7 @@ import {
   provenanceFile,
   verifyPackagedCli,
   versionFile,
+  writeInstallManifest,
 } from "./script/utils"
 
 const packageDir = path.dirname(fileURLToPath(import.meta.url))
@@ -180,6 +181,14 @@ const getBase = (appId: string): Configuration => {
             if (await NativeArch.isNative(file)) await NativeArch.verify(file, arch)
           }),
       )
+
+      // The NSIS include proves install ownership from this manifest before it deletes or stages anything.
+      await writeInstallManifest({
+        appDir: context.appOutDir,
+        appId: context.packager.appInfo.id,
+        version: context.packager.appInfo.version,
+        executable: `${context.packager.appInfo.productFilename}.exe`,
+      })
     },
     mac: {
       category: "public.app-category.developer-tools",

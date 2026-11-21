@@ -1,6 +1,6 @@
-import { chmod, copyFile, mkdir, readFile, stat } from "node:fs/promises"
+import { chmod, copyFile, mkdir, readFile, readdir, stat } from "node:fs/promises"
 import { createHash } from "node:crypto"
-import { basename, dirname, join } from "node:path"
+import { basename, dirname, join, relative } from "node:path"
 import { Option, Schema } from "effect"
 import { ProductIdentity } from "@opencode/util/product-identity"
 import { NativeArch } from "../../../script/native-arch"
@@ -234,6 +234,75 @@ async function sha256File(file: string) {
   return createHash("sha256")
     .update(await readFile(file))
     .digest("hex")
+}
+
+/**
+ * Records the exact files the packaged app owns, so the Windows installer can prove that a directory
+ * belongs to this app before it deletes anything. An executable or marker alone is not proof.
+ *
+ * The NSIS installer reads this as ANSI text, so every path must be plain ASCII. A path it cannot
+ * represent is a build error instead of a manifest that silently omits files.
+ */
+export async function writeInstallManifest(input: {
+  readonly appDir: string
+  readonly appId: string
+  readonly version: string
+  readonly executable: string
+}) {
+  for (const value of [input.appId, input.version, input.executable])
+    if (!/^[\x20-\x7e]+$/.test(value))
+      throw new Error(`The Windows install manifest cannot record the non-ASCII value ${JSON.stringify(value)}`)
+
+  const files = await collectInstallFiles(input.appDir)
+
+  const entries = await Promise.all(
+    files.map(async (file) => {
+      const name = relative(input.appDir, file)
+
+      if (name === INSTALL_MANIFEST) return undefined
+
+      if (!/^[\x20-\x7e]+$/.test(name))
+        throw new Error(`The Windows install manifest cannot record the non-ASCII path ${name}`)
+
+      return { name, size: (await stat(file)).size }
+    }),
+  )
+
+  const manifest = [
+    INSTALL_MANIFEST_HEADER,
+    `app=${input.appId}`,
+    `version=${input.version}`,
+    `exe=${input.executable}`,
+    ...entries
+      .filter((entry): entry is { readonly name: string; readonly size: number } => entry !== undefined)
+      .sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0))
+      .map((entry) => `${entry.size}\n${entry.name}`),
+  ].join("\n")
+
+  await Bun.write(join(input.appDir, INSTALL_MANIFEST), `${manifest}\n`)
+}
+
+export const INSTALL_MANIFEST = ".panacode-install"
+
+export const INSTALL_MANIFEST_HEADER = "panacode-install 1"
+
+// Reparse points are not owned by the package, and following one would record files outside appDir.
+async function collectInstallFiles(dir: string): Promise<string[]> {
+  const entries = await readdir(dir, { withFileTypes: true })
+
+  const nested = await Promise.all(
+    entries.map(async (entry) => {
+      if (entry.isSymbolicLink()) return []
+
+      const file = join(dir, entry.name)
+
+      if (entry.isDirectory()) return collectInstallFiles(file)
+
+      return entry.isFile() ? [file] : []
+    }),
+  )
+
+  return nested.flat()
 }
 
 export function windowsify(path: string) {

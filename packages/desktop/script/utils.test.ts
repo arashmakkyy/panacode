@@ -1,15 +1,18 @@
 import { expect, test } from "bun:test"
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import {
   CLI_BINARIES,
   copyBuiltCliToResources,
   getCurrentCli,
+  INSTALL_MANIFEST,
+  INSTALL_MANIFEST_HEADER,
   inspectBuiltCli,
   provenanceFile,
   verifyPackagedCli,
   versionFile,
+  writeInstallManifest,
 } from "./utils"
 
 function pe(machine: number) {
@@ -312,6 +315,73 @@ test("a partial previous staging is overwritten before it can be verified", asyn
       expect(await readFile(dest)).toEqual(await readFile(path.join(directory, "bin", "panacode.exe")))
       expect(staged.version).toBe("9.9.9")
     })
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test("the Windows install manifest records only owned files with exact sizes", async () => {
+  const root = await tempDir()
+  const app = path.join(root, "app")
+  const outside = path.join(root, "outside")
+
+  try {
+    await mkdir(path.join(app, "resources", "nested"), { recursive: true })
+    await mkdir(outside, { recursive: true })
+    await writeFile(path.join(app, "Panacode.exe"), "exe")
+    await writeFile(path.join(app, "resources", "nested", "app.asar"), "asar")
+    await writeFile(path.join(app, "resources", "empty.bin"), "")
+    await writeFile(path.join(app, INSTALL_MANIFEST), "stale manifest")
+    await writeFile(path.join(outside, "foreign.txt"), "foreign")
+    await symlink(outside, path.join(app, "linked"), process.platform === "win32" ? "junction" : "dir")
+
+    await writeInstallManifest({
+      appDir: app,
+      appId: "ai.panacode.desktop",
+      version: "2.3.0",
+      executable: "Panacode.exe",
+    })
+
+    expect(await readFile(path.join(app, INSTALL_MANIFEST), "utf8")).toBe(
+      [
+        INSTALL_MANIFEST_HEADER,
+        "app=ai.panacode.desktop",
+        "version=2.3.0",
+        "exe=Panacode.exe",
+        "3\nPanacode.exe",
+        "0\nresources\\empty.bin",
+        "4\nresources\\nested\\app.asar",
+      ].join("\n") + "\n",
+    )
+
+    await writeInstallManifest({
+      appDir: app,
+      appId: "ai.panacode.desktop",
+      version: "2.3.0",
+      executable: "Panacode.exe",
+    })
+    expect(await readFile(path.join(app, INSTALL_MANIFEST), "utf8")).not.toContain("stale manifest")
+    expect(await readFile(path.join(app, INSTALL_MANIFEST), "utf8")).not.toContain("foreign.txt")
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test("a path the installer cannot read as ANSI fails the manifest instead of being omitted", async () => {
+  const root = await tempDir()
+
+  try {
+    await writeFile(path.join(root, "café.txt"), "not ascii")
+
+    const error = await writeInstallManifest({
+      appDir: root,
+      appId: "ai.panacode.desktop",
+      version: "2.3.0",
+      executable: "Panacode.exe",
+    }).catch((error: Error) => error)
+
+    expect(String(error)).toContain("cannot record the non-ASCII path café.txt")
+    expect(await Bun.file(path.join(root, INSTALL_MANIFEST)).exists()).toBe(false)
   } finally {
     await rm(root, { recursive: true, force: true })
   }
