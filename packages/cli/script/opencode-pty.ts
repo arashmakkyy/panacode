@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { readFile } from "node:fs/promises"
+import { lstat, readFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import path from "node:path"
 
@@ -28,11 +28,15 @@ export async function resolveOpencodePty(target: Target): Promise<OpencodePtyAss
     .join("-")
   const name = `@opencode/pty-${suffix}`
   const local = process.env.PANACODE_PTY_BIN
-  if (local && (target.platform !== process.platform || target.arch !== process.arch))
-    throw new Error("PANACODE_PTY_BIN can only be embedded in a build for the current platform and architecture")
-  const source = local
-    ? path.resolve(local)
-    : pty.resolve(`${name}/bin/${target.platform === "win32" ? "opencode-pty.exe" : "opencode-pty"}`)
+  if (local) {
+    if (!path.isAbsolute(local)) throw new Error("PANACODE_PTY_BIN must be an absolute path")
+    if (target.platform !== process.platform || target.arch !== process.arch)
+      throw new Error("PANACODE_PTY_BIN can only be embedded in a build for the current platform and architecture")
+    const info = await lstat(local)
+    if (!info.isFile() || info.isSymbolicLink())
+      throw new Error("PANACODE_PTY_BIN must be a regular file, not a link or directory")
+  }
+  const source = local ? path.resolve(local) : pty.resolve(`${name}/bin/${target.platform === "win32" ? "opencode-pty.exe" : "opencode-pty"}`)
   const manifest: unknown = local
     ? { version: "local" }
     : JSON.parse(await readFile(pty.resolve(`${name}/package.json`), "utf8"))

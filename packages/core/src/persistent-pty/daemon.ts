@@ -4,6 +4,7 @@ import net from "node:net"
 import path from "node:path"
 import { Cause, Data, Duration, Effect, Schema, Semaphore } from "effect"
 import type { Handoff } from "@opencode/schema/persistent-pty"
+import { resolveBinary } from "#persistent-pty-binary"
 
 const ProtocolVersion = 8
 const MaxFrameBytes = 8 * 1024 * 1024
@@ -198,7 +199,7 @@ export interface DaemonTransport {
 export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport")(function* (
   root: string,
   initialID: string,
-  binary: () => Promise<string> = () => Promise.resolve(process.env.PANACODE_PTY_BIN || "opencode-pty"),
+  binary: () => Promise<string> = () => resolveBinary(path.join(root, "bin")),
   inherited?: Handoff,
 ) {
   const startup = Semaphore.makeUnsafe(1)

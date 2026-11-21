@@ -95,12 +95,18 @@ for (const target of targets) {
   const assets = await collectNodeAssets(target)
   await rm("dist-node", { recursive: true, force: true })
   const assetHash = await hashNodeAssets(assets)
+  const ptyAsset = assets.find((asset) => asset.key === target.opencodePtyAsset)
   const input = {
     version: Script.version,
     channel: Script.channel,
     highlights,
     modelsSnapshot,
     assetHash,
+    ptySha256: ptyAsset
+      ? createHash("sha256")
+          .update(await readFile(ptyAsset.source))
+          .digest("hex")
+      : undefined,
     target,
   }
   await copyNodeAssets(assets)

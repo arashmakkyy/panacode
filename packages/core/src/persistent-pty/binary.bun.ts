@@ -1,31 +1,49 @@
-import { createHash } from "node:crypto"
 import { chmod, lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises"
 import path from "node:path"
+import { assertOwner, dependencyBinary, digest, isMissing, verifiedBinary, type Asset } from "./binary.js"
 import asset from "./pty-binding.js"
 
 export const available = true
 
-export async function resolveBinary(bin: string) {
-  if (process.env.PANACODE_PTY_BIN) return process.env.PANACODE_PTY_BIN
-  if (!asset) return "opencode-pty"
-  if (typeof asset === "string") return asset
-  return install(bin, asset)
+/**
+ * Resolve the persistent PTY daemon for the current runtime.
+ *
+ * A packaged build embeds its own asset and installs it into a private cache whose digest must
+ * match. A development checkout may use the pinned `@opencode/pty` dependency. `PANACODE_PTY_BIN`
+ * is a development/test override: it must be an absolute file and is ignored by packaged builds,
+ * so a released executable can never be redirected to another program.
+ */
+export function resolveBinary(bin?: string) {
+  return resolve(bin, asset)
 }
 
-async function install(
-  bin: string,
-  input: { readonly path: string; readonly version: string; readonly sha256: string },
-) {
+export async function resolve(bin: string | undefined, asset: Asset | string | undefined) {
+  // A released build runs only the asset it was built with, from its private cache. The runtime
+  // override is not consulted here: silently preferring another executable would defeat packaging.
+  if (asset !== undefined && typeof asset !== "string") {
+    if (!bin) throw new Error("Persistent PTY cache directory is required for an embedded binary")
+    return install(bin, asset)
+  }
+  const override = process.env.PANACODE_PTY_BIN
+  if (override) return dependencyBinary(override, "PANACODE_PTY_BIN")
+  if (typeof asset === "string") return dependencyBinary(asset, "Persistent PTY dependency binary")
+  throw new Error(
+    `No persistent PTY binary is available for ${process.platform}-${process.arch}; ` +
+      "install the matching @opencode/pty package or set PANACODE_PTY_BIN to an absolute path",
+  )
+}
+
+async function install(bin: string, input: Asset) {
   const root = path.join(bin, "opencode-pty")
   await privateDirectory(root)
   const directory = path.join(root, `${input.version}-${input.sha256.slice(0, 16)}`)
   await privateDirectory(directory)
   // Windows only launches executables with their extension.
   const destination = path.join(directory, process.platform === "win32" ? "opencode-pty.exe" : "opencode-pty")
-  if (await validateIfPresent(destination, input.sha256)) return destination
+  if (await cached(destination, input.sha256)) return destination
 
   const bytes = new Uint8Array(await Bun.file(input.path).arrayBuffer())
-  if (sha256(bytes) !== input.sha256) throw new Error("Embedded opencode-pty checksum mismatch")
+  if (digest(bytes) !== input.sha256) throw new Error("Embedded opencode-pty checksum mismatch")
   const temporary = path.join(directory, `opencode-pty.${process.pid}.${crypto.randomUUID()}.tmp`)
   try {
     const file = await open(temporary, "wx", 0o700)
@@ -37,49 +55,45 @@ async function install(
     }
     await chmod(temporary, 0o755)
     await rename(temporary, destination).catch(async (error) => {
-      if (!(await validateIfPresent(destination, input.sha256))) throw error
+      if (await cached(destination, input.sha256)) return
+      // `cached` removed a corrupt destination; one retry can now claim the name.
+      await rename(temporary, destination).catch(() => {
+        throw error
+      })
     })
   } finally {
     await rm(temporary, { force: true })
   }
-  return validate(destination, input.sha256)
+  const file = await verifiedBinary(destination, input.sha256)
+  await chmod(file, 0o755)
+  return file
 }
 
 async function privateDirectory(directory: string) {
   await mkdir(directory, { recursive: true, mode: 0o700 })
   const info = await lstat(directory)
   if (!info.isDirectory() || info.isSymbolicLink()) throw new Error(`Unsafe opencode-pty directory: ${directory}`)
-  const uid = typeof process.getuid === "function" ? process.getuid() : undefined
-  if (uid !== undefined && info.uid !== uid)
-    throw new Error(`opencode-pty directory is owned by another user: ${directory}`)
+  assertOwner(info, `opencode-pty directory ${directory}`)
   await chmod(directory, 0o700)
 }
 
-async function validateIfPresent(file: string, expected: string) {
+// A cache file with the right bytes is reused. A regular file with the wrong bytes never ran from
+// this path; replace it from the embedded asset instead of failing forever. A link or a file owned
+// by another user is refused, because replacing it cannot be proven safe.
+async function cached(file: string, expected: string) {
+  let info
   try {
-    await validate(file, expected)
-    return true
+    info = await lstat(file)
   } catch (error) {
     if (isMissing(error)) return false
     throw error
   }
-}
-
-async function validate(file: string, expected: string) {
-  const info = await lstat(file)
   if (!info.isFile() || info.isSymbolicLink()) throw new Error(`Unsafe opencode-pty executable: ${file}`)
-  const uid = typeof process.getuid === "function" ? process.getuid() : undefined
-  if (uid !== undefined && info.uid !== uid)
-    throw new Error(`opencode-pty executable is owned by another user: ${file}`)
-  if (sha256(await readFile(file)) !== expected) throw new Error(`Cached opencode-pty checksum mismatch: ${file}`)
-  await chmod(file, 0o755)
-  return file
-}
-
-function sha256(bytes: Uint8Array) {
-  return createHash("sha256").update(bytes).digest("hex")
-}
-
-function isMissing(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && error.code === "ENOENT"
+  assertOwner(info, `opencode-pty executable ${file}`)
+  if (digest(await readFile(file)) === expected) {
+    await chmod(file, 0o755)
+    return true
+  }
+  await rm(file, { force: true })
+  return false
 }

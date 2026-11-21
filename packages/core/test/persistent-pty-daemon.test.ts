@@ -1,10 +1,14 @@
 import { expect } from "bun:test"
 import { spawn } from "node:child_process"
-import { mkdir, writeFile } from "node:fs/promises"
+import { createHash } from "node:crypto"
+import { existsSync } from "node:fs"
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises"
 import net from "node:net"
 import path from "node:path"
-import { Effect, Fiber } from "effect"
-import { makeDaemonTransport } from "../src/persistent-pty/daemon"
+import { binaryPath } from "@opencode/pty"
+import { Effect, Fiber, type Scope } from "effect"
+import { resolve as resolveBun } from "../src/persistent-pty/binary.bun"
+import { makeDaemonTransport, type DaemonTransport } from "../src/persistent-pty/daemon"
 import { frame, listen, pong, temporaryDirectory, terminal, writeRegistration } from "./fixture/persistent-pty-daemon"
 import { it } from "./lib/effect"
 
@@ -335,3 +339,174 @@ if (process.platform !== "win32")
       expect(count.trim().split("\n")).toHaveLength(1)
     }),
   )
+
+it.live("rejects a bare daemon name instead of letting PATH choose the executable", () =>
+  withEnvironment({ PANACODE_PTY_BIN: "opencode-pty" }, () =>
+    Effect.gen(function* () {
+      const root = yield* temporaryDirectory()
+      const trap = path.join(root, "path")
+      const marker = path.join(root, "executed")
+      yield* Effect.promise(() => mkdir(trap))
+      yield* Effect.promise(() =>
+        writeFile(
+          path.join(trap, process.platform === "win32" ? "opencode-pty.cmd" : "opencode-pty"),
+          process.platform === "win32"
+            ? `@echo ran > ${JSON.stringify(marker)}\r\n`
+            : `#!/bin/sh\necho ran > ${JSON.stringify(marker)}\n`,
+          process.platform === "win32" ? {} : { mode: 0o755 },
+        ),
+      )
+      const savedPath = process.env.PATH
+      process.env.PATH = `${trap}${path.delimiter}${savedPath ?? ""}`
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          if (savedPath === undefined) delete process.env.PATH
+          else process.env.PATH = savedPath
+        }),
+      )
+
+      const daemon = yield* makeDaemonTransport(path.join(root, "runtime"), "daemon")
+      const error = yield* Effect.flip(daemon.request({ op: "list" }, true))
+
+      expect(existsSync(marker)).toBeFalse()
+      expect(error.kind).toBe("spawn")
+      expect(error.message).toContain("must be an absolute path")
+    }),
+  ),
+)
+
+const realBinary = binaryPath !== undefined && existsSync(binaryPath) ? binaryPath : undefined
+const realTest = realBinary === undefined ? it.live.skip : it.live
+
+realTest(
+  "starts its default daemon from the pinned dependency and keeps the terminal across handoff",
+  () =>
+    withEnvironment({ PANACODE_PTY_BIN: undefined, PANACODE_PTY_BIN_SHA256: undefined }, () =>
+      Effect.gen(function* () {
+        const root = yield* temporaryDirectory()
+        yield* realTerminal(root)
+      }),
+    ),
+  30_000,
+)
+
+realTest(
+  "runs a packaged asset from its private cache by absolute path and keeps the terminal across handoff",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* temporaryDirectory()
+      if (!realBinary) return
+      const source = path.join(root, "asset", path.basename(realBinary))
+      yield* Effect.promise(() => mkdir(path.dirname(source), { recursive: true }))
+      yield* Effect.promise(() => copyFile(realBinary, source))
+      const installed = yield* Effect.promise(async () => {
+        const sha256 = createHash("sha256").update(await readFile(source)).digest("hex")
+        return resolveBun(path.join(root, "cache"), { path: source, version: "test", sha256 })
+      })
+
+      expect(path.isAbsolute(installed)).toBeTrue()
+      expect(installed.startsWith(path.join(root, "cache"))).toBeTrue()
+      expect(installed).not.toBe(source)
+      yield* realTerminal(root, () => Promise.resolve(installed))
+    }),
+  30_000,
+)
+
+// The default transport resolves its own binary, creates a real terminal, and hands the running
+// daemon to a replacement that must see the same session and terminal.
+function realTerminal(root: string, binary?: () => Promise<string>) {
+  return Effect.gen(function* () {
+    const runtime = path.join(root, "runtime")
+    const daemon = yield* makeDaemonTransport(runtime, "real", binary)
+    const created = yield* daemon.request(
+      {
+        op: "create_pty",
+        program: process.platform === "win32" ? (process.env.ComSpec ?? "cmd.exe") : "/bin/sh",
+        args: process.platform === "win32" ? ["/k", "echo pty-marker"] : ["-c", "printf pty-marker; exec cat"],
+        cwd: root,
+        title: "real",
+        group_id: "ses_real",
+        env: {},
+        cols: 80,
+        rows: 24,
+      },
+      true,
+    )
+    if (created.type !== "created") return yield* Effect.fail(new Error(`unexpected response: ${created.type}`))
+    const id = created.process.id
+    yield* Effect.addFinalizer(() => daemon.request({ op: "terminate", id }).pipe(Effect.ignore))
+
+    expect(yield* waitForTerminalText(daemon, id, "pty-marker")).toContain("pty-marker")
+    const handoff = yield* daemon.handoff
+    if (!handoff) return yield* Effect.fail(new Error("expected a handoff ticket"))
+    const registration = yield* Effect.promise(() => readFile(path.join(handoff.directory, "service.json"), "utf8"))
+    const daemonPID = (JSON.parse(registration) as { pid: number }).pid
+    const replacement = yield* makeDaemonTransport(runtime, "replacement", undefined, handoff)
+    expect(yield* waitForTerminalText(replacement, id, "pty-marker")).toContain("pty-marker")
+
+    const list = yield* replacement.request({ op: "list", mode: "pty" })
+    const terminal = list.type === "processes" ? list.processes.find((item) => item.id === id) : undefined
+    expect(terminal?.group_id).toBe("ses_real")
+    expect(terminal?.lifecycle.status).toBe("running")
+    yield* replacement.shutdown
+    // Windows locks a running executable, including the cached copy under this test root.
+    yield* waitForExit(daemonPID)
+  })
+}
+
+function waitForExit(pid: number) {
+  return Effect.gen(function* () {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      if (!isRunning(pid)) {
+        // Windows can hold a file briefly after its process exits.
+        yield* Effect.sleep(100)
+        return
+      }
+      yield* Effect.sleep(50)
+    }
+    return yield* Effect.fail(new Error(`PTY daemon ${pid} did not exit`))
+  })
+}
+
+function isRunning(pid: number) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function waitForTerminalText(daemon: DaemonTransport, id: number, text: string) {
+  return Effect.gen(function* () {
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const snapshot = yield* daemon.request({ op: "snapshot", id })
+      if (snapshot.type === "snapshot" && snapshot.text.includes(text)) return snapshot.text
+      yield* Effect.sleep(50)
+    }
+    return yield* Effect.fail(new Error(`terminal ${id} did not show ${text}`))
+  })
+}
+
+function withEnvironment<A, E>(
+  values: Record<string, string | undefined>,
+  body: () => Effect.Effect<A, E, Scope.Scope>,
+): Effect.Effect<A, E, Scope.Scope> {
+  return Effect.suspend(() => {
+    const saved = new Map(Object.keys(values).map((name) => [name, process.env[name]]))
+    for (const [name, value] of Object.entries(values)) {
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = value
+    }
+    return body().pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          for (const [name, value] of saved) {
+            if (value === undefined) delete process.env[name]
+            else process.env[name] = value
+          }
+        }),
+      ),
+    )
+  })
+}

@@ -160,7 +160,8 @@ export const Error = sdk.Tool.Error
 `
   return `#!/usr/bin/env -S node ${nodeExecArgv.join(" ")}
 import __cjs_mod__ from "node:module"
-import { chmodSync as __ocChmod, existsSync as __ocExists, lstatSync as __ocLstat, mkdirSync as __ocMkdir, renameSync as __ocRename, rmSync as __ocRm, writeFileSync as __ocWrite } from "node:fs"
+import { chmodSync as __ocChmod, existsSync as __ocExists, lstatSync as __ocLstat, mkdirSync as __ocMkdir, readFileSync as __ocReadFile, renameSync as __ocRename, rmSync as __ocRm, writeFileSync as __ocWrite } from "node:fs"
+import { createHash as __ocHash } from "node:crypto"
 import { tmpdir as __ocTmpdir } from "node:os"
 import __ocPath from "node:path"
 import { getAssetKeys as __ocAssetKeys, getRawAsset as __ocRawAsset, isSea as __ocIsSea } from "node:sea"
@@ -218,6 +219,11 @@ if (__ocIsSea()) {
   for (const __ocKey of __ocAssetKeys()) {
     if (__ocKey === ${JSON.stringify(appArchiveAsset)}) continue
     const __ocTarget = __ocPath.join(__ocAssetRoot, __ocKey)
+    if (__ocKey === __ocPersistentPty && __ocExists(__ocTarget)) {
+      const __ocExpected = __ocHash("sha256").update(new Uint8Array(__ocRawAsset(__ocKey))).digest("hex")
+      const __ocActual = __ocHash("sha256").update(__ocReadFile(__ocTarget)).digest("hex")
+      if (__ocActual !== __ocExpected) __ocRm(__ocTarget, { force: true })
+    }
     if (__ocExists(__ocTarget)) continue
     __ocMkdir(__ocPath.dirname(__ocTarget), { recursive: true })
     const __ocTemporary = \`${"${__ocTarget}"}.${"${process.pid}"}.${"${crypto.randomUUID()}"}.tmp\`
@@ -239,7 +245,10 @@ process.env.PANACODE_PARCEL_WATCHER_PATH = __ocPath.join(__ocAssetRoot, ${JSON.s
 process.env.PANACODE_PHOTON_WASM_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(photonWasmAsset)})
 process.env.FFF_BINARY_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(input.target.fffAsset)})
 process.env.PANACODE_FFF_FFI_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(input.target.fffFfiAsset)})
-if (__ocPersistentPty && !process.env.PANACODE_PTY_BIN) process.env.PANACODE_PTY_BIN = __ocPath.join(__ocAssetRoot, __ocPersistentPty)
+if (__ocPersistentPty) {
+  process.env.PANACODE_PTY_BIN = __ocPath.join(__ocAssetRoot, __ocPersistentPty)
+  ${input.ptySha256 ? `process.env.PANACODE_PTY_BIN_SHA256 = ${JSON.stringify(input.ptySha256)}` : ""}
+}
 try {
   globalThis.__PANACODE_FFF_FFI = require(process.env.PANACODE_FFF_FFI_PATH)
 } catch {}
@@ -253,6 +262,7 @@ export type NodeBuildInput = {
   readonly highlights?: string
   readonly modelsSnapshot?: string
   readonly assetHash: string
+  readonly ptySha256?: string
   readonly target: NodeTarget
 }
 
