@@ -2,13 +2,20 @@ export * as RemoteCli from "./remote-cli"
 
 import { Effect, Schema } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
+import { ManagedCli } from "../managed-cli"
 
 export class Failure extends Schema.TaggedError<Failure>()("RemoteCliFailure", {
-  code: Schema.Literals(["platform", "version", "install"]),
+  code: Schema.Literals(["platform", "version", "install", "unpublished"]),
   detail: Schema.String,
 }) {
   override get message() {
     return this.detail
+  }
+
+  static from(this: void, cause: unknown) {
+    return cause instanceof Failure
+      ? cause
+      : new Failure({ code: "install", detail: cause instanceof Error ? cause.message : String(cause) })
   }
 }
 
@@ -17,31 +24,58 @@ export function quote(value: string) {
 }
 
 export function requireVersion(version: string) {
-  if (version !== "local" && !/^[0-9][a-zA-Z0-9.+-]*$/.test(version))
-    throw new Failure({ code: "version", detail: version })
+  if (!ManagedCli.validVersion(version)) throw new Failure({ code: "version", detail: version })
 
   return version
 }
 
-export function discoverScript(options: { fromPath?: boolean; cache?: { directory: string; prefix: string } } = {}) {
-  return `cli=${options.fromPath ? "$(command -v panacode || true)" : '""'}
-if [ -z "$cli" ] && [ -x "$HOME/.panacode/bin/panacode" ]; then cli="$HOME/.panacode/bin/panacode"; fi
-${
-  options.cache
-    ? `if [ -z "$cli" ]; then
-  for binary in "$HOME"/${quote(options.cache.directory)}/${quote(options.cache.prefix)}*/panacode; do
-    if [ -x "$binary" ]; then cli="$binary"; fi
-  done
-fi
+const digest = `sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'
+  else return 1; fi
+}
+sha512_of() {
+  if command -v sha512sum >/dev/null 2>&1; then sha512sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then shasum -a 512 "$1" | awk '{print $1}'
+  else return 1; fi
+}
 `
-    : ""
-}if [ -n "$cli" ]; then printf '%s\\n' "$cli"; fi
+
+function metadataValue(key: string) {
+  return `sed -n 's/.*"${key}":"\\([^"]*\\)".*/\\1/p' "$metadata"`
+}
+
+/**
+ * Finds the private cache only when its sidecar names Panacode for this version
+ * and target, and the binary still matches the recorded digest. It sets `cli` for
+ * the caller's registration script; no cached binary is executed before this.
+ */
+export function discoverScript(input: { version: string; target: string }) {
+  const version = requireVersion(input.version)
+  const target = ManagedCli.requireTarget(input.target)
+
+  return `${digest}cli=""
+root="$HOME/.panacode/desktop-ssh"
+release="$root"/${quote(version)}
+destination="$release/panacode"
+metadata="$release/panacode.artifact.json"
+if [ ! -L "$HOME/.panacode" ] && [ ! -L "$root" ] && [ ! -L "$release" ] && [ -f "$destination" ] && [ -f "$metadata" ] && [ ! -L "$destination" ] && [ ! -L "$metadata" ]; then
+  product=$(${metadataValue("product")})
+  cached_version=$(${metadataValue("version")})
+  cached_target=$(${metadataValue("target")})
+  stored=$(${metadataValue("sha256")})
+  actual=$(sha256_of "$destination") || actual=""
+  if [ "$product" = "panacode" ] && [ "$cached_version" = ${quote(version)} ] && [ "$cached_target" = ${quote(target)} ] && [ \${#stored} -eq 64 ] && [ "$stored" = "$actual" ]; then
+    cli="$destination"
+    printf 'OPENCODE_SSH_CLI=ready\\n'
+  fi
+fi
 `
 }
 
 // Adapters supply a quoted shell expression, including remote HOME or wslpath expansion.
 export function versionScript(command: string) {
-  return `if [ -x ${command} ]; then ${command} --version 2>/dev/null || true; fi\n`
+  return `if [ -f ${command} ]; then ${command} --version 2>/dev/null || true; fi\n`
 }
 
 export function parseVersion(output: string) {
@@ -72,66 +106,108 @@ fi
 printf 'OPENCODE_REMOTE_TARGET=%s\\n' "$target"
 `
 
-export function archiveUrl(target: string, version: string) {
-  if (!/^(linux|darwin)-(x64-baseline|arm64)(-musl)?$/.test(target))
-    throw new Failure({ code: "platform", detail: target })
+type Source =
+  | { readonly type: "download"; readonly artifact: ManagedCli.Artifact }
+  | { readonly type: "archive"; readonly artifact: ManagedCli.Artifact; readonly sha256: string }
 
-  return `https://registry.npmjs.org/@panacode/cli-${target}/-/cli-${target}-${requireVersion(version)}.tgz`
-}
-
-type Source = { type: "download"; url: string } | { type: "archive" } | { type: "installer"; binary?: string }
-
-export function installScript(input: { version: string; directory?: string; source: Source }) {
+/**
+ * Installs one verified CLI into the private SSH cache. Download verifies the
+ * registry sha512; relay verifies the sha256 of the bytes on stdin. Both stage
+ * outside the destination and replace it atomically.
+ */
+export function installScript(input: { version: string; source: Source }) {
   const version = requireVersion(input.version)
 
-  // The managed CLI installer also configures the user's shell PATH. Private
-  // installations use archives so their destination and shell setup stay isolated.
-  if (input.source.type === "installer")
-    return `set -eu
-curl -fsSL https://raw.githubusercontent.com/arashmakkyy/panacode/dev/install | bash -s -- ${input.source.binary ? `--binary ${input.source.binary}` : `--version ${quote(version)}`}
-${verifyScript('"$HOME/.panacode/bin/panacode"', version)}
-`
+  if (input.source.artifact.version !== version)
+    throw new Failure({ code: "version", detail: input.source.artifact.version })
+  const target = ManagedCli.requireTarget(input.source.artifact.target)
+
+  const source =
+    input.source.type === "download"
+      ? `archive="$stage/archive.tgz"
+url=${quote(input.source.artifact.url)}
+if command -v curl >/dev/null 2>&1; then
+  curl -fsSL --connect-timeout 15 --max-time 300 "$url" -o "$archive"
+else
+  wget -T 300 -O "$archive" "$url"
+fi
+test -s "$archive"
+actual=$(sha512_of "$archive") || { echo "Could not hash the Panacode CLI archive." >&2; exit 1; }
+test "$actual" = ${quote(input.source.artifact.sha512)}`
+      : `archive="$stage/archive.tgz"
+cat > "$archive"
+test -s "$archive"
+actual=$(sha256_of "$archive") || { echo "Could not hash the Panacode CLI archive." >&2; exit 1; }
+test "$actual" = ${quote(input.source.sha256)}`
 
   return `set -eu
 umask 077
-destination="$HOME"/${quote(`${input.directory ?? ".panacode/bin"}/panacode`)}
-mkdir -p "$(dirname "$destination")"
-stage=$(mktemp -d "$(dirname "$destination")/.install-XXXXXX")
-trap 'rm -rf "$stage"' EXIT
-${stageBinary(input.source)}
+${digest}root="$HOME/.panacode/desktop-ssh"
+release="$root"/${quote(version)}
+destination="$release/panacode"
+metadata="$release/panacode.artifact.json"
+if [ -L "$HOME/.panacode" ] || [ -L "$root" ]; then
+  echo "Refusing to install the Panacode CLI through a symlinked directory." >&2
+  exit 1
+fi
+mkdir -p "$release"
+if [ -L "$HOME/.panacode" ] || [ -L "$root" ] || [ -L "$release" ] || [ -L "$destination" ] || [ -L "$metadata" ]; then
+  echo "Refusing to replace a symlinked Panacode CLI." >&2
+  exit 1
+fi
+lock="$root/.install.lock"
+if ! mkdir "$lock" 2>/dev/null; then
+  owner=$(cat "$lock/pid" 2>/dev/null || true)
+  if [ -n "$owner" ] && kill -0 "$owner" 2>/dev/null; then
+    echo "Another Panacode CLI install is already running." >&2
+    exit 1
+  fi
+  rm -rf "$lock"
+  mkdir "$lock" 2>/dev/null || { echo "Another Panacode CLI install is already running." >&2; exit 1; }
+fi
+printf '%s\\n' "$$" > "$lock/pid"
+stage=$(mktemp -d "$release/.install-XXXXXX")
+trap 'rm -rf "$stage" "$lock"' EXIT HUP INT TERM
+${source}
+tar -xzf "$archive" -C "$stage" package/bin/panacode
+test -d "$stage/package"
+test ! -L "$stage/package"
+test -d "$stage/package/bin"
+test ! -L "$stage/package/bin"
+test -f "$stage/package/bin/panacode"
+test ! -L "$stage/package/bin/panacode"
 chmod 755 "$stage/package/bin/panacode"
-${verifyScript('"$stage/package/bin/panacode"', version)}
-mv "$stage/package/bin/panacode" "$destination"
+sha=$(sha256_of "$stage/package/bin/panacode") || { echo "Could not hash the Panacode CLI." >&2; exit 1; }
+printf '{"product":"panacode","version":"%s","target":"%s","sha256":"%s"}\\n' ${quote(version)} ${quote(target)} "$sha" > "$stage/panacode.artifact.json"
+mv -f "$stage/package/bin/panacode" "$destination"
+mv -f "$stage/panacode.artifact.json" "$metadata"
 `
 }
 
-function stageBinary(source: Exclude<Source, { type: "installer" }>) {
-  if (source.type === "archive") return 'cat > "$stage/archive.tgz"\ntar -xzf "$stage/archive.tgz" -C "$stage"'
-
-  return `url=${quote(source.url)}
-if command -v curl >/dev/null 2>&1; then
-  curl -fsSL --connect-timeout 15 --max-time 180 "$url" -o "$stage/archive.tgz"
-else
-  wget -T 180 -O "$stage/archive.tgz" "$url"
-fi
-tar -xzf "$stage/archive.tgz" -C "$stage"`
-}
-
-function verifyScript(command: string, version: string) {
-  return `test "$(${command} --version | awk '{print $NF}' | sed 's/^v//')" = ${quote(version)}`
-}
-
-const Beta = Schema.Struct({ version: Schema.String.check(Schema.isPattern(/^0\.0\.0-beta-\d+(?:\.\d+)?$/)) })
-
-export const latestBeta = Effect.fn("RemoteCli.latestBeta")(function* () {
+/** Resolves the immutable artifact reference from registry metadata. */
+export const artifact = Effect.fn("RemoteCli.artifact")(function* (target: string, version: string) {
   const http = yield* HttpClient.HttpClient
+  const url = yield* Effect.try({ try: () => ManagedCli.metadataUrl(target, version), catch: Failure.from })
 
-  const metadata = yield* http.get("https://registry.npmjs.org/panacode/beta").pipe(
-    Effect.flatMap(HttpClientResponse.filterStatusOk),
-    Effect.flatMap(HttpClientResponse.schemaBodyJson(Beta)),
-    Effect.timeout("30 seconds"),
-    Effect.mapError(() => new Failure({ code: "install", detail: "https://registry.npmjs.org/panacode/beta" })),
+  const response = yield* http
+    .get(url)
+    .pipe(Effect.mapError(() => new Failure({ code: "install", detail: url })))
+    .pipe(Effect.timeout("30 seconds"))
+
+  if (response.status === 404)
+    return yield* Effect.fail(new Failure({ code: "unpublished", detail: ManagedCli.unavailable(target, version) }))
+
+  if (response.status < 200 || response.status >= 300)
+    return yield* Effect.fail(
+      new Failure({ code: "install", detail: `The managed Panacode CLI metadata returned HTTP ${response.status}` }),
+    )
+
+  const metadata = yield* HttpClientResponse.schemaBodyJson(ManagedCli.Metadata)(response).pipe(
+    Effect.mapError(() => new Failure({ code: "install", detail: `Invalid Panacode CLI metadata at ${url}` })),
   )
 
-  return metadata.version
+  return yield* Effect.try({
+    try: () => ManagedCli.artifact(target, version, metadata),
+    catch: Failure.from,
+  })
 })

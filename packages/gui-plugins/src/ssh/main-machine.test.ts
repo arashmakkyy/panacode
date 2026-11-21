@@ -14,7 +14,7 @@ import {
 
 const box: SshConfig = { id: "box", target: "ssh box", name: "Box" }
 
-const http = { url: "http://127.0.0.1:4100", password: "secret" }
+const http = { url: "http://127.0.0.1:4100", password: "secret", instance: "instance-1" }
 
 const prompt = { id: "password", text: "box's password:", confirm: false }
 

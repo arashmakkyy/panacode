@@ -56,8 +56,9 @@ const setup: Plugin.MainSetup = (ctx) => {
     installCli: local
       ? async (distro) => {
           const { buildLocalWslCli } = await import("./local")
-          const binary = await buildLocalWslCli({ ...local, version: cli.version })
-          await runtime.installCli(distro, { version: cli.version, binary })
+          const target = await runtime.probeCliTarget(distro)
+          const built = await buildLocalWslCli({ ...local, version: cli.version, target })
+          await runtime.installCli(distro, { version: cli.version, local: built })
         }
       : (distro, build) => runtime.installCli(distro, build),
     spawnSidecar: (distro, signal) => {

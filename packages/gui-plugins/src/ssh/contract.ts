@@ -5,7 +5,7 @@ export const SshConfig = Schema.Struct({ id: Schema.String, target: Schema.Strin
 
 export type SshConfig = typeof SshConfig.Type
 
-export const SshHttp = Schema.Struct({ url: Schema.String, password: Schema.String })
+export const SshHttp = Schema.Struct({ url: Schema.String, password: Schema.String, instance: Schema.String })
 
 export type SshHttp = typeof SshHttp.Type
 

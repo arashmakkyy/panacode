@@ -1,10 +1,12 @@
 import { Effect, Option, Schema } from "effect"
 import { HttpClient } from "effect/http"
+import { ManagedCli } from "../managed-cli"
 import { parseTarget, quote, runSsh, sshArgs, SshFailure } from "./command"
 import { RemoteCli } from "./remote-cli"
 
-// Use commands supported by released V2 CLIs. The registration is the service's
-// complete private discovery contract; no remote Python/Node runtime is needed.
+// The registration is the service's complete private discovery contract; no remote
+// Python/Node runtime is needed. It is read only through a CLI whose sidecar and digest
+// were verified, so an unrelated executable cannot answer for Panacode.
 const registrationScript = `status=$("$cli" service status) || exit 0
 if [ "$status" = stopped ]; then exit 0; fi
 printf 'OPENCODE_SSH_STATUS=%s\\n' "$status"
@@ -16,20 +18,24 @@ for file in "\${XDG_STATE_HOME:-$HOME/.local/state}"/panacode/service*.json; do
 done
 `
 
-export const discoverScript = `set -eu
-${RemoteCli.discoverScript({ fromPath: true, cache: { directory: ".panacode/desktop-ssh", prefix: "0.0.0-beta-" } })}
+export function discoverScript(input: { version: string; target: string }) {
+  return `set -eu
+${RemoteCli.discoverScript(input)}
 if [ -z "$cli" ]; then exit 0; fi
 ${registrationScript}`
+}
 
-export function startScript(version: string, replace = false) {
+export function startScript(input: { version: string; replace?: boolean }) {
   return `set -eu
-cli="${binaryPath(version)}"
-"$cli" service ${replace ? "restart" : "start"}
+cli="${binaryPath(input.version)}"
+"$cli" service ${input.replace ? "restart" : "start"}
 ${registrationScript}`
 }
 
 const Registration = Schema.fromJsonString(
   Schema.Struct({
+    id: Schema.NonEmptyString,
+    product: Schema.Literal("panacode"),
     url: Schema.String,
     password: Schema.String,
     version: Schema.String,
@@ -56,11 +62,15 @@ export function parseRegistration(output: string) {
   return undefined
 }
 
+function cachedCli(output: string) {
+  return output.split(/\r?\n/).includes("OPENCODE_SSH_CLI=ready")
+}
+
 export function binaryPath(version: string) {
   return `$HOME/.panacode/desktop-ssh/${RemoteCli.requireVersion(version)}/panacode`
 }
 
-function connectionAddress(address: string, password: string) {
+function connectionAddress(address: string, password: string, instance: string) {
   const url = new URL(address)
 
   if (url.protocol !== "http:" || !["127.0.0.1", "localhost", "0.0.0.0", "[::]", "[::1]"].includes(url.hostname))
@@ -70,6 +80,7 @@ function connectionAddress(address: string, password: string) {
     host: url.hostname === "[::1]" ? "[::1]" : "127.0.0.1",
     port: Number(url.port || 80),
     password,
+    instance,
   }
 }
 
@@ -87,57 +98,75 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
       stdin: script,
     })
 
-  const registered = parseRegistration(yield* run(discoverScript))
+  // Probe before discovery: the cache and every install decision belong to the
+  // remote OS and CPU, never to this Windows host.
+  const probe = yield* run(RemoteCli.probeScript).pipe(Effect.mapError(() => new SshFailure("platform")))
+
+  const reported = probe
+    .split(/\r?\n/)
+    .findLast((line) => line.startsWith("OPENCODE_REMOTE_TARGET="))
+    ?.slice("OPENCODE_REMOTE_TARGET=".length)
+
+  const target = yield* Effect.try({
+    try: () => ManagedCli.requireTarget(reported ?? ""),
+    catch: () => new SshFailure("platform"),
+  })
+
+  const discovery = yield* run(discoverScript({ version: input.version, target }))
+  const registered = parseRegistration(discovery)
+  const cached = cachedCli(discovery)
 
   if (registered && (input.development || registered.version === input.version))
     return yield* Effect.try({
-      try: () => connectionAddress(registered.url, registered.password),
+      try: () => connectionAddress(registered.url, registered.password, registered.id),
       catch: SshFailure.from,
     })
 
   if (registered && !input.replace) return yield* Effect.fail(new SshFailure("version", registered.version))
-  const destination = yield* Effect.try({ try: () => binaryPath(input.version), catch: SshFailure.from })
-  const existing = yield* run(RemoteCli.versionScript(`"${destination}"`))
-  const staged = RemoteCli.parseVersion(existing) === input.version
 
-  // Source worktree versions are unpublished. Use the installer's beta channel
-  // while retaining support for explicitly staged, matching development builds.
-  const version =
-    input.development && !staged ? yield* RemoteCli.latestBeta().pipe(Effect.mapError(SshFailure.from)) : input.version
+  if (!cached) {
+    const artifact = yield* RemoteCli.artifact(target, input.version).pipe(Effect.mapError(SshFailure.from))
 
-  const setup = { version, directory: `.panacode/desktop-ssh/${version}` }
+    const install = yield* Effect.try({
+      try: () => RemoteCli.installScript({ version: input.version, source: { type: "download", artifact } }),
+      catch: SshFailure.from,
+    })
 
-  if (!staged) {
-    const output = yield* run(RemoteCli.probeScript).pipe(Effect.mapError(() => new SshFailure("platform")))
-
-    const target = output
-      .split(/\r?\n/)
-      .findLast((line) => line.startsWith("OPENCODE_REMOTE_TARGET="))
-      ?.split("=")[1]
-
-    const url = yield* Effect.try({ try: () => RemoteCli.archiveUrl(target ?? "", version), catch: SshFailure.from })
-    yield* run(RemoteCli.installScript({ ...setup, source: { type: "download", url } })).pipe(
+    yield* run(install).pipe(
       Effect.catch(
         Effect.fnUntraced(function* (error) {
           const http = yield* HttpClient.HttpClient
-          const response = yield* http.get(url).pipe(Effect.mapError(SshFailure.from))
+
+          const response = yield* http
+            .get(artifact.url)
+            .pipe(Effect.mapError(() => new SshFailure("install", error.message)))
 
           if (response.status < 200 || response.status >= 300)
             return yield* Effect.fail(
-              new SshFailure(
-                response.status === 404 ? "unpublished" : "install",
-                JSON.stringify({ version, target, url, status: response.status }),
-              ),
+              new SshFailure("install", JSON.stringify({ url: artifact.url, status: response.status })),
             )
-          const archive = new Uint8Array(yield* response.arrayBuffer.pipe(Effect.mapError(SshFailure.from)))
+
+          const archive = new Uint8Array(
+            yield* response.arrayBuffer.pipe(Effect.mapError(() => new SshFailure("install", error.message))),
+          )
+
+          if (ManagedCli.sha512Hex(archive) !== artifact.sha512)
+            return yield* Effect.fail(new SshFailure("install", `The ${artifact.package} archive failed its digest check.`))
 
           // The upload uses stdin; the script itself must be the remote command.
+          const command = yield* Effect.try({
+            try: () =>
+              `sh -c ${quote(
+                RemoteCli.installScript({
+                  version: input.version,
+                  source: { type: "archive", artifact, sha256: ManagedCli.sha256Hex(archive) },
+                }),
+              )}`,
+            catch: SshFailure.from,
+          })
+
           return yield* runSsh({
-            args: [
-              ...sshArgs(input.target),
-              input.target.host,
-              `sh -c ${quote(RemoteCli.installScript({ ...setup, source: { type: "archive" } }))}`,
-            ],
+            args: [...sshArgs(input.target), input.target.host, command],
             env: input.env,
             stdin: archive,
           }).pipe(Effect.mapError(() => new SshFailure("install", error.message)))
@@ -146,7 +175,12 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
     )
   }
 
-  const registration = parseRegistration(yield* run(startScript(version, input.replace)))
+  const start = yield* Effect.try({
+    try: () => startScript({ version: input.version, replace: input.replace }),
+    catch: SshFailure.from,
+  })
+
+  const registration = parseRegistration(yield* run(start))
 
   if (!registration) return yield* Effect.fail(new SshFailure("service"))
 
@@ -154,7 +188,7 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
     return yield* Effect.fail(new SshFailure("version", registration.version))
 
   return yield* Effect.try({
-    try: () => connectionAddress(registration.url, registration.password),
+    try: () => connectionAddress(registration.url, registration.password, registration.id),
     catch: SshFailure.from,
   })
 })

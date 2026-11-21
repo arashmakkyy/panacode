@@ -187,7 +187,7 @@ describe("ssh dialog", () => {
   })
 
   test("a ready server completes once, and closing afterwards cancels nothing", () => {
-    const ready = snapshot({ item: server({ stage: "ready", http: { url: "u", password: "p" } }) })
+    const ready = snapshot({ item: server({ stage: "ready", http: { url: "u", password: "p", instance: "instance-1" } }) })
 
     const result = replay(createSshDialogState({ id: config.id, config }), [
       { type: "submitted", snapshot: snapshot({}) },

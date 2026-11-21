@@ -90,7 +90,7 @@ describe("ssh window attempt", () => {
     const settled = transitionSshWindow(joined.state, {
       type: "items.synced",
       ipcActive: true,
-      items: [server({ stage: "ready", http: { url: "http://127.0.0.1:1", password: "p" } })],
+      items: [server({ stage: "ready", http: { url: "http://127.0.0.1:1", password: "p", instance: "instance-1" } })],
     })
 
     expect(settled.effects).toEqual([{ type: "waiters.notify", waiters: [first, second], ready: true }])
@@ -326,13 +326,13 @@ describe("ssh cover offer", () => {
 describe("ssh resolve", () => {
   test("asks main only while it can answer with an endpoint", () => {
     const cases: [string, boolean, SshItem | undefined, boolean][] = [
-      ["main gone", false, server({ stage: "ready", http: { url: "u", password: "p" } }), false],
+      ["main gone", false, server({ stage: "ready", http: { url: "u", password: "p", instance: "instance-1" } }), false],
       ["unknown server", true, undefined, false],
       ["disconnected", true, server({ stage: "disconnected" }), false],
       ["signing in here", true, server({ stage: "authentication" }), false],
       ["incompatible", true, server({ stage: "incompatible", error: "version" }), false],
       ["failed for good", true, server({ stage: "failed", error: "connection" }), false],
-      ["ready", true, server({ stage: "ready", http: { url: "u", password: "p" } }), true],
+      ["ready", true, server({ stage: "ready", http: { url: "u", password: "p", instance: "instance-1" } }), true],
       ["connecting", true, server({ stage: "connecting" }), true],
       ["signing in elsewhere", true, server({ stage: "authentication", authenticatingElsewhere: true }), true],
       ["reconnecting", true, server({ stage: "failed", error: "connection", retrying: true }), true],

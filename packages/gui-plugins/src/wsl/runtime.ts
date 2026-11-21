@@ -1,9 +1,12 @@
 import { spawn } from "node:child_process"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
+import { Option, Schema } from "effect"
 import type { MainContext } from "@opencode/plugin/gui/main"
+import { ManagedCli } from "../managed-cli"
 import type { WslDistroProbe, WslInstalledDistro, WslOnlineDistro, WslRuntimeCheck } from "./contract"
-import { discoverScript, installScript, parseVersion, versionScript } from "./remote-cli"
+import { discoverScript, installScript, parseVersion, probeScript, versionScript } from "./remote-cli"
+import type { WslCliInstall } from "./remote-cli"
 
 export type WslCommandLine = {
   stream: "stdout" | "stderr"
@@ -32,7 +35,13 @@ export type RunWslOptions = {
 
 export type WslCliBuild = {
   version: string
-  binary?: string
+  /** A locally built Linux binary, verified and hashed by `buildLocalWslCli`. */
+  local?: {
+    binary: string
+    version: string
+    target: string
+    sha256: string
+  }
 }
 
 export type WslRuntime = ReturnType<typeof createWslRuntime>
@@ -47,11 +56,8 @@ export function wslArgs(args: string[], distro?: string | null, user?: string | 
   return [...(distro ? ["-d", distro] : []), ...(user ? ["--user", user] : []), "--exec", ...args]
 }
 
-export function wslCliInstallCommand(cli: WslCliBuild) {
-  return installScript({
-    version: cli.version,
-    binary: cli.binary ? `"$(wslpath -a ${shellEscape(cli.binary)})"` : undefined,
-  })
+export function wslCliInstallCommand(input: WslCliInstall) {
+  return installScript(input)
 }
 
 export function summarize(value: string) {
@@ -228,6 +234,37 @@ export function createWslRuntime(t: MainContext["t"]) {
     throw new Error(summarize(result.stderr || result.stdout) || fallback)
   }
 
+  const probeCliTarget = async (distro: string, opts?: RunWslOptions) => {
+    const result = await runWslSh(probeScript, distro, opts)
+
+    const target = result.stdout
+      .split(/\r?\n/g)
+      .findLast((line) => line.startsWith("OPENCODE_REMOTE_TARGET="))
+      ?.slice("OPENCODE_REMOTE_TARGET=".length)
+
+    if (!target) throw new Error(`${distro} does not report a supported Linux target for the Panacode CLI`)
+
+    return ManagedCli.requireTarget(target)
+  }
+
+  const managedSource = async (target: string, version: string, signal?: AbortSignal) => {
+    const url = ManagedCli.metadataUrl(target, version)
+    const response = await fetch(url, { signal, redirect: "error" })
+
+    if (response.status === 404) throw new Error(ManagedCli.unavailable(target, version))
+
+    if (!response.ok)
+      throw new Error(`The managed Panacode CLI metadata for ${target} returned HTTP ${response.status}`)
+
+    const metadata = Schema.decodeUnknownOption(ManagedCli.Metadata)(await response.json())
+
+    if (Option.isNone(metadata))
+      throw new Error(`The managed Panacode CLI metadata for ${target} version ${version} is invalid`)
+    const artifact = ManagedCli.artifact(target, version, metadata.value)
+
+    return { kind: "managed" as const, url: artifact.url, sha512: artifact.sha512 }
+  }
+
   return {
     runWslSh,
 
@@ -297,15 +334,23 @@ export function createWslRuntime(t: MainContext["t"]) {
     },
 
     async installCli(distro: string, cli: WslCliBuild, opts?: RunWslOptions) {
+      const target = cli.local?.target ?? (await probeCliTarget(distro, opts))
+
+      const source = cli.local
+        ? { kind: "local" as const, binary: cli.local.binary, sha256: cli.local.sha256 }
+        : await managedSource(target, cli.version, opts?.signal)
+
       const result = await runInteractiveCommand(
         system32("wsl.exe"),
-        wslArgs(["bash", "-lc", wslCliInstallCommand(cli)], distro),
+        wslArgs(["bash", "-lc", wslCliInstallCommand({ version: cli.version, target, source })], distro),
         withTimeout(opts, DEFAULT_WSL_INSTALL_TIMEOUT_MS),
         DEFAULT_WSL_INSTALL_TIMEOUT_MS,
       )
 
       requireSuccess(result, t("error.installOpencode"))
     },
+
+    probeCliTarget,
 
     async probeDistro(name: string, opts?: RunWslOptions): Promise<WslDistroProbe> {
       const executable = await runWslInDistro(["/bin/true"], name, opts).catch((error) => ({

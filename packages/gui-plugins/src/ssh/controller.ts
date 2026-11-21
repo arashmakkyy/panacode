@@ -7,11 +7,13 @@ import {
   Exit,
   Fiber,
   FileSystem,
+  Option,
   Path,
   Predicate,
   PubSub,
   Ref,
   Schedule,
+  Schema,
   Scope,
   Stream,
 } from "effect"
@@ -220,7 +222,7 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
       )
 
       const port = yield* freePort
-      const http = { url: `http://127.0.0.1:${port}`, password: remote.password }
+      const http = { url: `http://127.0.0.1:${port}`, password: remote.password, instance: remote.instance }
 
       const tunnel = yield* spawner.spawn(
         ChildProcess.make(sshExecutable(), tunnelArgs(target, port, remote), {
@@ -330,6 +332,8 @@ const waitReady = Effect.fn("Ssh.waitReady")(function* (http: SshHttp, authentic
   }).pipe(Effect.repeat({ until: (ready) => ready, schedule: Schedule.spaced(100) }))
 })
 
+const Info = Schema.Struct({ product: Schema.String, instance: Schema.String })
+
 const checkHealth = Effect.fn("Ssh.checkHealth")(function* (http: SshHttp) {
   const client = yield* HttpClient.HttpClient
 
@@ -339,7 +343,18 @@ const checkHealth = Effect.fn("Ssh.checkHealth")(function* (http: SshHttp) {
     })
     .pipe(
       Effect.timeout(2000),
-      Effect.map((response) => response.status >= 200 && response.status < 300),
+      Effect.flatMap((response) => {
+        if (response.status < 200 || response.status >= 300) return Effect.succeed(false)
+
+        return response.json.pipe(
+          Effect.map((body) => {
+            const info = Schema.decodeUnknownOption(Info)(body)
+
+            return Option.isSome(info) && info.value.product === "panacode" && info.value.instance === http.instance
+          }),
+          Effect.orElseSucceed(() => false),
+        )
+      }),
       Effect.orElseSucceed(() => false),
     )
 })
