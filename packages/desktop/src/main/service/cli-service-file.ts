@@ -27,6 +27,7 @@ export function serviceRegistration(input: ServiceRegistrationInput) {
     inherited: input.stateHome,
     isolatedRoot: input.isolatedRoot,
   })
+
   return {
     stateRoot,
     file: input.join(stateRoot, input.productSlug ?? "panacode", registrationName(input)),
@@ -40,6 +41,7 @@ export function cliServiceRegistrationFile(input: ServiceRegistrationInput) {
 function registrationName(input: Pick<ServiceRegistrationInput, "cliVersion" | "local">) {
   if (input.local) return "service-local.json"
   const channel = previewChannel(input.cliVersion)
+
   if (
     !channel ||
     channel === "latest" ||
@@ -50,6 +52,7 @@ function registrationName(input: Pick<ServiceRegistrationInput, "cliVersion" | "
   ) {
     return "service.json"
   }
+
   return `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
 }
 
@@ -57,5 +60,6 @@ function previewChannel(version: string) {
   // Script.version for preview builds: 0.0.0-<channel>-<YYYYMMDDHHmm> locally, 0.0.0-<channel>-<run>[.<attempt>] on
   // GitHub Actions (for example 0.0.0-prod-3 from the panacode-windows workflow).
   const match = /^0\.0\.0-(.+)-(\d+(?:\.\d+)?)$/.exec(version)
+
   return match?.[1]
 }

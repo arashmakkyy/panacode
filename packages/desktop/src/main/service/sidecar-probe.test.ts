@@ -54,8 +54,10 @@ test("discards a probe when the registration is no longer owned", async () => {
   const started = startSidecarProbe({ key })
   await started
 
-  const foreign = { ...service.registration() } as Record<string, unknown>
-  delete foreign.product
+  const foreign = Object.fromEntries(
+    Object.entries(service.registration()).filter(([key]) => key !== "product"),
+  )
+
   await writeFile(service.file, JSON.stringify(foreign))
 
   expect(await takeSidecarProbe(key)).toEqual({ status: "discarded", reason: "identity-changed" })
@@ -76,17 +78,21 @@ async function probeFixture() {
   const password = randomUUID()
   const id = randomUUID()
   let requests = 0
+
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     fetch(request) {
       requests++
+
       if (new URL(request.url).pathname !== "/api/info") return new Response("not found", { status: 404 })
 
       return Response.json({ version, instance: id, pid: process.pid, product: "panacode" })
     },
   })
+
   const url = `http://127.0.0.1:${server.port}`
+
   const registration = () => ({
     id,
     product: "panacode" as const,
@@ -95,6 +101,7 @@ async function probeFixture() {
     pid: process.pid,
     password,
   })
+
   await writeFile(file, JSON.stringify(registration()))
 
   return {

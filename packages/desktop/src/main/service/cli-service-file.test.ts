@@ -1,9 +1,13 @@
 import { expect, test } from "bun:test"
 import os from "node:os"
 import path from "node:path"
+import { Schema } from "effect"
 import { cliServiceRegistrationFile } from "./cli-service-file"
 
+const CliOutput = Schema.fromJsonString(Schema.Struct({ filename: Schema.String, state: Schema.String }))
+
 const home = path.join(os.tmpdir(), "panacode-registration", "home")
+
 const stateHome = path.join(os.tmpdir(), "panacode-registration", "state dir-é")
 
 test.each([
@@ -83,8 +87,9 @@ test.each([
   { name: "relative XDG_STATE_HOME", xdg: "relative/state" },
   { name: "no XDG_STATE_HOME", xdg: undefined },
 ] as const)("registration file matches the CLI for $name", ({ xdg }) => {
-  const env: Record<string, string> = { ...process.env, HOME: home, USERPROFILE: home }
+  const env = { ...process.env, HOME: home, USERPROFILE: home }
   delete env.XDG_STATE_HOME
+
   if (xdg !== undefined) env.XDG_STATE_HOME = xdg
 
   const result = Bun.spawnSync({
@@ -102,7 +107,7 @@ test.each([
   })
 
   expect(result.exitCode, result.stderr.toString()).toBe(0)
-  const output = JSON.parse(result.stdout.toString()) as { filename: string; state: string }
+  const output = Schema.decodeUnknownSync(CliOutput)(result.stdout.toString())
   expect(
     cliServiceRegistrationFile({
       join: path.join,

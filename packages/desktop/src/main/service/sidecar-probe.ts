@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs"
+import { Option, Schema } from "effect"
 import type { Endpoint } from "@opencode/client/service"
 
 /** Everything that must match before a speculative probe may be adopted. */
@@ -44,7 +45,9 @@ export function startSidecarProbe(input: { readonly key: SidecarProbeKey }) {
     },
     () => ({}),
   )
+
   probe = { key: input.key, result }
+
   return result.then(() => undefined)
 }
 
@@ -56,12 +59,17 @@ export function startSidecarProbe(input: { readonly key: SidecarProbeKey }) {
 export async function takeSidecarProbe(key: SidecarProbeKey): Promise<SidecarProbeTake> {
   const current = probe
   probe = undefined
+
   if (!current) return { status: "miss" }
+
   if (!sameKey(current.key, key)) return { status: "discarded", reason: "key-mismatch" }
 
   const result = await current.result
+
   if (result.endpoint === undefined) return { status: "miss" }
+
   if (result.identity === undefined) return { status: "discarded", reason: "identity-unavailable" }
+
   if (registrationIdentity(key.file) !== result.identity)
     return { status: "discarded", reason: "identity-changed" }
 
@@ -86,17 +94,23 @@ function sameKey(left: SidecarProbeKey, right: SidecarProbeKey) {
 // The endpoint alone is not proof of identity: another process may have replaced the registration
 // with the same file and version while the probe was in flight. Reading the same fields the client
 // already validated is enough to detect that race without duplicating its ownership rules.
+const Registration = Schema.fromJsonString(
+  Schema.Struct({
+    product: Schema.Literal("panacode"),
+    id: Schema.NonEmptyString,
+    url: Schema.String,
+    pid: Schema.Int,
+    version: Schema.optional(Schema.String),
+  }),
+)
+
 function registrationIdentity(file: string) {
   try {
-    const value: unknown = JSON.parse(readFileSync(file, "utf8"))
-    if (typeof value !== "object" || value === null) return undefined
-    if (!("product" in value) || value.product !== "panacode") return undefined
-    if (!("id" in value) || typeof value.id !== "string" || value.id.length === 0) return undefined
-    if (!("pid" in value) || typeof value.pid !== "number" || !Number.isInteger(value.pid)) return undefined
-    if (!("url" in value) || typeof value.url !== "string") return undefined
-    if ("version" in value && value.version !== undefined && typeof value.version !== "string") return undefined
-    const version = "version" in value && typeof value.version === "string" ? value.version : ""
-    return [value.id, String(value.pid), value.url, version].join("\0")
+    const registration = Option.getOrUndefined(Schema.decodeUnknownOption(Registration)(readFileSync(file, "utf8")))
+
+    if (registration === undefined) return undefined
+
+    return [registration.id, String(registration.pid), registration.url, registration.version ?? ""].join("\0")
   } catch {
     return undefined
   }

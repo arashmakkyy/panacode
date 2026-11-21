@@ -4,10 +4,15 @@ import path from "node:path"
 import { resolveStateRoot } from "./state-root"
 
 const home = path.join(os.tmpdir(), "panacode-state-root", "home")
+
 const defaultRoot = path.join(home, ".local", "state")
+
 const inherited = path.join(os.tmpdir(), "panacode-state-root", "inherited")
+
 const shell = path.join(os.tmpdir(), "panacode-state-root", "shell")
+
 const isolated = path.join(os.tmpdir(), "panacode-state-root", "isolated")
+
 const spaced = path.join(os.tmpdir(), "panacode-state-root", "state dir-é")
 
 test.each([

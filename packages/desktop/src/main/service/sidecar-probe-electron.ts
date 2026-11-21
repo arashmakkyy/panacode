@@ -12,6 +12,7 @@ export function startPackagedSidecarProbe() {
 
   if (version === "") return
   const local = process.env.PANACODE_DESKTOP_SERVER_CHANNEL === "local"
+
   const registration = serviceRegistration({
     join: path.join,
     home: app.getPath("home"),
@@ -19,6 +20,7 @@ export function startPackagedSidecarProbe() {
     stateHome: process.env.XDG_STATE_HOME,
     local,
   })
+
   startSidecarProbe({
     key: { stateRoot: registration.stateRoot, file: registration.file, version, local },
   })
@@ -28,8 +30,10 @@ function bundledVersion() {
   for (const name of ["panacode-cli.version"]) {
     try {
       const value = readFileSync(path.join(process.resourcesPath, name), "utf8").trim()
+
       if (value) return value
     } catch {}
   }
+
   return ""
 }

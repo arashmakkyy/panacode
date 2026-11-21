@@ -54,8 +54,10 @@ const probe = Effect.fn("BackgroundService.probe")(function* () {
 
   if (result.status === "discarded") {
     yield* Effect.logWarning("discarding speculative v2 CLI service probe", { reason: result.reason })
+
     return undefined
   }
+
   if (result.status === "miss") return undefined
 
   return (yield* adopt(setup, result.endpoint, true)).credentials
@@ -94,6 +96,7 @@ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: Background
       onDiagnostic: (diagnostic: EnsureDiagnostic) =>
         runFork(Effect.logInfo("v2 CLI background service boot", diagnostic)),
     }
+
     return setup.client.Service.ensure(
       windowsPackaged
         ? withEnsureTiming(options, {
@@ -135,11 +138,13 @@ const prepare = Effect.fn("BackgroundService.prepare")(function* (mode: Backgrou
   const desktopCli = yield* DesktopCli.Service
   const isolated = !app.isPackaged && process.env.PANACODE_DESKTOP_ISOLATED_SERVER === "1"
   const home = app.getPath("home")
+
   const stateRoot = resolveStateRoot({
     home,
     inherited: process.env.XDG_STATE_HOME,
     isolatedRoot: isolated ? app.getPath("userData") : undefined,
   })
+
   // The CLI and every process this desktop spawns must resolve the same state directory. Writing
   // the effective value also replaces a relative inherited value, which neither side may honor.
   process.env.XDG_STATE_HOME = stateRoot
@@ -147,6 +152,7 @@ const prepare = Effect.fn("BackgroundService.prepare")(function* (mode: Backgrou
   const cli = yield* desktopCli.resolve
   const local = process.env.PANACODE_DESKTOP_SERVER_CHANNEL === "local"
   const version = serviceVersion({ channel: CHANNEL, isolated, mode, version: cli.version })
+
   const registration = serviceRegistration({
     join: path.join,
     home,
@@ -154,6 +160,7 @@ const prepare = Effect.fn("BackgroundService.prepare")(function* (mode: Backgrou
     stateHome: stateRoot,
     local,
   })
+
   const client = yield* Effect.promise(() => import("@opencode/client/service"))
 
   yield* Effect.logInfo("v2 CLI service registration", {

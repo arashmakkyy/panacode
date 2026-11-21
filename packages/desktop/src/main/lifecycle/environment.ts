@@ -55,6 +55,7 @@ export const preferApplicationEnvironment = Effect.gen(function* () {
       inherited: process.env.XDG_STATE_HOME,
       shell: shellEnv?.XDG_STATE_HOME,
     })
+
     Object.assign(process.env, {
       ...shellEnv,
       PANACODE_EXPERIMENTAL_ICON_DISCOVERY: "true",

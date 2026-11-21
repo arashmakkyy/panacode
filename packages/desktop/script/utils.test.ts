@@ -137,7 +137,7 @@ test("a missing build names the checkout command and never falls back upstream",
   const root = await tempDir()
 
   try {
-    const error = await inspectBuiltCli(root, "windows-x64").catch((error: unknown) => error)
+    const error = await inspectBuiltCli(root, "windows-x64").catch((error: Error) => error)
 
     expect(String(error)).toContain("No Panacode CLI build for windows-x64")
     expect(String(error)).toContain("OPENCODE_TARGET=windows-x64-baseline bun run --cwd packages/cli build --single")
@@ -166,7 +166,7 @@ test("a foreign manifest, wrong target, or wrong architecture is rejected before
 
     try {
       await writeDist(root, "windows-x64", input.manifest)
-      const error = await inspectBuiltCli(root, "windows-x64").catch((error: unknown) => error)
+      const error = await inspectBuiltCli(root, "windows-x64").catch((error: Error) => error)
       expect(String(error), input.name).toMatch(input.message)
     } finally {
       await rm(root, { recursive: true, force: true })
@@ -180,7 +180,7 @@ test("a missing executable is rejected", async () => {
   try {
     const directory = await writeDist(root, "windows-x64")
     await rm(path.join(directory, "bin", "panacode.exe"))
-    const error = await inspectBuiltCli(root, "windows-x64").catch((error: unknown) => error)
+    const error = await inspectBuiltCli(root, "windows-x64").catch((error: Error) => error)
     expect(String(error)).toContain("missing the panacode.exe executable")
   } finally {
     await rm(root, { recursive: true, force: true })
@@ -195,7 +195,7 @@ test("a requested version must match the dist manifest before anything is staged
     const dest = path.join(root, "resources", "panacode-cli.exe")
 
     await withTarget("windows-x64", async () => {
-      const error = await copyBuiltCliToResources(root, dest, { version: "3.0.0" }).catch((error: unknown) => error)
+      const error = await copyBuiltCliToResources(root, dest, { version: "3.0.0" }).catch((error: Error) => error)
 
       expect(String(error)).toContain("is version 2.0.0, not the requested 3.0.0")
       expect(String(error)).toContain("OPENCODE_VERSION=3.0.0")
@@ -269,7 +269,7 @@ test("staging records the source and exact staged bytes for the packaged app", a
         versionFile: versionFile(unpacked),
         provenanceFile: provenanceFile(dest),
         target: cli,
-      }).catch((error: unknown) => error)
+      }).catch((error: Error) => error)
 
       expect(String(error)).toContain("is not the binary recorded at build time")
 
@@ -278,7 +278,7 @@ test("staging records the source and exact staged bytes for the packaged app", a
         versionFile: versionFile(unpacked),
         provenanceFile: provenanceFile(dest),
         target: getCurrentCli("linux-arm64"),
-      }).catch((error: unknown) => error)
+      }).catch((error: Error) => error)
 
       expect(String(wrongTarget)).toContain("provenance is for")
     })
