@@ -263,6 +263,30 @@ test("replaces a crashed service whose registration names a dead process", async
   expect(starts).toEqual(["missing"])
 })
 
+test("waits for its own contender that answers before it registers", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  const crashed = fixture.spawn("graceful")
+  await fixture.waitForFile()
+  const stale = await Bun.file(registration).json()
+  crashed.kill("SIGKILL")
+  await crashed.exited
+
+  const pending = ensure({
+    file: registration,
+    version: "test",
+    command: fixture.command("unregistered", String(new URL(stale.url).port)),
+  })
+  await fixture.waitForFile(registration + ".unregistered-request")
+  await Bun.write(registration + ".register-release", "")
+  const endpoint = await pending
+  const replacement = await Bun.file(registration).json()
+  fixture.track(replacement.pid)
+
+  expect(replacement.pid).not.toBe(stale.pid)
+  expect(endpoint.url).toBe(replacement.url)
+})
+
 test("stops the registered service even when terminal handoff fails", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration

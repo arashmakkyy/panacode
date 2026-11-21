@@ -22,6 +22,8 @@ export type LocalService = {
   readonly compatible: boolean
   /** A definite reason this endpoint must not be reused or controlled. */
   readonly error?: string
+  /** PID the endpoint reported, when it answered but its registration could not be trusted. */
+  readonly answeredPid?: number
 }
 
 const protocolError =
@@ -185,7 +187,10 @@ export async function occupied(url: string, timeout = defaultEnsureTiming.reques
 }
 
 /** Ask a registered owner for its health and classify the answer. */
-export async function probeResult(info: Info, timeout = defaultEnsureTiming.requestTimeout) {
+export async function probeResult(
+  info: Info,
+  timeout = defaultEnsureTiming.requestTimeout,
+): Promise<{ readonly service: LocalService | undefined; readonly timedOut: boolean }> {
   if (info.product !== "panacode" || info.id === undefined || info.password === undefined)
     return { service: undefined, timedOut: false }
   const origin = localEndpoint(info)
@@ -228,7 +233,12 @@ export async function probeResult(info: Info, timeout = defaultEnsureTiming.requ
   if (serverInfo === undefined)
     return denied(info, origin, "The registered endpoint returned an invalid health response; refusing to reuse it.")
   if (serverInfo.pid !== info.pid)
-    return denied(info, origin, "The registered endpoint is owned by another process; refusing to reuse or control it.")
+    return denied(
+      info,
+      origin,
+      "The registered endpoint is owned by another process; refusing to reuse or control it.",
+      serverInfo.pid,
+    )
   if (serverInfo.instance !== info.id)
     return denied(info, origin, "The registered endpoint reports a different service instance; refusing to reuse it.")
   if (serverInfo.product !== undefined && serverInfo.product !== "panacode")
@@ -249,7 +259,7 @@ export async function probeResult(info: Info, timeout = defaultEnsureTiming.requ
   }
 }
 
-function denied(info: Info, origin: string, message: string) {
+function denied(info: Info, origin: string, message: string, answeredPid?: number) {
   return {
     service: {
       info,
@@ -258,6 +268,7 @@ function denied(info: Info, origin: string, message: string) {
       state: "failed",
       compatible: true,
       error: message,
+      ...(answeredPid === undefined ? {} : { answeredPid }),
     } satisfies LocalService,
     timedOut: false,
   }

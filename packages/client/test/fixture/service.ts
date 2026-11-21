@@ -38,6 +38,7 @@ if (mode === "controlled") {
   }
 }
 
+if (mode === "unregistered") await appendFile(registration + ".starts", process.pid + "\n")
 if (mode === "delayed" || mode === "delayed-failed" || mode === "coordinated" || mode === "coordinated-failed-loser") {
   await appendFile(registration + ".starts", process.pid + "\n")
   const owner = await writeFile(registration + ".owner", String(process.pid), { flag: "wx" })
@@ -103,7 +104,7 @@ const handoff = {
   expiresAt: Date.now() + 30_000,
 }
 const server = Bun.serve({
-  port: 0,
+  port: mode === "unregistered" ? Number(delay) : 0,
   async fetch(request): Promise<Response> {
     const pathname = new URL(request.url).pathname
     if (mode === "protocol" && pathname === "/api/experimental/persistent-pty/handoff") {
@@ -126,6 +127,7 @@ const server = Bun.serve({
       return new Response(null, { status: 404 })
     requests += 1
     if (mode === "starting") await writeFile(registration + ".status-request", "")
+    if (mode === "unregistered") await writeFile(registration + ".unregistered-request", "")
     if (mode === "hanging" || controlled === "hang") {
       await appendFile(registration + ".requests", process.pid + "\n")
       return new Promise<Response>(() => {})
@@ -165,6 +167,10 @@ const server = Bun.serve({
 if (controlled !== "hang") {
   process.on("SIGTERM", () => void shutdown("SIGTERM"))
   process.on("SIGINT", () => void shutdown("SIGINT"))
+}
+
+if (mode === "unregistered") {
+  while (!(await Bun.file(registration + ".register-release").exists())) await Bun.sleep(5)
 }
 
 await writeFile(

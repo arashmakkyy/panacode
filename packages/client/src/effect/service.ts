@@ -143,7 +143,13 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
         yield* report({ stage: "health", pid: service.info.pid, state: service.state })
       }
       const decision = decide(service, options)
-      if (decision._tag === "fail") return yield* Effect.fail(decision.error)
+      if (decision._tag === "fail") {
+        // A contender this call spawned can answer before it publishes its own registration. That
+        // endpoint is ours, not a foreign owner, so keep polling instead of failing on the stale
+        // record. Adoption still waits for a matching registration.
+        if (service.answeredPid !== undefined && pool.has(service.answeredPid)) return Option.none()
+        return yield* Effect.fail(decision.error)
+      }
       if (decision._tag === "reuse") {
         yield* Effect.tryPromise(() => PtyHandoff.complete(options.file ?? fallback(), service.info))
         yield* report({ stage: "ready", pid: service.info.pid })

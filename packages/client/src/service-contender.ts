@@ -111,6 +111,11 @@ export function contenderPool(timing: EnsureTiming) {
       contenders.add(contender)
       lastSpawn = Date.now()
     },
+    /** Whether this ensure call spawned the process that answered. */
+    has(pid: number) {
+      for (const item of contenders) if (item.child.pid === pid) return true
+      return false
+    },
     /**
      * Startup timeout. Keeps the stderr of any attempt still running, so a server that started but
      * registered somewhere else (or hung before listening) is diagnosable. The registration path
