@@ -1,8 +1,8 @@
 export * as ServiceControl from "./service-control"
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
-import { chmod, mkdir, rmdir, unlink } from "node:fs/promises"
-import { createServer, type Server, type Socket } from "node:net"
+import { chmod, mkdir, readdir, rmdir, unlink } from "node:fs/promises"
+import { connect, createServer, type Server, type Socket } from "node:net"
 import path from "node:path"
 import { Effect } from "effect"
 
@@ -33,6 +33,9 @@ export const start = (options: {
         await mkdir(directory, { recursive: true, mode: 0o700 })
         await chmod(directory, 0o700)
         await unlink(socketPath).catch(() => undefined)
+        // An instance that died without closing leaves its endpoint behind. A live sibling
+        // accepts the probe, so only dead endpoints are removed.
+        await sweep(directory)
       }
       const token = randomBytes(32).toString("base64url")
       const sockets = new Set<Socket>()
@@ -122,6 +125,36 @@ function isPipe(value: string) {
 
 function missing(error: unknown) {
   return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT"
+}
+
+async function sweep(directory: string) {
+  const entries = await readdir(directory).catch(() => [])
+  await Promise.all(
+    entries
+      .filter((name) => name.endsWith(".sock"))
+      .map(async (name) => {
+        const file = path.join(directory, name)
+        if (await listening(file)) return
+        await unlink(file).catch(() => undefined)
+      }),
+  )
+}
+
+function listening(file: string) {
+  return new Promise<boolean>((resolve) => {
+    const socket = connect(file)
+    let settled = false
+    const finish = (value: boolean) => {
+      if (settled) return
+      settled = true
+      socket.destroy()
+      resolve(value)
+    }
+    socket.once("connect", () => finish(true))
+    socket.once("error", () => finish(false))
+    // A live owner that is too busy to accept still owns its endpoint.
+    socket.setTimeout(1_000, () => finish(true))
+  })
 }
 
 function listen(server: Server, socketPath: string) {
