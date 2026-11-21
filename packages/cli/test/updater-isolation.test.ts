@@ -27,7 +27,9 @@ function fixture(
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
-    const root = yield* fs.makeTempDirectoryScoped({ prefix: "panacode-updater-" })
+    // Canonicalize the temp path: Windows runners hand out 8.3 names such as RUNNER~1, and the
+    // updater compares the canonical curl path against the canonical executable.
+    const root = yield* fs.realPath(yield* fs.makeTempDirectoryScoped({ prefix: "panacode-updater-" }))
     const home = path.join(root, "home")
     const executable = path.resolve(root, input.executable ?? packagePath("panacode", "panacode"))
     const resolved = input.resolved ? path.resolve(root, input.resolved) : executable
