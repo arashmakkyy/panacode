@@ -231,19 +231,25 @@ async function content(root: string, name: string) {
 }
 
 // A NSIS uninstaller relaunches itself from a temporary copy, so the process that Bun started can
-// exit before the removal finishes. Wait until the directory listing stops changing.
-async function settle(read: () => Promise<string[]>) {
-  let previous = await read()
+// exit before the removal finishes. Wait for the expected tree and then for it to stay unchanged:
+// a fixed stability window alone can observe the untouched tree before the copy even starts.
+async function settle(read: () => Promise<string[]>, expected: readonly string[]) {
+  const wanted = expected.join("\n")
+  const deadline = Date.now() + 15_000
 
-  for (let attempt = 0; attempt < 50; attempt++) {
+  while (Date.now() < deadline) {
+    const current = await read()
+    if (current.join("\n") === wanted) {
+      // The relaunched copy may start after the parent exits; give it time to begin and finish
+      // before trusting an unchanged tree.
+      await Bun.sleep(2_000)
+      const next = await read()
+      if (next.join("\n") === wanted) return next
+    }
     await Bun.sleep(100)
-    const next = await read()
-
-    if (next.join("\n") === previous.join("\n")) return next
-    previous = next
   }
 
-  return previous
+  return read()
 }
 
 // The include's result contract: each test body ends with this trailer when it needs to report $INSTDIR.
@@ -897,19 +903,20 @@ SectionEnd`,
         const created = path.join(install, uninstaller)
         expect((await stat(created).catch(() => undefined))?.isFile(), item.name).toBe(true)
         expect((await installer.run([created, "/S"])).code, item.name).toBe(0)
-        const left = await settle(() => names(install))
+        const left = await settle(() => names(install), item.left.toSorted())
 
         if (item.remove) {
           expect(left, item.name).toEqual(item.left.toSorted())
-          expect(await settle(() => names(path.join(`${install}.update-${stageSuffix}`))), item.name).toEqual([])
+          expect(await settle(() => names(path.join(`${install}.update-${stageSuffix}`)), []), item.name).toEqual([])
           expect(await names(path.join(`${install}.update-FEDCBA9876543210`)), item.name).toEqual(
             [INSTALL_MANIFEST, executable].toSorted(),
           )
         } else {
           expect(left, item.name).toEqual(item.left.toSorted())
-          expect(await names(path.join(`${install}.update-${stageSuffix}`)), item.name).toEqual(
-            item.stageLeft.toSorted(),
-          )
+          expect(
+            await settle(() => names(path.join(`${install}.update-${stageSuffix}`)), item.stageLeft.toSorted()),
+            item.name,
+          ).toEqual(item.stageLeft.toSorted())
         }
       }
 
