@@ -241,7 +241,14 @@ async function shellFixture(label: string): Promise<ShellFixture> {
   await writeFile(foreign, "#!/bin/sh\nexit 0\n")
   await chmod(foreign, 0o755)
   const wslpath = path.join(bin, "wslpath")
-  await writeFile(wslpath, '#!/bin/sh\n[ "$1" = "-a" ] && shift\ncygpath -u "$1"\n')
+  // The fixture runs under Git Bash on Windows and a POSIX shell elsewhere. `wslpath -a` only
+  // converts Windows paths; a POSIX path is already in the form the installer needs.
+  await writeFile(
+    wslpath,
+    process.platform === "win32"
+      ? '#!/bin/sh\n[ "$1" = "-a" ] && shift\ncygpath -u "$1"\n'
+      : '#!/bin/sh\n[ "$1" = "-a" ] && shift\nprintf \'%s\\n\' "$1"\n',
+  )
   await chmod(wslpath, 0o755)
   await writeFile(path.join(home, ".bashrc"), "# user\n")
   await writeFile(path.join(home, ".profile"), "# user profile\n")
