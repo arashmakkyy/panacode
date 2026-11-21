@@ -69,10 +69,12 @@ async function archiveFixture(root: string) {
   await mkdir(path.dirname(binary), { recursive: true })
   const bytes = new TextEncoder().encode("#!/bin/sh\nexit 0\n")
   await writeFile(binary, bytes)
-  const archive = path.join(root, "cli.tgz")
+  const archive = path.join(workspace, "cli.tgz")
 
   const built = Bun.spawnSync({
-    cmd: [tar!, "-czf", archive, "-C", workspace, "package/bin/panacode"],
+    // Keep every operand relative: GNU tar reads `C:\...` as a remote host:path.
+    cmd: [tar!, "-czf", "cli.tgz", "package/bin/panacode"],
+    cwd: workspace,
     stdout: "pipe",
     stderr: "pipe",
   })
