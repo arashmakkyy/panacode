@@ -1,4 +1,5 @@
-// Side-effect import: prefer PANACODE_* over OPENCODE_* before other CLI modules read env.
-import { syncProductEnv } from "@opencode/util/product-env"
+// Side-effect import: strip inherited upstream OpenCode runtime overrides before any other CLI
+// module reads the environment. Panacode reads PANACODE_* only.
+import { sanitizeProductEnv } from "@opencode/util/product-env"
 
-syncProductEnv()
+sanitizeProductEnv()
