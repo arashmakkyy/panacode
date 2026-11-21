@@ -143,7 +143,7 @@ jobs:
         run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 10 -- ./electron.vite.config.test.ts ./script/utils.test.ts
 
       - name: Desktop identity and service contracts
-        run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 75 -- ./src/main/lifecycle/configure.test.ts ./src/main/service/desktop-cli-state.test.ts ./src/main/service/cli-stages.test.ts ./src/main/service/cli-service-file.test.ts ./src/main/service/sidecar-probe.test.ts ./src/main/service/cli-version.test.ts ./src/main/service/background-service-machine.test.ts ./src/main/service/state-root.test.ts ./src/main/native/logging-machine.test.ts
+        run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 75 --max-skip 2 -- ./src/main/lifecycle/configure.test.ts ./src/main/service/desktop-cli-state.test.ts ./src/main/service/cli-stages.test.ts ./src/main/service/cli-service-file.test.ts ./src/main/service/sidecar-probe.test.ts ./src/main/service/cli-version.test.ts ./src/main/service/background-service-machine.test.ts ./src/main/service/state-root.test.ts ./src/main/native/logging-machine.test.ts
 
       - name: Support archive private-data exclusion
         run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 18 -- ./src/main/native/support-archive.test.ts ./src/main/lifecycle/deep-link.test.ts
