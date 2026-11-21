@@ -5,6 +5,7 @@
 ## فهرست تصمیم‌های جاری
 | شناسه | موضوع / محدودهٔ اثر فعلی |
 |---|---|
+| D-019 | جداسازی کامل زمان اجرا از OpenCode: فقط `PANACODE_*`، sidecarهای `panacode-cli`، سرویس/پورت مستقل، پیکربندی محلی قدیمی فقط‌خواندنی، آرشیو پشتیبانی `panacode-debug-*`، deep link فقط `panacode://` و به‌روزرسانی دستی |
 | D-018 | کانال `prod` (بیلد workflow ویندوز) کانال ریلیز است: ثبت سرویس در `service.json` و پورت 28844 |
 | D-017 | updater و What's New دسکتاپ OpenCode در Panacode خاموش است (`PANACODE_UPSTREAM_UPDATES`) |
 | D-016 | پورت سرویس Panacode جدا از OpenCode: 28844 روی Windows، 49324 در macOS/Linux |
@@ -23,6 +24,20 @@
 | D-003 | بدون دادهٔ دمو؛ نام ارائه‌دهندهٔ عمدهٔ پشت PanaAI هرگز نمایش داده نمی‌شود |
 | D-002 | فقط PanaAI به‌عنوان provider؛ مدل‌ها از `/v1/models`؛ فعلاً `stream:false` |
 | D-001 | Panacode = fork سبک و همگام‌پذیر با upstream OpenCode |
+
+## D-019 — جداسازی کنار‌به‌کنار از OpenCode
+- تاریخ و وضعیت: 2026-11-20 | اجراشده در شاخه `panacode-isolation` با پایه `82d54281e79f33fb08e3d7db7adb166436857c43`
+- انگیزه: نصب و اجرای Panacode نباید به متغیر محیطی، فایل، سرویس، پورت، sidecar، آرشیو پشتیبانی یا کانال به‌روزرسانی OpenCode وابسته باشد.
+- تصمیم:
+  - `productEnv` فقط `PANACODE_*` را می‌خواند و هیچ fallback یا کپی `PANACODE_*` → `OPENCODE_*` وجود ندارد. `sanitizeProductEnv()` در شروع CLI و Desktop تمام `OPENCODE_*`های زمان اجرا را حذف می‌کند؛ حتی وقتی هر دو تنظیم شده باشند، مقدار Panacode ملاک است.
+  - sidecarها `panacode-cli` / `panacode-cli.exe` و `panacode-cli.version` هستند؛ در dev از `panacode-cli-dev` و `panacode-cli-wsl` استفاده می‌شود. Desktop دیگر `opencode-cli` را probe نمی‌کند.
+  - ثبت سرویس با `product: "panacode"` نوشته می‌شود؛ کلاینت محصول ناهمخوان را رد می‌کند. پورت پیش‌فرض Windows `28844` و macOS/Linux `49324` است و مقدار ذخیره‌شده `panacode service set port` بر `--port 0x70ac` اولویت دارد.
+  - `opencode.json`، `opencode.jsonc` و `.opencode/` فقط‌خواندنی‌اند. تنها `tool_output.max_lines` و `tool_output.max_bytes` به‌صورت `legacy: true` زیر مقادیر Panacode وارد می‌شوند؛ هیچ plugin قدیمی فعال نمی‌شود و هیچ فایلی نوشته نمی‌شود.
+  - آرشیو پشتیبانی `panacode-debug-*.zip` است، فقط ریشه‌های log پن‌کد را جمع می‌کند و markerهای OpenCode و فایل‌های حساس مانند `.env`، `auth.json`، فایل‌های config و `service*.json` را کنار می‌گذارد.
+  - فقط `panacode://` dispatch می‌شود؛ `opencode://` پیش از routing نادیده گرفته می‌شود و `oc://renderer` داخلی می‌ماند.
+  - updater دسکتاپ خاموش است (`PANACODE_UPSTREAM_UPDATES = false`) و CLI هیچ feed یا installer متعلق به OpenCode را صدا نمی‌زند. `check` به `https://github.com/arashmakkyy/panacode/releases` اشاره می‌کند و `apply`/`latest`/`upgrade`/`managed` با خطای «Panacode updates are manual» متوقف می‌شوند.
+- اجرا: `.github/workflows/panacode-isolation.yml` برای PR به `panacode/redesign-v2` و dispatch دستی؛ بدون انتشار یا publish. گارد `script/panacode-isolation-check.ts` هر خواندن محیطی `OPENCODE_*` در کد محصول را رد می‌کند.
+- مرجع: `PANACODE.md`، `panacode-docs/UPSTREAM-MERGE.md` (بخش M) و `panacode-docs/status.md`.
 
 ## D-018 — کانال prod کانال ریلیز است
 - تاریخ و وضعیت: 2026-11-18 | معتبر

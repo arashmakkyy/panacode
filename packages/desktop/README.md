@@ -1,6 +1,11 @@
-# OpenCode Desktop
+# Panacode Desktop
 
-The OpenCode Desktop app, built with Electron.
+The Panacode Desktop app, built with Electron on the OpenCode upstream. This fork ships its own sidecars, service
+registration, deep-link handler and install directories, so an installed OpenCode stays independent.
+
+Build variables (`OPENCODE_CHANNEL`, `OPENCODE_VERSION`, `OPENCODE_TARGET`) keep their upstream names because they are
+compile-time inputs shared with the CLI build. Runtime code reads `PANACODE_*` only and strips inherited `OPENCODE_*`
+variables at startup; see `PANACODE.md`.
 
 ## Development
 
@@ -34,19 +39,22 @@ downloads the published dev CLI, `beta` downloads the beta CLI, and `prod`/`late
 `bun dev` is separate from packaging: it uses local renderer/server mode, the dev app identity, and the CLI source by
 default. `bun dev --download-server <version>` instead downloads that CLI version for local development.
 
-## Beta channel
+## Release and updates
 
-Every push to the `beta` branch publishes OpenCode Beta (`ai.opencode.desktop.beta`) as version `0.0.0-beta-<run>` to
-the `beta` update channel. Beta publishes only the desktop app; the CLI and SDK packages ship
-from `dev`. Install it from `https://opencode.ai/update/api/beta/desktop/opencode/<asset>`, for example
-`opencode-desktop-mac-arm64.dmg` or `opencode-desktop-win-x64.exe`. Installed builds update in place on every platform.
+The Windows installer is built by `.github/workflows/panacode-windows.yml` and published as the GitHub release
+`panacode-desktop-win-x64-<tag>`. Panacode has no beta update channel and no automatic updater: `electron-builder.config.ts`
+carries no upstream `publish` feed, the desktop updater is off behind `PANACODE_UPSTREAM_UPDATES`, and installed builds
+stay on the version that was installed. To update, install a newer build over the old one and restart.
+
+The bundled CLI is named `panacode-cli` (`panacode-cli.exe` on Windows) with a `panacode-cli.version` marker; the
+development sidecar is `panacode-cli-dev`. A packaged build registers `panacode://` and ignores `opencode://`.
 
 ## Startup benchmark
 
 `perf/startup.bench.ts` times a launch with [strobe](https://github.com/anomalyco/strobe), from process spawn to what a
 person waits for, in pairs of launches of two builds with an interval per case. Every launch runs in a private home
-(its own `%APPDATA%`, XDG folders, database, config and service registration, the developer's `OPENCODE_*`, `OTEL_*`
-and `SENTRY_*` environment removed), so it never touches the developer's app, profile or live service.
+(its own `%APPDATA%`, XDG folders, database, config and service registration, the developer's `PANACODE_*` and inherited
+`OPENCODE_*`, `OTEL_*` and `SENTRY_*` environment removed), so it never touches the developer's app, profile or live service.
 
 | Case                            | Launch                                                                              | Ends on      |
 | ------------------------------- | ----------------------------------------------------------------------------------- | ------------ |
@@ -82,6 +90,6 @@ returning-user cases keep the GPU shader caches their build compiled in earlier 
 them; `first launch` starts each launch without them. `--why always` adds a profiled
 launch per build: the main process and the renderer, both from their first statement.
 
-A packaged beta or prod build registers itself as the `opencode://` handler when it starts, even from the bench; the
+A packaged beta or prod build registers itself as the `panacode://` handler when it starts, even from the bench; the
 installed app takes the registration back on its next launch. Those channels run with `HTTPS_PROXY` pointed at a
 closed port (`--offline` forces it for dev) so the updater's first check fails fast instead of reaching GitHub.

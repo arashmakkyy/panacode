@@ -14,6 +14,7 @@ Read this **before** editing UI surfaces or running an upstream merge.
 | Panacode fork | `https://github.com/arashmakkyy/panacode` |
 | Upstream integration branch | `dev` (verified via `upstream/dev`) |
 | Panacode working branch for this redesign | `panacode/redesign-v2` |
+| Isolation branch | `panacode-isolation`, based on `82d54281e79f33fb08e3d7db7adb166436857c43` from `panacode/redesign-v2` |
 | Fork default branch | `dev` (this fork's `dev` matches upstream at the baseline below; it is not a Panacode release branch) |
 | Recommended stable Panacode branch | none yet. Do not treat `dev` as the branded product branch. |
 | Baseline (merge-base of `panacode/redesign-v2` with `origin/dev`) | `cbe71595e1f370ff91b3081872b96bbe56519c41` |
@@ -168,9 +169,15 @@ Internal package names `@opencode/*` remain for upstream compatibility.
 | `packages/app/src/settings/model.tsx` | Shared integration boundary | Side-effect imports `@panacode/ui/icons` and `@panacode/ui/motion`; default `tabLayout` is `inbox` (workspace sidebar) | Medium | Re-apply the two imports and the default |
 | `packages/desktop/src/renderer/startup/splash.*` | Shared integration boundary | Splash uses the active brand pack | Medium | Keep the `SplashBrand` mount |
 | `packages/cli/src/services/service-config.ts` | Shared integration boundary | `PANACODE_SERVICE_PORT = 0xC0AC` replaces upstream's `0xC0DE` in `channelPort` (Windows maps it to `0x70AC` = 28844) so Panacode and OpenCode can run together (decisions D-016) | Medium | Keep the Panacode constant; take upstream changes to the Windows mapping in `defaultPort` and re-check `packages/cli/test/service.test.ts` |
-| `packages/desktop/src/main/service/background-service.ts` | Shared integration boundary | Packaged Windows passes `--port 0x70ac` (upstream `0x70de`) | Medium | Keep `0x70ac`; it must equal `ServiceConfig.defaultPort("latest", "win32")` |
+| `packages/desktop/src/main/service/background-service.ts` | Shared integration boundary | Installs the `panacode-cli` sidecar, writes `product: "panacode"` registration, and launches the managed server with `PANACODE_*` env. Packaged Windows no longer forces `--port 0x70ac`: a saved `panacode service set port` or the Panacode CLI default wins | Medium | Keep `0x70ac` only as `ServiceConfig.defaultPort("latest", "win32")`; never reintroduce a forced `--port` in the desktop |
 | `packages/cli/src/services/port-owner.ts` | Shared integration boundary | Windows branch (`netstat` + `tasklist`) names the process holding the port; upstream returns `undefined` on Windows | Low | Keep the Windows branch unless upstream adds its own |
-| `packages/gui-plugins/src/updater/panacode.ts`, `updater/main.ts`, `updater/renderer.tsx` | Panacode flag + two guarded hunks | `PANACODE_UPSTREAM_UPDATES = false`: no desktop updater (feed `opencode.ai/update/api/.../opencode`), no Check for Updates menu/settings/titlebar/error-page buttons, no What's New (`opencode.ai/changelog.json`) (decisions D-017) | Low | Keep the early return in `main.ts` and the two guards in `renderer.tsx`; set the flag to `true` only when Panacode has its own feed. The `publish` URLs in `packages/desktop/electron-builder.config.ts` are still upstream's but unused while the flag is off |
+| `packages/gui-plugins/src/updater/panacode.ts`, `updater/main.ts`, `updater/renderer.tsx` | Panacode flag + two guarded hunks | `PANACODE_UPSTREAM_UPDATES = false`: no desktop updater (feed `opencode.ai/update/api/.../opencode`), no Check for Updates menu/settings/titlebar/error-page buttons, no What's New (`opencode.ai/changelog.json`) (decisions D-017) | Low | Keep the early return in `main.ts` and the two guards in `renderer.tsx`; set the flag to `true` only when Panacode has its own feed. The upstream `publish` feeds are removed from `packages/desktop/electron-builder.config.ts`; do not restore them during an upstream merge |
+| `packages/util/src/product-env.ts`, `packages/cli/src/env-bootstrap.ts` | Panacode-owned | `PANACODE_*`-only runtime contract; `sanitizeProductEnv()` deletes inherited `OPENCODE_*` runtime keys before any other module reads the environment | Low | Keep the sanitizer side-effect import first in the CLI and desktop start path; never add an `OPENCODE_*` fallback or copy `PANACODE_*` onto it |
+| `packages/core/src/config.ts`, `packages/core/src/config/discovery.ts`, `packages/schema/src/config.ts` | Shared integration boundary | Read-only legacy `opencode.json`/`opencode.jsonc`/`.opencode/` discovery; only `tool_output.max_lines` and `tool_output.max_bytes` import under a `legacy: true` document below Panacode values | Medium | Keep the allowlist and `Sources.legacy`; never activate legacy plugins, never write a legacy file, and never let legacy values override Panacode config |
+| `packages/desktop/src/main/native/logging.ts` | Shared integration boundary | Support archive is `panacode-debug-*.zip`, uses Panacode log roots only, and omits foreign markers plus secrets | Medium | Keep the archive prefix, root list, and sensitive-name exclusions when merging log changes |
+| `packages/desktop/src/main/deep-link.ts`, `packages/desktop/src/main/lifecycle/index.ts` | Shared integration boundary | Only `panacode://` is dispatched; `opencode://` is ignored before routing; `oc://renderer` stays internal | Low | Re-apply the scheme filters after upstream lifecycle/router changes |
+| `packages/desktop/resources/windows/installer.nsh` | Shared integration boundary | Moves a legacy shared install into a per-app-id directory and removes the old directory only when no other executable remains | High | Keep the `*.exe` guard before `RMDir /r`; never delete the shared directory based only on a missing uninstaller |
+| `script/panacode-isolation-check.ts`, `.github/workflows/panacode-isolation.yml` | Panacode-owned | CI guard for ambient `OPENCODE_*` reads and the isolation regression suite; PRs to `panacode/redesign-v2` plus manual dispatch, no publish | Low | Keep ours; extend the allowlist only for deliberate provider credentials or defensive scrubbing |
 | `script/panacode-icons-generate.ts`, `script/panacode-brand-apply.ts` | Panacode-owned | Generated lucide artwork; brand pack swap | Low | Keep ours |
 | `bun.lock` | Generated | Lockfile | Medium | Regenerate after resolving package.json |
 | `release/desktop/*.exe` | Generated output | Installers | None | Do not commit binaries |
@@ -405,10 +412,40 @@ Prefer non-destructive recovery. Destructive resets are last resort and never th
 - **Stage 1 only.** The shell (window, titlebar, sidebar, home, session empty/loading/error) is mounted. Chat, composer, tool call, code suggestion, agent run, and orchestrator are not. Approvals and MCP remain the earlier low-fidelity mounts.
 - **Brand scan.** `bun script/panacode-brand-scan.ts` fails on user-visible `opencode` in prose, docs/Discord/GitHub links, and `www.opencode.ai`. It allows internal ids, license lines (`Forked from OpenCode`, the trademark sentence), and the upstream product names OpenCode Go / Console / Zen / Free because those are the services a person actually signs into.
 - **Upstream tip.** Baseline is `cbe71595e1` on `origin/dev`. Fetch `upstream` before the next integration; it was not available in the stage 1 environment.
-- **Release channel:** Panacode must not consume OpenCode production update feeds. The desktop updater is off behind `PANACODE_UPSTREAM_UPDATES` (D-017). The terminal CLI still has upstream's own updater (`packages/cli/src/services/updater.ts`, opencode.ai feed); the desktop service never runs it, but a standalone `panacode` CLI could.
+- **Release channel:** Panacode must not consume OpenCode production update feeds. The desktop updater is off behind `PANACODE_UPSTREAM_UPDATES` (D-017). The CLI updater is manual-only: it never fetches a feed or runs an upstream installer; `check` points at `https://github.com/arashmakkyy/panacode/releases`, and `apply`/`latest`/`upgrade`/`managed` fail with "Panacode updates are manual". Do not restore an upstream feed during a merge.
+- **Runtime isolation:** product code reads `PANACODE_*` only. `sanitizeProductEnv()` runs at CLI and Desktop startup and deletes inherited `OPENCODE_*` runtime keys. `script/panacode-isolation-check.ts` fails on a new ambient read. The retained exceptions are compile-time constants (`OPENCODE_VERSION`, `OPENCODE_CHANNEL`, `OPENCODE_TARGET`), the OpenCode-hosted provider credential name (`OPENCODE_API_KEY`, stripped from the inherited environment), and defensive password scrubbing in `packages/cli/src/server-process.ts`.
+- **Sidecars and service:** packaged Desktop expects `panacode-cli` / `panacode-cli.exe` and `panacode-cli.version`; development uses `panacode-cli-dev`. Service registration carries `product: "panacode"`, and the client rejects a mismatched product. The saved `panacode service set port` wins over the default.
+- **Legacy project config:** `opencode.json(c)` and `.opencode/` are read-only, allowlisted to `tool_output.max_lines` and `tool_output.max_bytes`. A merge that adds a new legacy import must extend the allowlist deliberately and add a test.
 - **Service port:** Panacode's managed service port is its own (D-016). If an upstream merge changes `channelPort` or the desktop `servicePort`, keep Panacode's value distinct from upstream's.
 - **No conflict-free guarantee:** Large upstream architectural changes can still require multi-day conflict resolution. This architecture reduces surface area and makes conflicts understandable; it does not eliminate them.
 - **Unverified in this agent environment:** full desktop GUI smoke, Windows NSIS install, SSH/WSL, and broad `bun typecheck` across the monorepo may be incomplete depending on VM resources — re-run section H before shipping.
+
+---
+
+## M. Isolation checklist for an upstream merge
+
+Run these after resolving conflicts, before merging the integration branch:
+
+```bash
+bun script/panacode-isolation-check.ts
+bun script/panacode-brand-scan.ts
+bun script/panacode-ui-ownership-check.ts
+bun --cwd packages/util test test/product-env.test.ts
+bun --cwd packages/core test test/config/discovery.test.ts test/config/config.test.ts test/config/watch.test.ts
+bun --cwd packages/cli test test/updater-isolation.test.ts test/env.test.ts
+bun --cwd packages/client test test/service-decision.test.ts
+bun --cwd packages/desktop test script/electron-builder.config.test.ts src/main/service/desktop-cli-state.test.ts src/main/service/cli-stages.test.ts
+```
+
+Review points that upstream merges commonly reopen:
+
+1. **No ambient `OPENCODE_*` read.** New runtime code uses `productEnv("SUFFIX")` or `process.env.PANACODE_*`. Build-time defines and third-party provider credentials are the only exceptions.
+2. **No upstream feed.** Check `packages/cli/src/services/updater.ts`, `packages/gui-plugins/src/updater`, and `packages/desktop/electron-builder.config.ts` for a restored `publish` URL, changelog fetch, or installer command.
+3. **Branded sidecars.** `packages/desktop/src/main/service/desktop-cli.ts`, `sidecar-probe.ts`, `script/utils.ts`, and `gui-plugins/src/wsl` must keep `panacode-cli*` names and `panacode-cli.version`.
+4. **Service identity.** `service-registration.ts` writes `product: "panacode"`; `packages/client/src/service.ts` accepts it as optional for older servers, and `service-probe.ts` validates product and loopback before credentials.
+5. **Legacy config stays read-only.** Discovery may find `opencode.json(c)`/`.opencode/`, but `Config.loadLegacyFile` copies only the allowlisted `tool_output` fields into `legacy: true` documents and writes nothing.
+6. **Installer safety.** `installer.nsh` removes a legacy shared directory only after a `*.exe` scan comes back empty.
+7. **CI wiring.** `.github/workflows/panacode-isolation.yml` still targets `panacode/redesign-v2` and `workflow_dispatch`, with `permissions: contents: read` and no release/publish step.
 
 ---
 

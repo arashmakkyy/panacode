@@ -63,25 +63,20 @@ bun run --cwd packages/cli src/index.ts
 
 Upstream OpenCode installers (`curl … opencode.ai`, `@opencode/cli`, brew `opencode`, …) remain for OpenCode itself and must not be used if you want an isolated Panacode install.
 
-### Desktop App (BETA)
+### Desktop App
 
-OpenCode is also available as a desktop application. Download it from [opencode.ai/download](https://opencode.ai/download).
+Panacode desktop builds are published on [GitHub Releases](https://github.com/arashmakkyy/panacode/releases); the Windows
+release workflow publishes `panacode-desktop-win-x64-<tag>`. Upstream OpenCode downloads from `opencode.ai/download`
+install OpenCode, not Panacode.
 
-| Platform              | Download                           |
-| --------------------- | ---------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
-| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
-| Windows               | `opencode-desktop-win-x64.exe`     |
-| Linux                 | `.deb`, `.rpm`, or `.AppImage`     |
-
-```bash
-# macOS (Homebrew)
-brew install --cask opencode-desktop
-```
+Panacode has no automatic updater. Install a newer build over the old one, then restart; `panacode` reports the manual
+release page instead of fetching an upstream feed. The desktop app keeps its own profile, service registration and
+`panacode://` handler, so an installed OpenCode can stay side by side.
 
 #### Installation Directory
 
-The install script installs OpenCode to `$HOME/.opencode/bin`.
+The CLI installer writes `$HOME/.panacode/bin/panacode`; the desktop app uses its own per-app-id install directory
+(`ai.panacode.desktop` on Windows) and never modifies `$HOME/.opencode`.
 
 ### Agents
 

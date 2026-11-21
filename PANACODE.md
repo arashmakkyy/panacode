@@ -30,11 +30,23 @@ Central identity: `packages/util/src/product-identity.ts` (also mirrored on `Pro
 | Config files | `opencode.json(c)` | `panacode.json(c)` |
 | System config | `/etc/opencode`, etc. | `/etc/panacode`, etc. |
 | CLI command | `opencode` | `panacode` |
-| Env prefix | `OPENCODE_*` | Prefer `PANACODE_*` (falls back to `OPENCODE_*`) |
+| Env prefix | `OPENCODE_*` | `PANACODE_*` only (no fallback) |
 
-`@opencode/util/product-env` copies every set `PANACODE_*` onto the matching `OPENCODE_*` at startup so existing readers keep working while Panacode wins when both are set.
+`@opencode/util/product-env` reads only `PANACODE_*`. CLI and Desktop startup call `sanitizeProductEnv()`, which deletes inherited `OPENCODE_*` runtime overrides before any other module reads the environment. There is no `PANACODE_*` → `OPENCODE_*` copying, so setting both always leaves Panacode on the `PANACODE_*` value.
 
-Examples: `PANACODE_CONFIG_DIR`, `PANACODE_CONFIG`, `PANACODE_FLAGS`, `PANACODE_DB`, `PANACODE_PASSWORD`, `PANACODE_TEST_HOME`.
+Examples: `PANACODE_CONFIG_DIR`, `PANACODE_CONFIG`, `PANACODE_FLAGS`, `PANACODE_DB`, `PANACODE_PASSWORD`, `PANACODE_PRINT_LOGS`, `PANACODE_LOG_LEVEL`, `PANACODE_TEST_HOME`.
+
+The one retained `OPENCODE_*` name is `OPENCODE_API_KEY`, the credential variable of the OpenCode-hosted model provider, which Panacode treats like any other third-party provider key. Because the startup sanitizer removes it, sign-in goes through `/connect` (or the provider auth store) rather than an ambient variable. Compile-time constants such as `OPENCODE_VERSION`, `OPENCODE_CHANNEL`, and `OPENCODE_TARGET` are build inputs, not runtime product settings.
+
+## Side-by-side isolation rules
+
+- **Sidecars.** Packaged Desktop uses `panacode-cli` / `panacode-cli.exe` and `panacode-cli.version`; development uses `panacode-cli-dev` and `panacode-cli-wsl`. The upstream `opencode-cli` name is never probed.
+- **Service.** Panacode keeps its own service registration (`product: "panacode"`) and ports: Windows `28844`, macOS/Linux `49324`; `local` shifts each by one. A saved `panacode service set port` wins; packaged Windows no longer forces `--port 0x70ac`.
+- **Legacy project config.** `opencode.json`, `opencode.jsonc`, and `.opencode/` are read-only. Only `tool_output.max_lines` and `tool_output.max_bytes` are imported, below every Panacode value; legacy plugins are never activated and no file is written back.
+- **Support archive.** `panacode-debug-*.zip` collects Panacode log roots only and omits OpenCode markers plus obvious secrets (`.env`, `auth.json`, config files, credentials, service registration files).
+- **Deep links.** Only `panacode://` is dispatched. `opencode://` is ignored before routing; `oc://renderer` remains internal.
+- **Updates.** Panacode has no upstream update feed and no desktop auto-updater. The CLI `check` command points at https://github.com/arashmakkyy/panacode/releases, and `apply`/`latest`/`upgrade`/`managed` fail with "Panacode updates are manual". Install a newer build, then restart.
+- **CI.** `.github/workflows/panacode-isolation.yml` runs the isolation guard, environment contract, legacy-config, service, sidecar, and installer-metadata tests for pull requests to `panacode/redesign-v2` and on manual dispatch. It publishes nothing.
 
 ## Install (Linux / macOS)
 
@@ -86,7 +98,7 @@ If the connect page sends the user to buy credits or top up, finishing that flow
 ## Files that belong to the overlay
 
 - `packages/util/src/product-identity.ts` — slug, CLI name, install dir, config file names
-- `packages/util/src/product-env.ts` — `PANACODE_*` → `OPENCODE_*` preference
+- `packages/util/src/product-env.ts` — `PANACODE_*`-only contract and inherited-upstream sanitizer
 - `packages/core/src/panacode/product.ts` — centralized name, baseURL, authURL, allowlist, identity
 - `packages/core/src/plugin/provider/panaai.ts` — integration, browser OAuth, discovery, provider registration
 - `packages/core/src/plugin/panacode-overlay.ts` — late filter so allowlist wins over models.dev/config
