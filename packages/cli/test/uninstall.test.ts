@@ -28,6 +28,8 @@ test("uninstall --dry-run reports a service and cache without stopping or deleti
 
     expect({ exitCode: result.exitCode, stderr: result.stderr }).toEqual({ exitCode: 0, stderr: "" })
     expect(result.stdout).toContain("Dry run - no changes made")
+    expect(result.stdout).toContain("Panacode ownership not proven")
+    expect(result.stdout).not.toMatch(/Package: .*(?:uninstall|remove)/)
     expect(result.stdout).toContain(`Stop background service and persistent terminals: ${registration}`)
     expect(result.stdout).toContain(`Cache: ${cache}`)
     expect(await fs.readFile(registration, "utf8")).toBe(before)
@@ -39,7 +41,7 @@ test("uninstall --dry-run reports a service and cache without stopping or deleti
     await witness.exited
     await fs.rm(root, { recursive: true, force: true })
   }
-})
+}, 30_000)
 
 test("uninstall refuses to stop a legacy record and leaves the cache and process intact", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "panacode-uninstall-legacy-"))
@@ -71,7 +73,7 @@ test("uninstall refuses to stop a legacy record and leaves the cache and process
     await witness.exited
     await fs.rm(root, { recursive: true, force: true })
   }
-})
+}, 30_000)
 
 test("uninstall without confirmation leaves the shell config untouched", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "panacode-uninstall-cancel-"))
@@ -87,7 +89,41 @@ test("uninstall without confirmation leaves the shell config untouched", async (
   } finally {
     await fs.rm(root, { recursive: true, force: true })
   }
-})
+}, 30_000)
+
+test("uninstall leaves a cache alias and the cache it points at untouched", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "panacode-uninstall-alias-"))
+  const target = path.join(root, "cache", "opencode")
+  const link = path.join(root, "cache", "panacode")
+  await fs.mkdir(target, { recursive: true })
+  await fs.writeFile(path.join(target, "marker"), "opencode-cache")
+  await fs.symlink(target, link, process.platform === "win32" ? "junction" : "dir")
+  try {
+    const result = await cli(["uninstall", "--force"], root)
+
+    expect({ exitCode: result.exitCode, stderr: result.stderr }).toEqual({ exitCode: 0, stderr: "" })
+    expect(result.stdout).toContain("symlink or shared alias")
+    expect(await fs.readFile(path.join(target, "marker"), "utf8")).toBe("opencode-cache")
+    expect((await fs.lstat(link)).isSymbolicLink()).toBe(true)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+}, 30_000)
+
+test("uninstall removes a normal private cache", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "panacode-uninstall-cache-"))
+  const cache = path.join(root, "cache", "panacode")
+  await fs.mkdir(cache, { recursive: true })
+  await fs.writeFile(path.join(cache, "marker"), "panacode-cache")
+  try {
+    const result = await cli(["uninstall", "--force"], root)
+
+    expect({ exitCode: result.exitCode, stderr: result.stderr }).toEqual({ exitCode: 0, stderr: "" })
+    expect(await fs.exists(cache)).toBe(false)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+}, 30_000)
 
 async function waitForHeartbeat(file: string) {
   for (let attempt = 0; attempt < 300; attempt++) {

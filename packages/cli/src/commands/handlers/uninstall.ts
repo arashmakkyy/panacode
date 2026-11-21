@@ -1,6 +1,7 @@
 import { confirm, intro, log, outro, spinner } from "@clack/prompts"
 import { Service } from "@opencode/client/effect/service"
 import { Global } from "@opencode/util/global"
+import { ProductIdentity } from "@opencode/util/product-identity"
 import { Effect, FileSystem, Schedule } from "effect"
 import path from "node:path"
 import { Commands } from "../commands"
@@ -26,7 +27,8 @@ export default Runtime.handler(
     const fs = yield* FileSystem.FileSystem
     const global = yield* Global.Service
     const updater = yield* Updater.Service
-    const method = yield* updater.method()
+    const ownership = yield* updater.ownership()
+    const method = ownership.owned ? ownership.method : undefined
     const removal = method ? updater.removal(method) : undefined
     // Data, config, and state hold sessions, credentials, settings, and prompt history; uninstall only removes the cache.
     // All channels share the cache. Stop background services before deleting it.
@@ -36,17 +38,24 @@ export default Runtime.handler(
       : []
     const bin = path.dirname(process.execPath)
     const shell = method === "curl" ? yield* shellConfigs(global.home, bin) : []
+    const cache = yield* privateCache(fs, global.cache)
 
     log.info(`Installation method: ${method ?? "unknown"}`)
+    if (!ownership.owned) {
+      log.warn("Panacode ownership not proven; no package or executable will be removed.")
+      log.message(ownership.detail)
+      log.message("If this executable is a Panacode build you installed yourself, delete that exact file.")
+    }
     log.message("The following global files will be removed (shared by Panacode versions and channels):")
-    if (yield* fs.exists(global.cache)) log.info(`  Cache: ${global.cache}`)
+    if (cache.status === "safe") log.info(`  Cache: ${cache.path}`)
+    if (cache.status === "unsafe")
+      log.warn(`  Cache is a symlink or shared alias and will be left untouched: ${cache.path}`)
     services.forEach((name) =>
       log.info(`  Stop background service and persistent terminals: ${path.join(global.state, name)}`),
     )
     shell.forEach((file) => log.info(`  Shell PATH: ${file}`))
     if (removal) log.info(`  Package: ${removal.command.join(" ")}`)
-    if (method === "curl") log.info(`  Binary (manual removal): ${process.execPath}`)
-    if (!method) log.warn("Could not detect the installation method. Remove the installation manually after cleanup.")
+    if (ownership.owned && ownership.method === "curl") log.info(`  Binary (manual removal): ${ownership.binary}`)
 
     if (input.dryRun) {
       log.warn("Dry run - no changes made")
@@ -80,24 +89,26 @@ export default Runtime.handler(
     }
 
     // Links that keep an older OpenCode replaceable may still run; move them so the cache can go.
-    if (process.platform === "win32") yield* RetainedImage.relocate(global.cache, global.tmp)
     const errors: string[] = []
-    progress.start("Removing Cache...")
-    yield* fs.remove(global.cache, { recursive: true, force: true }).pipe(
-      // Windows reports a terminated service as gone before it releases its file handles,
-      // so the first removal can race that teardown.
-      Effect.retry({
-        while: (error) => process.platform === "win32" && error.reason._tag === "Busy",
-        schedule: Schedule.max([Schedule.spaced("250 millis"), Schedule.recurs(40)]),
-      }),
-      Effect.tap(() => Effect.sync(() => progress.stop("Removed Cache"))),
-      Effect.catch((error) =>
-        Effect.sync(() => {
-          progress.stop("Failed to remove Cache", 1)
-          errors.push(`Cache: ${errorMessage(error)}`)
+    if (cache.status === "safe") {
+      if (process.platform === "win32") yield* RetainedImage.relocate(cache.path, global.tmp)
+      progress.start("Removing Cache...")
+      yield* fs.remove(cache.path, { recursive: true, force: true }).pipe(
+        // Windows reports a terminated service as gone before it releases its file handles,
+        // so the first removal can race that teardown.
+        Effect.retry({
+          while: (error) => process.platform === "win32" && error.reason._tag === "Busy",
+          schedule: Schedule.max([Schedule.spaced("250 millis"), Schedule.recurs(40)]),
         }),
-      ),
-    )
+        Effect.tap(() => Effect.sync(() => progress.stop("Removed Cache"))),
+        Effect.catch((error) =>
+          Effect.sync(() => {
+            progress.stop("Failed to remove Cache", 1)
+            errors.push(`Cache: ${errorMessage(error)}`)
+          }),
+        ),
+      )
+    }
     yield* Effect.forEach(shell, (file) =>
       cleanShellFile(file, shellPathCommands({ bin, fish: isFishConfig(file) })).pipe(
         Effect.catch((error) => Effect.sync(() => errors.push(`Shell config ${file}: ${errorMessage(error)}`))),
@@ -116,14 +127,24 @@ export default Runtime.handler(
         ),
       )
     }
-    if (method === "curl") {
-      log.message("To finish removing the binary, run:")
-      log.info(`  rm '${process.execPath.replaceAll("'", "'\\''")}'`)
+    if (ownership.owned && ownership.method === "curl") {
+      log.message("To finish removing the Panacode binary, run:")
+      log.info(`  rm '${ownership.binary.replaceAll("'", "'\\''")}'`)
     }
     if (errors.length) yield* Effect.fail(new Error(errors.join("\n")))
     outro("Done")
   }, handlePromptErrors),
 )
+
+const privateCache = Effect.fnUntraced(function* (fs: FileSystem.FileSystem, directory: string) {
+  if (!(yield* fs.exists(directory))) return { status: "missing" as const }
+  const info = yield* fs.lstat(directory).pipe(Effect.orElseSucceed(() => undefined))
+  // A linked cache may be OpenCode's or a shared cache. Never delete or relocate through the alias.
+  if (!info || info.type === "SymbolicLink") return { status: "unsafe" as const, path: directory }
+  const resolved = yield* fs.realPath(directory).pipe(Effect.orElseSucceed(() => directory))
+  if (path.basename(resolved) !== ProductIdentity.slug) return { status: "unsafe" as const, path: directory }
+  return { status: "safe" as const, path: directory }
+})
 
 const shellConfigs = Effect.fnUntraced(function* (home: string, bin: string) {
   const fs = yield* FileSystem.FileSystem
