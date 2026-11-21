@@ -141,6 +141,7 @@ export const stop = Effect.fn("service.stop")(function* (options: StopOptions = 
 /** Schema for the local service registration file. */
 export const Info = Schema.Struct({
   id: Schema.optional(Schema.String),
+  product: Schema.optional(Schema.Literal("panacode")),
   version: Schema.optional(Schema.String),
   url: Schema.String,
   pid: Schema.Int.check(Schema.isGreaterThan(0)),

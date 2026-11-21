@@ -46,6 +46,8 @@ export type StopOptions = {
 export type Info = {
   /** Unique service instance identifier. */
   readonly id?: string
+  /** Product that owns this registration. Legacy registrations omit it. */
+  readonly product?: "panacode"
   /** OpenCode version served by the process. */
   readonly version?: string
   /** Base URL advertised by the service. */
