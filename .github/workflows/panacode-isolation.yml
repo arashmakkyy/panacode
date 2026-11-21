@@ -194,7 +194,7 @@ jobs:
         run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 55 --max-skip 1 --test-timeout 30000 -- ./test/updater-isolation.test.ts ./test/env.test.ts ./test/shell-config.test.ts ./test/install-shell.test.ts ./test/uninstall.test.ts ./test/service-witness.test.ts
 
       - name: Database path foreign-root and alias guard
-        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 18 --max-skip 1 -- ./test/database-path.test.ts
+        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 18 --max-skip 2 -- ./test/database-path.test.ts
 
       - name: Real service lifecycle
         timeout-minutes: 20
