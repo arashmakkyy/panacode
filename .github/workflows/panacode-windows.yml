@@ -110,6 +110,10 @@ jobs:
         env:
           OPENCODE_TARGET: windows-x64
 
+      - name: Verify bundled CLI provenance
+        working-directory: packages/desktop
+        run: bun ./script/verify-cli-provenance.ts | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Checksum
         working-directory: dist/desktop
         run: |

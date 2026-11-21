@@ -3,9 +3,9 @@ import { constants, setPriority } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { prepareDevElectron } from "./dev-electron"
-import { downloadCliToResources, windowsify } from "./utils"
+import { copyBuiltCliToResources, windowsify } from "./utils"
 
-type ServerSource = { type: "build" } | { type: "download"; version: string }
+type ServerSource = { type: "build" } | { type: "dist"; version: string }
 
 type DevOptions = { server: ServerSource; electron: string[] }
 
@@ -44,14 +44,20 @@ function selectOptions(): DevOptions {
   const consumed = new Set([build, download, download >= 0 ? download + 1 : -1])
 
   return {
-    server: download >= 0 ? { type: "download", version: args[download + 1] } : { type: "build" },
+    server: download >= 0 ? { type: "dist", version: args[download + 1] } : { type: "build" },
     electron: args.filter((_, index) => !consumed.has(index)),
   }
 }
 
 async function prepareServer(source: ServerSource) {
-  if (source.type === "download")
-    return downloadCliToResources(source.version, windowsify("resources/panacode-cli-dev"))
+  if (source.type === "dist")
+    return copyBuiltCliToResources(
+      join(import.meta.dirname, "../../cli/dist"),
+      windowsify("resources/panacode-cli-dev"),
+      {
+        version: source.version,
+      },
+    )
   buildWebUi()
   process.env.PANACODE_DESKTOP_CLI_DEV = join(import.meta.dirname, "../../cli")
 

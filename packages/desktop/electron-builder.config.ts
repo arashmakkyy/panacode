@@ -6,7 +6,14 @@ import { Arch, type Configuration } from "electron-builder"
 import { NativeArch } from "../../script/native-arch"
 import { DESKTOP_NATIVE_ENGLISH } from "@opencode/app/i18n/desktop-native"
 import { ProductIdentity } from "@opencode/util/product-identity"
-import { CLI_BINARIES, getCurrentCli, nodePtyPackage } from "./script/utils"
+import {
+  CLI_BINARIES,
+  getCurrentCli,
+  nodePtyPackage,
+  provenanceFile,
+  verifyPackagedCli,
+  versionFile,
+} from "./script/utils"
 
 const packageDir = path.dirname(fileURLToPath(import.meta.url))
 
@@ -117,18 +124,32 @@ const getBase = (appId: string): Configuration => {
 
       const cli = path.join(
         resources,
-        context.electronPlatformName === "win32"
-          ? `${ProductIdentity.cli}-cli.exe`
-          : `${ProductIdentity.cli}-cli`,
+        context.electronPlatformName === "win32" ? `${ProductIdentity.cli}-cli.exe` : `${ProductIdentity.cli}-cli`,
       )
 
       const file = await stat(cli)
 
       if (!file.isFile() || file.size === 0) throw new Error(`Bundled CLI must be a non-empty file: ${cli}`)
       await NativeArch.verify(cli, arch)
-      const version = path.join(path.dirname(cli), `${ProductIdentity.cli}-cli.version`)
+      const version = versionFile(cli)
+      const staged = path.join(packageDir, "resources", path.basename(cli))
 
-      if ((await stat(version)).size === 0) throw new Error(`Bundled CLI version must be a non-empty file: ${version}`)
+      const built = await verifyPackagedCli({
+        binary: staged,
+        versionFile: versionFile(staged),
+        provenanceFile: provenanceFile(staged),
+        target,
+      })
+
+      const bundled = await verifyPackagedCli({
+        binary: cli,
+        versionFile: version,
+        provenanceFile: provenanceFile(staged),
+        target,
+      })
+
+      if (bundled.sha256 !== built.sha256) throw new Error(`Bundled CLI ${cli} does not match the staged CLI ${staged}`)
+      console.log(`Bundled Panacode CLI ${bundled.version} (${bundled.sha256}) from ${built.sourceSha256}`)
 
       // With an Icon Composer mac.icon, electron-builder bundles the ICNS that actool generates as the pre-macOS 26
       // fallback. That one tops out at 256px and draws a light ring around the squircle, so ship ours instead.

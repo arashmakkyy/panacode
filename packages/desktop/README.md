@@ -33,11 +33,14 @@ Both read the same environment as every other release package:
 | `OPENCODE_TARGET`  | `darwin-arm64`, `darwin-x64`, `windows-arm64`, `windows-x64`, `linux-x64`, `linux-arm64`. Defaults to the host. |
 
 The CLI is placed outside `app.asar` in the application's resources directory, and packaging fails if it is missing.
-`bun run build` uses `packages/cli/dist` when that holds the target's CLI. Otherwise `dev` (and `local`, unset or unrecognized)
-downloads the published dev CLI, `beta` downloads the beta CLI, and `prod`/`latest` fail.
+`bun run build` stages the CLI from `packages/cli/dist` for the selected target and rejects a missing build, a
+foreign package manifest, the wrong version or architecture, and a binary whose bytes changed before staging.
+Build it from this checkout first with `OPENCODE_TARGET=<target> bun run --cwd packages/cli build --single`.
+Panacode publishes no downloadable CLI, so no build falls back to an upstream package.
 
 `bun dev` is separate from packaging: it uses local renderer/server mode, the dev app identity, and the CLI source by
-default. `bun dev --download-server <version>` instead downloads that CLI version for local development.
+default. `bun dev --download-server <version>` stages a CLI built from this checkout whose dist manifest has that
+version; it never downloads an upstream CLI.
 
 ## Release and updates
 
