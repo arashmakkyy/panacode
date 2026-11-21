@@ -151,6 +151,8 @@ const VersionCache = Schema.Struct({ path: Schema.String, identity: Schema.Strin
 
 const ExecFailure = Schema.Struct({ stdout: Schema.optional(Schema.String), stderr: Schema.optional(Schema.String) })
 
+const ExecCode = Schema.Struct({ code: Schema.Union([Schema.Number, Schema.String]) })
+
 const installCli = Effect.fn("DesktopCli.install")(function* (source: string, version: string) {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
@@ -185,20 +187,25 @@ const run = Effect.fn("DesktopCli.run")(function* (binary: string, args: string[
     execFileAsync(binary, args, { windowsHide: true, timeout: RUN_TIMEOUT_MS }),
   ).pipe(
     Effect.tapError((error) => {
+      // stderr from an installer or a future CLI can contain a token or a prompt; keep only its shape.
       const output = Option.getOrUndefined(Schema.decodeUnknownOption(ExecFailure)(error.cause))
+      const code = Option.getOrUndefined(Schema.decodeUnknownOption(ExecCode)(error.cause))?.code
 
       return Effect.logError("v2 CLI command failed", {
         args,
-        error: error.cause instanceof Error ? error.cause.message : String(error.cause),
-        stdout: output?.stdout?.trim() ?? "",
-        stderr: output?.stderr?.trim() ?? "",
+        code,
+        stdoutBytes: output?.stdout?.length ?? 0,
+        stderrBytes: output?.stderr?.length ?? 0,
       })
     }),
   )
 
   const stdout = result.stdout.trim()
-  const stderr = result.stderr.trim()
-  yield* Effect.logInfo("v2 CLI command completed", { args, stdout, stderr })
+  yield* Effect.logInfo("v2 CLI command completed", {
+    args,
+    stdoutBytes: result.stdout.length,
+    stderrBytes: result.stderr.length,
+  })
 
   return stdout
 })

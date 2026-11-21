@@ -19,6 +19,7 @@ import {
   type State,
 } from "./machine"
 import { initializeFirstLaunchOnboarding } from "./onboarding"
+import { logDeepLink, panacodeDeepLinks } from "./deep-link"
 import { Shutdown } from "./shutdown"
 
 export interface Interface {
@@ -103,10 +104,10 @@ const runtime = Layer.effect(
     const deepLinks = yield* DeepLinks.make(focusWindow)
 
     const secondInstance = (_event: Event, argv: string[]) => {
-      const urls = argv.filter((arg) => arg.startsWith("panacode://"))
+      const urls = panacodeDeepLinks(argv)
 
       if (urls.length) {
-        runFork(Effect.logInfo("deep link received via second-instance", { urls }))
+        runFork(logDeepLink("second-instance", urls))
         deepLinks.receive(urls)
       }
 
@@ -115,9 +116,11 @@ const runtime = Layer.effect(
 
     const openUrl = (event: Event, url: string) => {
       event.preventDefault()
+
       // Foreign schemes never reach the renderer: a Panacode window cannot handle OpenCode links.
       if (!url.startsWith("panacode://")) return
-      runFork(Effect.logInfo("deep link received via open-url", { url }))
+
+      runFork(logDeepLink("open-url", [url]))
       deepLinks.receive([url])
     }
 

@@ -9,6 +9,7 @@ import { BackgroundServiceMachine } from "./background-service-machine"
 import { cleanStages } from "./cli-stages"
 import { keptStages, serviceVersion, shouldRetryEnsure } from "./cli-version"
 import { DesktopCli } from "./desktop-cli"
+import { diagnosticErrorCode, recordDiagnostic } from "../native/support-archive"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { takeSidecarProbe } from "./sidecar-probe"
 import { withEnsureTiming } from "@opencode/client/service"
@@ -91,10 +92,20 @@ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: Background
             PANACODE_DISABLE_FILEWATCHER: "1",
           }
         : undefined,
-      onStart: (reason: "missing" | "version-mismatch", previousVersion?: string) =>
-        runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion })),
-      onDiagnostic: (diagnostic: EnsureDiagnostic) =>
-        runFork(Effect.logInfo("v2 CLI background service boot", diagnostic)),
+      onStart: (reason: "missing" | "version-mismatch", previousVersion?: string) => {
+        recordDiagnostic({ event: "service.start", version: previousVersion, status: "started", reason })
+        runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion }))
+      },
+      onDiagnostic: (diagnostic: EnsureDiagnostic) => {
+        recordDiagnostic({
+          event: "service.boot",
+          stage: diagnostic.stage,
+          durationMs: diagnostic.elapsed,
+          status: diagnostic.state,
+          errorCode: diagnostic.stage === "exit" ? diagnosticErrorCode(diagnostic.reason) : undefined,
+        })
+        runFork(Effect.logInfo("v2 CLI background service boot", diagnostic))
+      },
     }
 
     return setup.client.Service.ensure(
@@ -214,6 +225,7 @@ const adopt = Effect.fn("BackgroundService.adopt")(function* (
     probed,
     ...endpoint(url.origin),
   })
+  recordDiagnostic({ event: "service.ready", version: setup.version, status: "ready" })
 
   return {
     credentials: { url: url.origin, password: service.auth.password } satisfies SidecarCredentials.Data,
