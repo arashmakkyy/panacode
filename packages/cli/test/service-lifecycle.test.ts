@@ -14,7 +14,9 @@ import { isolatedEnv } from "./fixture/environment"
 // the configured port, which a stop removes without leftovers.
 
 const entry = path.join(import.meta.dir, "../src/index.ts")
-const serviceTest = process.platform === "win32" ? test.skip : test
+// These are real detached service processes. Windows is a supported service platform, so the
+// suite runs there too; `processes()` observes the fixture through the OS instead of pgrep.
+const serviceTest = test
 
 serviceTest(
   "concurrent CLI and client starts converge on one server",
@@ -80,7 +82,7 @@ serviceTest(
 )
 
 serviceTest(
-  "an old-protocol server survives version-agnostic clients and yields to a required version",
+  "an old-protocol server survives every client and is never a takeover target",
   async () => {
     await using home = await serviceHome()
     await using old = Bun.spawn(
@@ -96,12 +98,13 @@ serviceTest(
 
     await expect(cli(home, "service", "start")).rejects.toThrow("incompatible health protocol")
     await expect(ensure(home)).rejects.toThrow("incompatible health protocol")
+    // Protocol compatibility is checked before version, so even a required version must not
+    // replace or take over an endpoint whose health contract cannot be verified.
+    await expect(ensure(home, OPENCODE_VERSION)).rejects.toThrow("incompatible health protocol")
     expect(old.exitCode).toBe(null)
-
-    await ensure(home, OPENCODE_VERSION)
-    await old.exited
-    await settled(home)
-    await stopped(home)
+    // No contender was spawned, and the old owner still holds the registration and port.
+    expect(await servers(home)).toEqual([])
+    expect((await snapshot(home)).info?.pid).toBe(old.pid)
   },
   120_000,
 )
@@ -140,8 +143,11 @@ serviceTest(
     await ensure(home)
     const original = await settled(home)
 
-    // The original server keeps the port until its registration self-check notices the damage.
+    // The original server exits once its registration self-check notices the damage. Wait for
+    // the port to be released before starting the replacement, so startup is not a race between
+    // the old process and the new contender.
     await fs.writeFile(home.registration, "{")
+    await exited(original.pid)
     await cli(home, "service", "start")
     const replacement = await settled(home)
     expect(replacement.pid).not.toBe(original.pid)
@@ -197,9 +203,10 @@ async function serviceHome(options: { readonly failBoot?: boolean } = {}) {
     ),
     async [Symbol.asyncDispose]() {
       // Only a failed case leaves processes behind: servers, or CLI commands that could still spawn one.
-      const pids = await processes(homeEntry)
-      pids.forEach((pid) => signal(pid, "SIGKILL"))
-      await Promise.all(pids.map((pid) => exited(pid).catch(() => undefined)))
+      // Every observation is scoped to this fixture's exact entry path. On Windows the creation time
+      // is read again immediately before signalling, so a reused PID is never killed.
+      const owned = await processes(homeEntry)
+      await terminate(owned, homeEntry)
       await fs.rm(root, { recursive: true, force: true })
     },
   }
@@ -314,13 +321,82 @@ async function snapshot(home: Home) {
 }
 
 /** Every live `serve --service` process started through this home's entry. */
-function servers(home: Home) {
-  return processes(home.entry + " serve --service")
+async function servers(home: Home) {
+  return (await processes(home.entry))
+    .filter((item) => item.commandLine.includes("serve --service"))
+    .map((item) => item.pid)
 }
 
-async function processes(pattern: string) {
-  const output = await Bun.$`pgrep -f ${pattern}`.nothrow().quiet().text()
-  return output.split("\n").filter(Boolean).map(Number)
+type ObservedProcess = {
+  readonly pid: number
+  /** OS creation time. Windows uses this to tell a reused PID from the original process. */
+  readonly created: string
+  readonly commandLine: string
+}
+
+async function processes(needle: string): Promise<ObservedProcess[]> {
+  if (process.platform === "win32") return windowsProcesses(needle)
+  const output = await Bun.$`pgrep -f ${needle}`.nothrow().quiet().text()
+  return output
+    .split("\n")
+    .filter(Boolean)
+    .map((pid) => ({ pid: Number(pid), created: "", commandLine: needle }))
+}
+
+// `Get-CimInstance` is the Windows API for reading another process's command line. The fixture
+// entry path is unique per home; the creation time is carried along so disposal can prove that a
+// PID still belongs to the process it observed before terminating it.
+async function windowsProcesses(needle: string) {
+  const rows = await windowsRows([
+    '$ErrorActionPreference = "Stop"',
+    "Get-CimInstance Win32_Process |",
+    "  Select-Object ProcessId, @{Name='Created';Expression={\"$($_.CreationDate.Ticks)\"}}, CommandLine |",
+    "  ConvertTo-Json -Compress",
+  ])
+  return rows.flatMap((row) =>
+    typeof row.ProcessId === "number" && typeof row.CommandLine === "string" && row.CommandLine.includes(needle)
+      ? [{ pid: row.ProcessId, created: row.Created ?? "", commandLine: row.CommandLine }]
+      : [],
+  )
+}
+
+type WindowsRow = { ProcessId?: number; Created?: string; CommandLine?: string }
+
+async function windowsRows(script: ReadonlyArray<string>): Promise<WindowsRow[]> {
+  const child = Bun.spawn(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script.join("\n")], {
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ])
+  if (code !== 0) throw new Error(`Win32_Process query exited ${code}: ${stderr.trim()}`)
+  if (stdout.trim() === "") return []
+  const parsed = JSON.parse(stdout) as WindowsRow | WindowsRow[]
+  return Array.isArray(parsed) ? parsed : [parsed]
+}
+
+/** Signal the exact processes this fixture observed, re-checking the Windows creation time first. */
+async function terminate(owned: ReadonlyArray<ObservedProcess>, needle: string) {
+  for (const item of owned) {
+    if (!(await stillOwned(item, needle))) continue
+    signal(item.pid, "SIGKILL")
+    await exited(item.pid).catch(() => undefined)
+  }
+}
+
+async function stillOwned(item: ObservedProcess, needle: string) {
+  if (process.platform !== "win32") return signal(item.pid, 0)
+  const rows = await windowsRows([
+    '$ErrorActionPreference = "Stop"',
+    `Get-CimInstance Win32_Process -Filter "ProcessId = ${item.pid}" |`,
+    "  Select-Object ProcessId, @{Name='Created';Expression={\"$($_.CreationDate.Ticks)\"}}, CommandLine |",
+    "  ConvertTo-Json -Compress",
+  ])
+  const row = rows.find((candidate) => candidate.ProcessId === item.pid)
+  return row !== undefined && row.Created === item.created && row.CommandLine?.includes(needle) === true
 }
 
 async function exited(pid: number) {

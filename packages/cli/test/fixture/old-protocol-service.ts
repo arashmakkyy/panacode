@@ -19,6 +19,7 @@ await Bun.write(
   registration + ".tmp",
   JSON.stringify({
     id: crypto.randomUUID(),
+    product: "panacode",
     version: "2.0.5",
     url: `http://127.0.0.1:${server.port}`,
     pid: process.pid,

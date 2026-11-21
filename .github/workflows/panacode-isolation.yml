@@ -1,12 +1,24 @@
 name: panacode-isolation
 
 # Guards the Panacode/OpenCode boundary: PANACODE_* only, branded sidecars, a read-only legacy
-# config allowlist, and no upstream update feed. Manual dispatch builds no artifacts and publishes
-# nothing; releases stay in panacode-windows.yml.
+# config allowlist, and no upstream update feed.
+#
+# Every test group runs through script/panacode-test-contract.ts. It fails when a listed path is
+# missing, a test fails or errors, Bun prints no summary, fewer than --min-pass tests pass, more
+# than --max-skip tests skip, or the group exceeds its timeout. A Windows acceptance suite that
+# silently regresses to a skip therefore cannot look green.
+#
+# Ubuntu runs the platform-neutral ownership, config, storage, client, PTY, desktop and GUI
+# contracts. windows-latest runs the real lifecycle service, NTFS junction/alias guard, live
+# foreign-PID witness, foreign shell preservation, support ZIP privacy, PTY, state-root and NSIS
+# installer harness. This workflow only tests and builds nothing; releases stay in
+# panacode-windows.yml and publishing is never enabled here.
 on:
   pull_request:
-    branches: ["panacode/redesign-v2"]
+    branches: ["panacode-isolation", "panacode/redesign-v2"]
     types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: ["isolation-fixes", "panacode-isolation"]
   workflow_dispatch:
 
 permissions:
@@ -16,10 +28,134 @@ concurrency:
   group: panacode-isolation-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
-  isolation:
-    name: runtime isolation
-    if: ${{ !github.event.pull_request.draft }}
+  guards:
+    name: guards (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Verify pinned Bun
+        run: test "$(bun --version)" = "$(node -p 'require("./package.json").packageManager.split("@")[1]')"
+
+      - name: Runtime isolation guard
+        run: bun script/panacode-isolation-check.ts
+
+      - name: UI ownership guard
+        run: bun script/panacode-ui-ownership-check.ts
+
+      - name: Brand scan
+        run: bun script/panacode-brand-scan.ts
+
+  quality:
+    name: root quality (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Verify pinned Bun
+        run: test "$(bun --version)" = "$(node -p 'require("./package.json").packageManager.split("@")[1]')"
+
+      - name: Typecheck every package
+        run: bun run typecheck
+
+      - name: Lint
+        run: bunx oxlint
+
+      - name: GUI plugin AST rules
+        run: bunx ast-grep scan -c script/ast-grep/gui-plugins/sgconfig.yml
+
+      - name: Generated SDK docs are current
+        run: bun script/sdk-docs.ts
+
+      # `bun run check` is lint + typecheck. Both parts gate above; check-greys has 172
+      # pre-existing findings in services/site at the base commit. Record that baseline
+      # explicitly instead of hiding it or letting it block every unrelated change.
+      - name: Root check baseline (known site grey findings, non-gating)
+        timeout-minutes: 45
+        run: |
+          set +e
+          bun run check > root-check.log 2>&1
+          status=$?
+          set -e
+          cat root-check.log
+          {
+            echo "### Root \`bun run check\` baseline"
+            echo ""
+            echo "- exit status: \`$status\`"
+            echo "- known pre-existing failure: \`script/check-greys.ts\` reports 172 findings in \`services/site\` at the base commit"
+            echo "- typecheck, oxlint, AST rules and SDK docs gate in the steps above"
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+  linux-core:
+    name: linux core, desktop and gui (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Verify pinned Bun
+        run: test "$(bun --version)" = "$(node -p 'require("./package.json").packageManager.split("@")[1]')"
+
+      - name: Product environment and global roots
+        run: bun script/panacode-test-contract.ts --cwd packages/util --min-pass 7 -- ./test/product-env.test.ts ./test/global-roots.test.ts
+
+      - name: Legacy config allowlist and storage isolation
+        run: bun script/panacode-test-contract.ts --cwd packages/core --min-pass 58 --max-skip 1 -- ./test/config/config.test.ts ./test/config/discovery.test.ts ./test/config/watch.test.ts ./test/storage-isolation.test.ts
+
+      - name: Persistent PTY resolver, daemon and handoff
+        run: bun script/panacode-test-contract.ts --cwd packages/core --min-pass 40 --max-skip 0 --test-timeout 30000 -- ./test/persistent-pty-binary.test.ts ./test/persistent-pty-daemon.test.ts ./test/persistent-pty-session.test.ts ./test/shell-daemon.test.ts
+
+      - name: Server process identity
+        run: bun script/panacode-test-contract.ts --cwd packages/server --min-pass 7 -- ./test/process.test.ts ./test/service-status.test.ts
+
+      # The product brief calls out this exact path: the old workflow pointed at
+      # script/electron-builder.config.test.ts, which does not exist.
+      - name: Desktop packaging identity (electron-builder.config.test.ts)
+        run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 8 -- ./electron-builder.config.test.ts
+
+      - name: Desktop CLI staging and installer metadata
+        run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 10 -- ./electron.vite.config.test.ts ./script/utils.test.ts
+
+      - name: Desktop identity and service contracts
+        run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 75 -- ./src/main/lifecycle/configure.test.ts ./src/main/service/desktop-cli-state.test.ts ./src/main/service/cli-stages.test.ts ./src/main/service/cli-service-file.test.ts ./src/main/service/sidecar-probe.test.ts ./src/main/service/cli-version.test.ts ./src/main/service/background-service-machine.test.ts ./src/main/service/state-root.test.ts ./src/main/native/logging-machine.test.ts
+
+      - name: Support archive private-data exclusion
+        run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 18 -- ./src/main/native/support-archive.test.ts ./src/main/lifecycle/deep-link.test.ts
+
+      # The repeatable WSL script/install path is exercised by wsl/local.test.ts. The real
+      # wsl/runtime.test.ts case needs an installed WSL distribution and is tracked as a
+      # separate acceptance row; GitHub-hosted Windows runners do not provide one.
+      - name: SSH and WSL fixture contracts
+        run: bun script/panacode-test-contract.ts --cwd packages/gui-plugins --min-pass 55 --test-timeout 60000 -- ./src/managed-cli.test.ts ./src/ssh/bootstrap.test.ts ./src/ssh/remote-cli.test.ts ./src/ssh/dialog-machine.test.ts ./src/ssh/main-machine.test.ts ./src/ssh/window-machine.test.ts ./src/wsl/local.test.ts
+
+  linux-client:
+    name: linux client service contracts (ubuntu-latest)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -31,30 +167,110 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
-      - name: Runtime isolation guard
-        run: bun script/panacode-isolation-check.ts
+      - name: Verify pinned Bun
+        run: test "$(bun --version)" = "$(node -p 'require("./package.json").packageManager.split("@")[1]')"
 
-      - name: Ownership and brand
-        run: |
-          bun script/panacode-ui-ownership-check.ts
-          bun script/panacode-brand-scan.ts
+      - name: Client registration, control channel and recovery
+        timeout-minutes: 20
+        run: bun script/panacode-test-contract.ts --cwd packages/client --min-pass 90 --max-skip 0 --test-timeout 30000 --timeout-ms 900000 -- ./test/service-probe.test.ts ./test/service-decision.test.ts ./test/service-control.test.ts ./test/service-file.test.ts ./test/service-reconnect.test.ts ./test/service-witness.test.ts ./test/service.test.ts ./test/promise-service.test.ts ./test/service-contender-pool.test.ts
 
-      - name: Product environment contract
-        working-directory: packages/util
-        run: bun test test/product-env.test.ts
+  linux-cli:
+    name: linux cli contracts (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
 
-      - name: Legacy project config allowlist
-        working-directory: packages/core
-        run: bun test test/config/discovery.test.ts test/config/config.test.ts test/config/watch.test.ts
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
 
-      - name: CLI registration and manual updates
-        working-directory: packages/cli
-        run: bun test test/updater-isolation.test.ts test/env.test.ts
+      - name: Verify pinned Bun
+        run: test "$(bun --version)" = "$(node -p 'require("./package.json").packageManager.split("@")[1]')"
 
-      - name: Client service identity
-        working-directory: packages/client
-        run: bun test test/service-probe.test.ts test/service-decision.test.ts
+      - name: CLI ownership, shell preservation and manual updates
+        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 55 --max-skip 1 --test-timeout 30000 -- ./test/updater-isolation.test.ts ./test/env.test.ts ./test/shell-config.test.ts ./test/install-shell.test.ts ./test/uninstall.test.ts ./test/service-witness.test.ts
 
-      - name: Desktop sidecar names and installer metadata
-        working-directory: packages/desktop
-        run: bun test script/electron-builder.config.test.ts src/main/service/desktop-cli-state.test.ts src/main/service/cli-stages.test.ts src/main/native/logging-machine.test.ts
+      - name: Database path foreign-root and alias guard
+        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 18 --max-skip 1 -- ./test/database-path.test.ts
+
+      - name: Real service lifecycle
+        timeout-minutes: 20
+        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 7 --max-skip 0 --test-timeout 120000 --timeout-ms 900000 -- ./test/service-lifecycle.test.ts
+
+      - name: Service, debug and upgrade contracts
+        timeout-minutes: 20
+        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 50 --max-skip 3 --test-timeout 30000 --timeout-ms 900000 -- ./test/service.test.ts ./test/server-connection.test.ts ./test/debug-config.test.ts ./test/debug-heap-dump.test.ts ./test/upgrade.test.ts
+
+  windows-acceptance:
+    name: windows acceptance (windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Verify pinned Bun
+        run: test "$(bun --version)" = "$(node -p 'require("./package.json").packageManager.split("@")[1]')"
+
+      # Detached service fixture: the suite observes processes through
+      # Get-CimInstance Win32_Process with the fixture's exact entry path and creation time,
+      # and disposal only signals processes that still match both.
+      - name: Real service lifecycle (Windows service processes)
+        timeout-minutes: 20
+        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 7 --max-skip 0 --test-timeout 120000 --timeout-ms 900000 -- ./test/service-lifecycle.test.ts
+
+      - name: Database path junction, alias and sidecar guard
+        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 19 --max-skip 1 -- ./test/database-path.test.ts
+
+      - name: Live foreign PID and PTY witness
+        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 2 --max-skip 0 -- ./test/service-witness.test.ts
+
+      - name: Foreign shell profile preservation
+        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 5 --max-skip 0 -- ./test/uninstall.test.ts
+
+      - name: Shell installer block and cleanup contract
+        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 36 --max-skip 1 -- ./test/shell-config.test.ts ./test/install-shell.test.ts
+
+      - name: Service, updater and environment contracts
+        timeout-minutes: 20
+        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 60 --max-skip 3 --test-timeout 30000 --timeout-ms 900000 -- ./test/service.test.ts ./test/server-connection.test.ts ./test/debug-config.test.ts ./test/debug-heap-dump.test.ts ./test/upgrade.test.ts ./test/updater-isolation.test.ts ./test/env.test.ts
+
+      - name: Support ZIP private-data exclusion
+        run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 18 --max-skip 0 -- ./src/main/native/support-archive.test.ts ./src/main/lifecycle/deep-link.test.ts
+
+      - name: Persistent PTY resolver, digest and handoff
+        run: bun script/panacode-test-contract.ts --cwd packages/core --min-pass 40 --max-skip 2 --test-timeout 30000 -- ./test/persistent-pty-binary.test.ts ./test/persistent-pty-daemon.test.ts ./test/persistent-pty-session.test.ts ./test/shell-daemon.test.ts
+
+      - name: Desktop packaging identity (electron-builder.config.test.ts)
+        run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 8 -- ./electron-builder.config.test.ts
+
+      - name: Desktop CLI staging and installer metadata
+        run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 10 -- ./electron.vite.config.test.ts ./script/utils.test.ts
+
+      - name: Desktop identity, state root and service contracts
+        run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 75 -- ./src/main/lifecycle/configure.test.ts ./src/main/service/desktop-cli-state.test.ts ./src/main/service/cli-stages.test.ts ./src/main/service/cli-service-file.test.ts ./src/main/service/sidecar-probe.test.ts ./src/main/service/cli-version.test.ts ./src/main/service/background-service-machine.test.ts ./src/main/service/state-root.test.ts ./src/main/native/logging-machine.test.ts
+
+      # This step runs alone: the client recovery fixtures use short control-channel and
+      # contender deadlines, and CPU contention from another suite makes them flaky.
+      - name: Client registration, control channel and recovery
+        timeout-minutes: 20
+        run: bun script/panacode-test-contract.ts --cwd packages/client --min-pass 88 --max-skip 2 --test-timeout 30000 --timeout-ms 900000 -- ./test/service-probe.test.ts ./test/service-decision.test.ts ./test/service-control.test.ts ./test/service-file.test.ts ./test/service-reconnect.test.ts ./test/service-witness.test.ts ./test/service.test.ts ./test/promise-service.test.ts ./test/service-contender-pool.test.ts
+
+      # Real-WSL execution is a separate acceptance row; the repeatable WSL script/install
+      # path runs through wsl/local.test.ts with Git Bash.
+      - name: SSH and WSL fixture contracts
+        run: bun script/panacode-test-contract.ts --cwd packages/gui-plugins --min-pass 55 --test-timeout 60000 -- ./src/managed-cli.test.ts ./src/ssh/bootstrap.test.ts ./src/ssh/remote-cli.test.ts ./src/ssh/dialog-machine.test.ts ./src/ssh/main-machine.test.ts ./src/ssh/window-machine.test.ts ./src/wsl/local.test.ts
+
+      # Real makensis, plugins, 7za and the production installer include. This is the NSIS
+      # executable harness, not a metadata-only test.
+      - name: NSIS installer executable harness
+        timeout-minutes: 30
+        run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 8 --max-skip 0 --test-timeout 600000 --timeout-ms 1800000 -- ./script/windows-installer.test.ts

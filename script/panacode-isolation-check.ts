@@ -7,6 +7,10 @@
  * exceptions remain: the CLI scrubs inherited passwords, and the OpenCode-hosted model provider
  * keeps its provider credential name.
  *
+ * It also rejects the three product paths that crossed the boundary before: a remote `dev/install`
+ * script, a bare `opencode-pty` executable resolved through PATH, and an upstream `@opencode/cli`
+ * artifact download. These static checks complement the behavioral tests; they do not replace them.
+ *
  *   bun script/panacode-isolation-check.ts
  */
 import path from "node:path"
@@ -45,6 +49,45 @@ for (const [directory, pattern] of roots) {
       const key = match[1]!
       if (allowed.get(relative)?.has(key)) continue
       violations.push(`${relative}: ${key}`)
+    }
+  }
+}
+
+// The exact shapes that were reintroduced before. Each rule is scoped to the product paths that
+// own it, so documentation and test fixtures elsewhere do not trip it.
+const forbidden: ReadonlyArray<{
+  readonly reason: string
+  readonly directories: ReadonlyArray<string>
+  readonly pattern: RegExp
+}> = [
+  {
+    reason: "remote dev installer",
+    directories: ["packages/cli/src", "packages/gui-plugins/src"],
+    pattern: /dev\/install/g,
+  },
+  {
+    reason: "bare persistent PTY executable name",
+    directories: ["packages/cli/src", "packages/core/src", "packages/desktop/src"],
+    pattern:
+      /(?:PANACODE_PTY_BIN\s*\|\|\s*|\b(?:spawn|which|resolveBinary|command|binary)\s*[=(]?\s*\[?\s*)["'`]opencode-pty(?:\.exe)?["'`]/g,
+  },
+  {
+    reason: "upstream CLI artifact download",
+    directories: ["packages/cli/src", "packages/desktop/script", "packages/desktop/src", "packages/gui-plugins/src"],
+    pattern:
+      /@opencode\/cli-(?:linux|darwin|windows)|downloadCliToResources|opencode\.ai\/install|github\.com\/sst\/opencode/g,
+  },
+]
+
+for (const rule of forbidden) {
+  for (const directory of rule.directories) {
+    for (const file of new Bun.Glob("**/*.{ts,tsx,js,mjs,cjs}").scanSync({ cwd: path.join(root, directory) })) {
+      if (file.includes(".test.") || file.includes(".stories.")) continue
+      if (/(?:^|\/)(?:generated|test)\//.test(file)) continue
+      const text = await Bun.file(path.join(root, directory, file)).text()
+      for (const match of text.matchAll(rule.pattern)) {
+        violations.push(`${directory}/${file}: ${rule.reason}: ${match[0]}`)
+      }
     }
   }
 }
