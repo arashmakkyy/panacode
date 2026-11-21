@@ -1,7 +1,7 @@
 export * as ServiceControl from "./service-control"
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
-import { chmod, mkdir, unlink } from "node:fs/promises"
+import { chmod, mkdir, rmdir, unlink } from "node:fs/promises"
 import { createServer, type Server, type Socket } from "node:net"
 import path from "node:path"
 import { Effect } from "effect"
@@ -41,7 +41,17 @@ export const start = (options: {
         socket.on("close", () => sockets.delete(socket))
         handle(socket, options, token)
       })
-      await listen(server, socketPath)
+      try {
+        await listen(server, socketPath)
+      } catch (error) {
+        // Another instance can remove the shared directory between `mkdir` and `listen` when its
+        // own socket was the last entry. Recreate it and retry once.
+        if (isPipe(socketPath) || !missing(error)) throw error
+        const directory = path.dirname(socketPath)
+        await mkdir(directory, { recursive: true, mode: 0o700 })
+        await chmod(directory, 0o700)
+        await listen(server, socketPath)
+      }
       if (!isPipe(socketPath)) await chmod(socketPath, 0o600)
       const state = { closed: false }
       return {
@@ -110,6 +120,10 @@ function isPipe(value: string) {
   return value.startsWith("\\\\")
 }
 
+function missing(error: unknown) {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT"
+}
+
 function listen(server: Server, socketPath: string) {
   return new Promise<void>((resolve, reject) => {
     const onError = (error: Error) => reject(error)
@@ -130,7 +144,12 @@ function close(server: Server, socketPath: string, state: { closed: boolean }, s
       state.closed = true
       for (const socket of sockets) socket.destroy()
       await new Promise<void>((resolve) => server.close(() => resolve()))
-      if (!isPipe(socketPath)) await unlink(socketPath).catch(() => undefined)
+      if (!isPipe(socketPath)) {
+        await unlink(socketPath).catch(() => undefined)
+        // Leave no empty private directory behind. It stays while another live instance still
+        // has its socket there.
+        await rmdir(path.dirname(socketPath)).catch(() => undefined)
+      }
     },
     catch: (cause) => new Error("Failed to close the local service control channel", { cause }),
   }).pipe(Effect.ignore)
