@@ -1,0 +1,60 @@
+name: panacode-isolation
+
+# Guards the Panacode/OpenCode boundary: PANACODE_* only, branded sidecars, a read-only legacy
+# config allowlist, and no upstream update feed. Manual dispatch builds no artifacts and publishes
+# nothing; releases stay in panacode-windows.yml.
+on:
+  pull_request:
+    branches: ["panacode/redesign-v2"]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: panacode-isolation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  isolation:
+    name: runtime isolation
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Runtime isolation guard
+        run: bun script/panacode-isolation-check.ts
+
+      - name: Ownership and brand
+        run: |
+          bun script/panacode-ui-ownership-check.ts
+          bun script/panacode-brand-scan.ts
+
+      - name: Product environment contract
+        working-directory: packages/util
+        run: bun test test/product-env.test.ts
+
+      - name: Legacy project config allowlist
+        working-directory: packages/core
+        run: bun test test/config/discovery.test.ts test/config/config.test.ts test/config/watch.test.ts
+
+      - name: CLI registration and manual updates
+        working-directory: packages/cli
+        run: bun test test/updater-isolation.test.ts test/env.test.ts
+
+      - name: Client service identity
+        working-directory: packages/client
+        run: bun test test/service-probe.test.ts test/service-decision.test.ts
+
+      - name: Desktop sidecar names and installer metadata
+        working-directory: packages/desktop
+        run: bun test script/electron-builder.config.test.ts src/main/service/desktop-cli-state.test.ts src/main/service/cli-stages.test.ts src/main/native/logging-machine.test.ts
