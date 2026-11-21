@@ -2,6 +2,7 @@
 
 **وضعیت سند:** پیش‌نویس بازسازی‌شده؛ نیازمند تأیید صاحب محصول (Arash Makki). بخش ۲ تا ۷ از درخواست‌ها و تأییدهای صریح Arash گرفته شده‌اند؛ مواردی که فقط «رفتار مشاهده‌شده» یا «استنباط» هستند، همان‌جا علامت خورده‌اند.
 **تاریخ بازسازی:** 2026-11-18
+**بازبینی:** 2026-11-21 — شاخهٔ `isolation-fixes` از `9618e4d5ac`؛ D-020 مالکیت نصب، ریشهٔ داده، provenance باینری PTY و پذیرش ویندوز را دقیق‌تر کرد.
 **مبنای بررسی:** شاخهٔ `panacode/redesign-v2` در `arashmakkyy/panacode` @ `07b4ccaa8a`؛ `PANACODE.md`؛ `panacode-docs/redesign/PROMPT.md` (مشخصات اصلی بازطراحی)؛ `panacode-docs/UPSTREAM-MERGE.md`؛ `panacode-docs/redesign/AUDIT-2026-11-18.md`؛ `packages/panacode-ui/src/brand/README.md`؛ بررسی پک Arc (فایل‌های Pro در `uiarc-pro-markdowns/` و کدهای Free در `uiarc-free-code/` روی box)؛ گفت‌وگوهای Arash با Agent تا 2026-11-18.
 **محدودیت شناخت:** PRD رسمیِ جداگانه‌ای برای Panacode پیدا نشد؛ این سند از شواهد بالا بازسازی شده است. مشخصات کامل و تأییدشدهٔ بازطراحی UI در `redesign/PROMPT.md` است و این‌جا تکرار نمی‌شود. پک Arc و پروژه‌های مرجع React فقط روی box ایجنت (و کپی مرجع‌ها در `panacode-docs/redesign/reference/`) هستند.
 
@@ -42,6 +43,9 @@
 - همهٔ قابلیت‌های موجود OpenCode باید با طراحی جدید **کار کنند** (PROMPT §12).
 - ارائه‌دهنده: فقط PanaAI (`panaai`)، base URL `https://panaai-psi.vercel.app/v1` (موقت)، مدل‌ها پویا از `GET /v1/models`، فعلاً `stream: false` (جزئیات در `PANACODE.md`).
 - جداسازی کامل از OpenCode: مسیرهای `~/.panacode`، XDG `…/panacode`، `.panacode/`، `panacode.json(c)`، باینری `panacode`، متغیرهای `PANACODE_*`؛ app id ویندوز `ai.panacode.desktop`، پروتکل `panacode://`. نصب Panacode هرگز تنظیمات/تاریخچهٔ OpenCode را دست نمی‌زند.
+- **مالکیت نصب ویندوز:** نصب/حذف فقط فایل‌هایی را برمی‌دارد که manifest نصب (`.panacode-install`) با app ID، نسخه، executable، اندازه و مسیر نسبی تأیید می‌کند. نصب pre-manifest مشترک فقط برای تصمیم مکان/مهاجرت شناسایی می‌شود و فایل/process آن حذف یا متوقف نمی‌شود؛ uninstaller قدیمی هرگز اجرا نمی‌شود. اگر مالکیت ثابت نشود، حذف متوقف می‌شود.
+- **ریشهٔ داده و باینری:** مسیر SQLite و جانبی‌های آن نباید از طریق junction/hard link یا containment به ریشهٔ برنامهٔ دیگر برسند؛ مسیر خارجی، link شکسته و فایل با `nlink > 1` رد می‌شود. باینری PTY فقط مسیر مطلق، فایل معمولی و digest-verified است و هیچ نامی از PATH اجرا نمی‌شود.
+- **آرشیو پشتیبانی:** ZIP فقط `manifest.json` و `diagnostics.jsonl` ساختاریافته دارد؛ لاگ خام، dump، NetLog، مسیر مطلق کاربر و URL کامل deep link/auth خارج می‌شوند.
 - هر کامپوننت مرجع/Arc **کامل** منتقل می‌شود (مثلاً AI Chat یعنی کل چت، model picker، thinking، sources، versions، actions و motion)، و به **state واقعی** وصل است (adapterها)، نه دادهٔ نمونه.
 - کامپوننت‌های Pro مورد نیاز و جای دقیقشان: `status.md` → «کامپوننت‌های Pro در انتظار ساخت».
 
@@ -68,6 +72,7 @@
 - معیارهای کامل فاز ۱ و ۲: PROMPT §8، §12، §13 و §15.
 - هر مرحله: اجرای اپ، تست end-to-end، اسکرین‌شات و ویدیو برای Arash و **تأیید صریح او** پیش از رفتن به مرحلهٔ بعد.
 - در هیچ اسکرین‌شات، ویدیو یا لاگی کلید API نمایش داده نشود.
+- **پذیرش ویندوز:** نصب‌کننده روی VM تعاملی ویندوز x64 در یک snapshot تازه، از cold/warm launch تا هم‌زیستی با OpenCode، upgrade از r10، تداخل پورت، reinstall/uninstall، مسیرهای نصب/junction و Export Logs بررسی می‌شود (A–G در `status.md`). build موفق یا unit test جای این پذیرش را نمی‌گیرد.
 - هیچ «OpenCode» قابل‌مشاهده، هیچ متن فارسی، هیچ دادهٔ دمو.
 
 ## ۸. فرض‌ها، موارد نامعلوم و نیازمند تأیید

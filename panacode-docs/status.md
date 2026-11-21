@@ -1,14 +1,15 @@
 # وضعیت پروژه — Panacode
-آخرین به‌روزرسانی: 2026-11-18 (21:50 PT)
+آخرین به‌روزرسانی: 2026-11-21 (08:15 PT)
 
 ## تصویر فعلی
-- **کدنویسی بازطراحی متوقف است.** آخرین commit بازطراحی: `07b4ccaa8a` (feat(shortcut-recorder)) روی `panacode/redesign-v2` در `arashmakkyy/panacode`. به دستور Arash فقط دو رفع کوچک بعد از آن push شد: پورت سرویس جدا از OpenCode (`afae032e9a`، D-016) و حذف updater دسکتاپ OpenCode (`31d5c44587`، D-017). هنوز در هیچ exe نیستند؛ بیلد r10 را Arash از Actions می‌زند (T-013). پورت Freeهای باقی‌مانده تمام نشده است (T-001). طبق D-015 تست جدید هم تا دستور Arash اجرا نمی‌شود.
+- **بازبینی جداسازی (شاخهٔ `isolation-fixes`):** ۱۵ commit از `9618e4d5ac` (نوک `panacode-isolation`) در همین worktree — ۱۴ commit کد/تست و یک commit مستندات؛ هیچ push، PR یا انتشار انجام نشده. هر یافتهٔ P0/P1/P2 با تست رفتاری که روی کد قدیم شکست می‌خورد، نوع واقعی فراخوان و اصلاح حداقلی پوشش داده شد. تست‌ها با Bun `1.4.4` از پوشهٔ هر package اجرا شدند. artifact کاندید (CLI + installer) ساخته شد، اما پذیرش A–G روی EXE نصب‌شده اجرا نشده است (T-019).
+- **کدنویسی بازطراحی متوقف است.** آخرین commit بازطراحی: `07b4ccaa8a` (feat(shortcut-recorder)) روی `panacode/redesign-v2` در `arashmakkyy/panacode`. رفع‌های D-016، D-017 و D-018 و بازبینی جداسازی هنوز در هیچ exe منتشرشده‌ای نیستند؛ بیلد بعدی (r11) باید پس از merge یا از همین شاخه ساخته شود (T-013). پورت Freeهای باقی‌مانده تمام نشده است (T-001).
 - **هر ۸ مرجع Arc منتقل و به state واقعی وصل شده‌اند** (کد commit شده؛ تأیید نهایی Arash هنوز نگرفته): Tool Call (`bc7350a7dd`)، Agent Approvals (`64afda0f07`)، Code Suggestion (`c547400640`)، AI Chat (`836bdc2d7f`)، AI Composer (`f409be2deb`، `77039b49c7`، `935d91ff84`)، Agent Run (`e1cd0362a5`)، Agent Orchestrator (`a3edd8ba63`)، MCP Servers (`975cc3c659`).
 - **پایه:** برند Firouzeh (موقت، قابل تعویض؛ `0f11cd5a05`)، shell با سایدبار ورک‌اسپیس و تاپ‌بار باریک (`c18a6764d7`، `a713a9a323`)، آیکون‌های lucide (`ca80b6487b`)، motion با springهای Arc (`8f35c335a2`)، PanaAI spotlight در Providers (`153f43a020`)، اصلاح dark mode و brand-scan در CI.
 - **Freeهای پورت‌شده (commit شده):** command-palette، dropdown/context menu، toast-stack، tooltip، dialog، search-field، tabs، theme-switch، card، select، resizable-panels، hover-card، shortcut-recorder. switch و segmented-control از قبل primitive دارند (وفاداری به Free پک بازبینی نشده).
 - **کامپوننت‌های Pro:** ۱۷ مورد در انتظار ساخت توسط Arash — بخش «کامپوننت‌های Pro در انتظار ساخت» در پایین (T-008).
-- مبنای بررسی: `origin/panacode/redesign-v2` @ `07b4ccaa8a`؛ در worktree کدنویس (`/workspace/pc-audit` روی box) یک تغییر commit‌نشده هست: `packages/gui-plugins/src/context/tab.tsx` (محتوا بررسی نشده).
-- سطح بررسی: این بازسازی از Git، کد، اسناد و گفت‌وگوها انجام شد؛ هیچ تستی در آن اجرا نشد. آخرین QA خودکار ثبت‌شده (harness روی box: Electron + Playwright + ffmpeg، بک‌اند واقعی) در 2026-11-18 حدود 08:35 PT روی `6b1d24a9ec`: ۸۹ گام، ۰ خطا، thinking و پاسخ چت دیده شد. commitهای بعد از آن (`d3274184b5` تا `07b4ccaa8a`) تست نشده‌اند؛ هیچ نسخه‌ای هنوز تأیید Arash را ندارد.
+- مبنای بررسی: `isolation-fixes` (پایه `9618e4d5ac`، head نهایی در تاریخچهٔ 2026-11-21) و `origin/panacode/redesign-v2` @ `07b4ccaa8a`. artifact کاندید از working tree معادل `90c282c11b` ساخته شد؛ CLI `0.0.0-prod-202611211535` از `97858ae392`.
+- سطح بررسی: این بازبینی تست‌های واقعی Bun 1.4.4، typecheck، oxlint، AST/SDK docs و harness واقعی NSIS را اجرا کرد؛ remote CI و نصب واقعی EXE اجرا نشدند. آخرین QA خودکار ثبت‌شده (Electron + Playwright + ffmpeg، بک‌اند واقعی) در 2026-11-18 حدود 08:35 PT روی `6b1d24a9ec` بود: ۸۹ گام، ۰ خطا؛ commitهای بعدی هنوز تأیید بصری Arash را ندارند.
 
 ## کارهای باز
 | تسک | هدف و شرط پایان | وضعیت | پیشرفت / مانع / اقدام باقی‌مانده |
@@ -26,10 +27,50 @@
 | T-011 | تأیید PRD بازسازی‌شده توسط Arash | منتظر بررسی | `PRD.md` پیش‌نویس است. |
 | T-013 | بیلد Windows با رفع‌های D-016، D-017 و D-018 | منتظر بررسی | r10 (`44461403354`، از `be0ba6cbd1`) ساخته شد ولی بعد از ۴ دقیقه timeout سرویس داد (علت: D-018). رفع در `21058b3855`؛ بیلد بعدی (مثلاً r11) را باید اجرا کرد. Agent بیلد/QA نمی‌زند (D-015). بعد از نصب: Panacode کنار OpenCode باز شود و هیچ‌جا «Update to …» دیده نشود. اگر سرور یتیم r10 (`opencode-cli.exe`) هنوز در Task Manager باشد، نسخهٔ جدید باید خودش آن را جایگزین کند. |
 | T-014 | نمایش نسخهٔ خود Panacode | در صف | صفحهٔ خطا «Version: 2.3.0» نشان می‌دهد: نسخهٔ `package.json` upstream (OpenCode 2.3.0). Panacode شمارهٔ نسخهٔ جدا ندارد و ریلیزها فقط برچسب rN دارند. رفع ساده و امن پیدا نشد: نسخه با نسخهٔ CLI سرویس مقایسه می‌شود (`cli-version.ts`) و workflow از `dev` اجرا می‌شود. پیشنهاد: یک ثابت build-time مثل `PANACODE_RELEASE` که workflow تزریق کند و فقط در UI نمایش داده شود. نیازمند تصمیم Arash. |
+| T-018 | رفع ۱۳ یافتهٔ بازبینی جداسازی و اثبات رفتاری هرکدام | منتظر بررسی | ۱۴ commit کد/تست روی `isolation-fixes` (شامل رفع باگ واقعی packaging در `90c282c11b`)؛ تست‌های هدفمند/گروه‌های CI، typecheck، oxlint، AST/SDK docs و NSIS واقعی سبز؛ installer واقعی ساخته و hash شد. جزئیات و محدودیت‌ها در تاریخچهٔ 2026-11-21. |
+| T-019 | پذیرش ویندوز نصب‌شده A–G روی VM تعاملی | مسدود | VM/runner تعاملی ویندوز x64 با snapshot تازه و OpenCode نصب‌شده در دسترس نیست. دستور اجرا، شناسهٔ کاندید و شواهد لازم در بخش «پذیرش ویندوز نصب‌شده (A–G)» آمده است. |
+
+## پذیرش ویندوز نصب‌شده (A–G)
+
+**وضعیت:** مسدود — این محیط VM/runner تعاملی ویندوز x64 با snapshot تازه ندارد. هیچ نتیجه‌ای از A–G ادعا نمی‌شود؛ فقط دستور اجرا و شناسهٔ کاندید ثبت شده است. **build موفق یا unit test جای این بخش را نمی‌گیرد.**
+
+**کاندید:** commit `90c282c11b`؛ CLI `0.0.0-prod-202611211535`؛ CLI SHA-256 `D5C3E052B9D3345C8D13787CC249E4A34675D70900C10EFE5E9D225B30DAA0AB`؛ installer `panacode-desktop-win-x64.exe` با SHA-256 `DC3B624CA4E82BDE390E4417F4E46ED9434422908115B55F5B9A58461E54F93D` (۲۶۷٬۶۴۸٬۷۳۰ بایت، `NotSigned`).
+
+**قاعدهٔ ایمنی:** فقط روی VM دورریختنی با snapshot پایه؛ پروفایل، registry، shell config و processهای میزبان واقعی دست‌کاری نشوند. پس از هر گام، snapshot یا فایل fixture پاک شود.
+
+1. **A — نصب و راه‌اندازی در محیط تازه:** در snapshot با OpenCode نصب‌شده (اما بسته) candidate را نصب کن. `Get-FileHash .\panacode-desktop-win-x64.exe -Algorithm SHA256` را ثبت کن. زمان تا پنجرهٔ آماده را با stopwatch بگیر (cold)، از منو خارج و دوباره باز کن (warm). سپس:
+   ```powershell
+   Invoke-RestMethod http://127.0.0.1:28844/api/info | ConvertTo-Json -Depth 4
+   Get-ChildItem "$env:USERPROFILE\.local\state\panacode\service*.json" | ForEach-Object {
+     $j = Get-Content $_.FullName -Raw | ConvertFrom-Json
+     [pscustomobject]@{ file=$_.Name; product=$j.product; version=$j.version; url=$j.url; pid=$j.pid }
+   }
+   Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -like '*ai.panacode.desktop*' } |
+     Select-Object ProcessId,Name,ExecutablePath,CreationDate
+   ```
+   شرط PASS: `product=panacode`، `url` روی loopback/پورت Panacode، PID زنده، و restart یک instance جدید بدهد؛ هیچ credential در خروجی چاپ نشود (فقط فیلدهای بالا).
+2. **B — هم‌زیستی با OpenCode:** OpenCode را باز و یک session/terminal با marker (`echo PANACODE_MARKER`) بساز. Panacode را باز کن، همان marker را در terminal خودش بساز، برنامه را ببند/باز کن و اتصال/restart را ببین. سپس `panacode service restart` را اجرا و marker را دوباره بخوان. همین را از سمت OpenCode تکرار کن. شرط PASS: دو محصول هم‌زمان، پورت/PID جدا، هیچ terminal یا session به محصول دیگر attach نشود، و هیچ process OpenCode متوقف/جایگزین نشود. PID/port هر دو در جدول شواهد ثبت شود.
+3. **C — upgrade از r10:** snapshot با r10 و service ثبت‌شده (از جمله registration کهنه). candidate را روی آن نصب کن. شرط PASS: registration قدیمی Panacode به‌صورت مالکانه replace شود، UI برند Panacode را نشان دهد (نمایش شمارهٔ نسخه هنوز T-014 است) و هیچ «Update to …» یا feed OpenCode دیده نشود؛ فایل‌ها/processهای OpenCode دست‌نخورده بمانند و sessionهای Panacode مطابق انتظار باقی بمانند. اگر registration 404/incompatible باشد، candidate باید خطای روشن بدهد و contender جدید نسازد.
+4. **D — تداخل پورت:** Panacode را ببند؛ یک listener fixture روی 28844 بگیر:
+   ```powershell
+   $l = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 28844); $l.Start()
+   ```
+   candidate را باز کن و خطای روشن (نام/پورت/PID دارنده) را ثبت کن؛ هیچ takeover خاموشی نباید رخ دهد. listener را ببند، برنامه را باز کن، سپس:
+   ```powershell
+   panacode service set port 28845
+   panacode service restart
+   Invoke-RestMethod http://127.0.0.1:28845/api/info | ConvertTo-Json -Depth 4
+   ```
+   برنامه را ببند/باز کن و ببین پورت ذخیره‌شده حفظ می‌شود. در پایان در صورت نیاز پورت را برگردان.
+5. **E — reinstall/uninstall:** همان نسخه را دوباره نصب کن. سپس `panacode uninstall --dry-run` و بعد uninstall واقعی (یا از Settings) را اجرا کن. شرط PASS: OpenCode همچنان اجرا می‌شود و config/session/registry/PATH آن بایت‌به‌بایت سالم است؛ فقط فایل‌های Panacode حذف می‌شوند؛ session/config/state پن‌کد باقی می‌مانند و cache پاک می‌شود؛ reinstall داده‌ها را برمی‌گرداند. هیچ uninstaller قدیمی اجرا نمی‌شود.
+6. **F — نصب کامل، ACL، marker و junction:** در `%LOCALAPPDATA%\Programs\ai.panacode.desktop` وجود `.panacode-install` و محتوای آن (`header`، `appId`، `version`، `exe` و لیست فایل‌ها) را ثبت کن. `icacls` دسترسی RX app-container را نشان دهد. یک فایل ناشناس و یک junction کنار/داخل مسیر نصب بساز؛ uninstall باید فقط فایل‌های manifest را حذف کند، فایل ناشناس/junction را دست نزند و در نبود مالکیت متوقف شود. نصب upgrade باید `.old`/stage را پاک کند و هیچ پوشهٔ نیمه‌کاره باقی نگذارد. hash فایل‌های نصب‌شده (`Panacode.exe`، `resources\panacode-cli.exe`) ثبت شود.
+7. **G — Export Logs و ZIP:** در command palette (`Ctrl+K`) «Export Logs…» را اجرا کن، در حالی که یک marker ساختگی در `main.log`/`server.log`، یک `dump.dmp` و یک deep link با `token=AUTH_MARKER#COOKIE_MARKER` وجود دارد. ZIP را با `Expand-Archive` باز کن. شرط PASS: فقط `manifest.json` و `diagnostics.jsonl`؛ هیچ marker، URL کامل، مسیر `C:\Users\...`، dump یا NetLog در هیچ member نیست؛ فیلدهای diagnostics فقط allowlist باشند. SHA-256 ZIP و اندازهٔ آن ثبت شود.
+
+**شواهد لازم برای هر گام:** تاریخ/ساعت PT، فرمان یا فایل شاهد، خروجی کوتاه، PID/port، و PASS/FAIL/BLOCKED. اگر گامی اجرا نشد، همان BLOCKED با دلیل واقعی ثبت شود؛ نتیجهٔ گام دیگر به آن تعمیم داده نشود.
 
 ## ادامه از اینجا
-- قدم بعدی: منتظر دستور Arash بمان. اگر کدنویسی ادامه یافت → T-001 از `07b4ccaa8a`، بعد T-002/T-003، و فقط با دستور او T-004.
-- اطلاعات لازم: `redesign/PROMPT.md`، `UPSTREAM-MERGE.md`، `packages/panacode-ui/src/brand/README.md`، `redesign/RUNNING.md`؛ روی box: `/workspace/arc-pack-review.md` (نقشهٔ صفحه→Arc و پیشنهادها)، `/workspace/arc-pack/arc-ui/`، `/workspace/panacode-qa/run-qa.sh panacode/redesign-v2` (با `QA_PERMISSION=1`).
+- قدم بعدی: T-019 (پذیرش A–G روی VM تعاملی ویندوز)؛ پس از آن T-013 (بیلد r11 از شاخهٔ تأییدشده) و T-011 (تأیید PRD).
+- اطلاعات لازم: `panacode-docs/UPSTREAM-MERGE.md` §C، `panacode-docs/decisions.md` D-020، `redesign/PROMPT.md`، `UPSTREAM-MERGE.md`، `packages/panacode-ui/src/brand/README.md`، `redesign/RUNNING.md`؛ روی box (در صورت دسترسی): `/workspace/arc-pack-review.md`، `/workspace/arc-pack/arc-ui/`، `/workspace/panacode-qa/run-qa.sh panacode/redesign-v2` (با `QA_PERMISSION=1`).
 
 ## کامپوننت‌های Pro در انتظار ساخت (Arash)
 
@@ -232,3 +273,17 @@
 - بررسی: `bunx bun@1.4.4` (مطابق `packageManager`). تست‌ها: `packages/util` ۳/۳؛ `packages/client` سرویس ۳۰ پاس و `promise-service` ۱۸ پاس + ۲ skip؛ `packages/cli` `service.test.ts` ۲۹ پاس + ۳ skip، `config/retained-image/env/updater-isolation/debug-heap-dump` ۳۰ پاس، `service-lifecycle` ۷ skip؛ `packages/core` config ۵۸ پاس + ۱ skip و logging ۲ پاس؛ `packages/tui` ۱۵۷ پاس؛ `packages/simulation` ۲ پاس؛ `packages/gui-plugins` debug/ssh ۱۳ پاس؛ `packages/server` `persistent-pty` ۱ پاس + ۶ skip؛ `packages/desktop` focused ۳۱ پاس، `electron.vite.config` ۲ پاس و `windows-installer` ۲ پاس + ۲ خطای محیطی. typecheck ریشه ۳۶/۳۶ سبز شد؛ چون `packages/app/src/custom-elements.d.ts` در این checkout ویندوزی symlink نیست (`core.symlinks=false`)، برای این اجرا موقتاً با محتوای `packages/ui/src/custom-elements.d.ts` جایگزین و سپس دقیقاً به همان فایل symlink متنی بازگردانده شد (بدون diff). `bun script/panacode-isolation-check.ts`، `bun script/panacode-ui-ownership-check.ts` و `bun script/panacode-brand-scan.ts` سبزند. `bun run check` در بخش lint فقط روی ۱۷۲ تخلف از پیش موجود `services/site` (اسکریپت `script/check-greys.ts`) شکست می‌خورد؛ فایل‌های این تغییر به آن‌ها دست نزده‌اند.
 - تأیید نشده: پذیرش A–F روی ویندوز واقعی/VM تعاملی و آرتیفکت نصب‌شده اجرا نشد (D-015، T-013). تست‌های `windows-installer.test.ts` برای حالت ACL به `pwsh` و برای حالت process به ICMP/loopback سالم نیاز دارند که در این محیط نیست. `packages/cli/dist` وجود ندارد، پس `service-smoke.ts`، `catalog-smoke.ts` و بررسی باینری کامپایل‌شده اجرا نشد. Cargo/Rust نصب نیست، پس `packages/process-daemon` (نام باینری `opencode-pty` به‌عنوان مرز باینری خارجی) بازسازی/تست نشد.
 - باقی‌مانده / ارجاع: T-013 (بیلد و QA آرتیفکت ویندوز)، T-014 (نسخهٔ Panacode)، D-019. مسیر به‌روزرسانی همچنان دستی است تا فید و installer اختصاصی Panacode ساخته شود.
+
+### 2026-11-21
+#### T-018 — بازبینی جداسازی ۰۰–۱۵ و رفع یافته‌ها | منتظر بررسی
+- انجام‌شده: ۱۴ commit کد/تست روی `isolation-fixes` از `9618e4d5ac`: تأیید مالکیت/instance پیش از stop و PTY، کنترل کانال خصوصی و ثبت atomic، ریشهٔ state مشترک و boot قابل‌تشخیص (`f4638c3d57`، `bd52230bdb`)، حذف فقط fragment نصب‌کننده از shell و مالکیت package پیش از uninstall (`d90765a5a1`، `3dc905f2cf`)، staging فقط CLI محلی تأییدشده و artifact مدیریت‌شدهٔ WSL/SSH (`99854af432`، `9ff85023bd`)، manifest مالکیت نصب و حذف دقیق (`7f11a8d250`)، گارد مسیر SQLite (`58cb764372`)، PTY مطلق/digest-verified (`e8e3828fa5`)، ZIP فقط diagnostics ساختاریافته و deep-link خلاصه (`db08704f95`)، جداسازی config/auth/session/Desktop identity (`49b95a8987`)، CI/contract/Windows acceptance (`97858ae392`)، و رفع باگ واقعی packaging (`90c282c11b`). D-020 ثبت شد و `UPSTREAM-MERGE.md` §C به‌روزرسانی شد.
+- باگ packaging و رفع: نخستین بیلد واقعی installer نشان داد `writeInstallManifest` در hook `afterPack` با `Bun.write` نوشته شده بود، اما electron-builder آن را در runtime خودش (Node) اجرا می‌کند؛ پس هر بسته‌بندی واقعی با `ReferenceError: Bun is not defined` می‌شکست. `utils.ts` به `writeFile` منتقل شد و تست regression با spawn واقعی `node` + jiti همین تابع را بدون Bun اجرا می‌کند؛ proof قرمز قبلی همان ReferenceError را گرفت. utils suite: ۱۱ pass / ۰ fail / ۵۴ expect؛ oxlint صفر. بیلد بعدی علاوه بر NSIS، installer کامل Electron را تولید کرد.
+- بررسی: Bun `1.4.4`؛ گروه‌های واقعی CI روی ویندوز: lifecycle ۷/۰، database ۱۹/۱ skip، witness ۲/۰، uninstall ۵/۰، shell ۳۷/۱، cli-service ۶۷/۳، support ZIP ۱۸/۰، PTY ۴۲/۲، electron-builder ۱۰/۰، staging ۱۲/۰، desktop service ۸۰/۰، client ۹۲/۲، GUI ۵۹/۰، NSIS ۸/۰ (۲۲.۶ ثانیه). typecheck پکیج‌های core/util/CLI/desktop/client/server/protocol/gui-plugins سبز؛ oxlint ۰ یافته؛ AST/SDK docs سبز؛ `script/panacode-isolation-check.ts` با سه گارد جدید و red/green probe سبز؛ harness واقعی NSIS با makensis/7za سبز. جزئیات تست هر تسک در گزارش موقت بازبینی و تاریخچهٔ commitهاست.
+- artifact: CLI `0.0.0-prod-202611211535` با SHA-256 `D5C3E052B9D3345C8D13787CC249E4A34675D70900C10EFE5E9D225B30DAA0AB`؛ installer `panacode-desktop-win-x64.exe` با SHA-256 `DC3B624CA4E82BDE390E4417F4E46ED9434422908115B55F5B9A58461E54F93D` (۲۶۷٬۶۴۸٬۷۳۰ بایت، `NotSigned`؛ ساخته‌شده از working tree معادل `90c282c11b`). bundled CLI داخل `win-unpacked` همان hash منبع را دارد و `verify-cli-provenance.ts` سبز است.
+- محدودیت: remote CI اجرا/مشاهده نشد (dispatch/push مجاز نبود)؛ پذیرش A–G روی EXE نصب‌شده مسدود است (T-019)؛ Node SEA prelude فقط typecheck/review شد؛ WSL واقعی (VHDX گمشده) و Rust/process-daemon در دسترس نیستند؛ root `bun run check` فقط روی ۱۷۲ تخلف از پیش موجود `services/site` شکست می‌خورد.
+- باقی‌مانده / ارجاع: T-019، T-013، T-011؛ D-020.
+
+#### T-019 — پذیرش ویندوز نصب‌شده A–G | مسدود
+- انجام‌شده: runbook دقیق A–G، دستورهای PowerShell/CLI، شناسهٔ کاندید و جدول شواهد در همین فایل ثبت شد (بخش «پذیرش ویندوز نصب‌شده (A–G)»).
+- بررسی: اجرا نشد. این محیط VM/runner تعاملی ویندوز x64 با snapshot تازه و OpenCode نصب‌شده ندارد؛ هیچ PASS یا FAIL برای A–G ثبت نمی‌شود.
+- باقی‌مانده / ارجاع: اجرای A–G روی VM دورریختنی؛ سپس به‌روزرسانی همین بخش با hash، PID/port، خروجی و نتیجهٔ هر گام.
