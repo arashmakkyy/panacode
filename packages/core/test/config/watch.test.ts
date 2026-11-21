@@ -10,6 +10,7 @@ const root = AbsolutePath.make(path.join(project, ".panacode"))
 const sources: ConfigDiscovery.Sources = {
   direct: ["panacode.json", "panacode.jsonc"].map((name) => AbsolutePath.make(path.join(project, name))),
   project: [{ path: root, present: false }],
+  legacy: [],
   claude: [AbsolutePath.make(path.join(project, ".claude"))],
   agents: [AbsolutePath.make(path.join(project, ".agents"))],
 }

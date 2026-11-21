@@ -127,6 +127,36 @@ describe("ConfigDiscovery.discover", () => {
     ),
   )
 
+  it.live("discovers legacy OpenCode project config separately from Panacode sources", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const root = yield* Effect.promise(() => fs.realpath(tmp.path))
+          const project = path.join(root, "project")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(project, ".opencode"), { recursive: true })
+            await fs.mkdir(path.join(project, ".panacode"), { recursive: true })
+            await fs.writeFile(path.join(project, "opencode.json"), "{}")
+            await fs.writeFile(path.join(project, ".opencode", "opencode.json"), "{}")
+            await fs.writeFile(path.join(project, "panacode.json"), "{}")
+          })
+
+          const sources = yield* discoverWith(root, project, project)
+          const direct = sources.direct.filter((item) => inFixture(project, item)).map((item) => path.relative(project, item))
+          expect(direct).toEqual(["panacode.json", "panacode.jsonc"])
+          expect(sources.project).toContainEqual({
+            path: AbsolutePath.make(path.join(project, ".panacode")),
+            present: true,
+          })
+          expect(sources.legacy.map((item) => path.relative(project, item))).toEqual([
+            "opencode.json",
+            path.join(".opencode", "opencode.json"),
+          ])
+        }),
+      ),
+    ),
+  )
+
   it.live("probes candidates when readDirectory reports a differently cased entry", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>

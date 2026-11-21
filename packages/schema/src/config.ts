@@ -125,6 +125,8 @@ export class Document extends Schema.Class<Document>("Config.Document")({
   type: Schema.Literal("document"),
   path: AbsolutePath.pipe(optional),
   info: Info,
+  /** Read-only OpenCode compatibility source; only allowlisted fields cross the product boundary. */
+  legacy: optional(Schema.Boolean),
 }) {}
 
 export class Directory extends Schema.Class<Directory>("Config.Directory")({

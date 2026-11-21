@@ -179,6 +179,26 @@ export const layer = (options?: Options) =>
         return new Document({ type: "document", path: AbsolutePath.make(filepath), info })
       })
 
+      // OpenCode project config is read-only here: only `tool_output` limits cross over, and the
+      // legacy marker keeps its plugins and every other setting inert.
+      const loadLegacyFile = Effect.fnUntraced(function* (filepath: string) {
+        const text = yield* fs.readFileStringSafe(filepath)
+        if (text === undefined) return
+        const errors: ParseError[] = []
+        const input: unknown = parse(text, errors, { allowTrailingComma: true })
+        if (errors.length || !input || typeof input !== "object" || Array.isArray(input)) return
+        const raw = (input as Record<string, unknown>).tool_output
+        if (raw === undefined) return
+        const tool_output = Option.getOrUndefined(Schema.decodeUnknownOption(Info.fields.tool_output)(raw))
+        if (!tool_output) return
+        return new Document({
+          type: "document",
+          path: AbsolutePath.make(filepath),
+          info: new Info({ tool_output }),
+          legacy: true,
+        })
+      })
+
       const loadWellknownEntry = Effect.fnUntraced(function* (entry: WellKnown.Entry) {
         const auth = entry.manifest.auth
         const credential = (yield* credentials.list(entry.integrationID)).at(-1)
@@ -288,15 +308,19 @@ export const layer = (options?: Options) =>
               Effect.orDie,
             )
           : []
+        const legacy = yield* Effect.forEach(sources.legacy, (filepath) => loadLegacyFile(filepath)).pipe(
+          Effect.orDie,
+          Effect.map((entries) => entries.filter((entry): entry is Document => entry !== undefined)),
+        )
         const content =
           options?.content !== undefined
             ? yield* ConfigVariable.substitute({
                 type: "virtual",
-                source: "OPENCODE_CONFIG_CONTENT",
+                source: "PANACODE_CONFIG_CONTENT",
                 dir: location.directory,
                 text: options.content,
               }).pipe(
-                Effect.flatMap((text) => parseInfo(text, "OPENCODE_CONFIG_CONTENT")),
+                Effect.flatMap((text) => parseInfo(text, "PANACODE_CONFIG_CONTENT")),
                 Effect.map((info) => (info ? [new Document({ type: "document", info })] : [])),
                 Effect.orDie,
               )
@@ -368,6 +392,7 @@ export const layer = (options?: Options) =>
           ...managedPolicies,
           ...integrated,
           ...wellknownDocuments.flat(),
+          ...legacy,
           ...globalSupplementary,
           ...explicit,
           ...direct,

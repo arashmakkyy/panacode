@@ -12,6 +12,11 @@ import type { Options } from "../config.js"
 
 export const names = [...ProductIdentity.configFiles]
 
+// OpenCode project configuration is read-only in Panacode and contributes only `tool_output`.
+export const legacyNames = ["opencode.json", "opencode.jsonc"] as const
+
+const legacyDir = ".opencode"
+
 const projectDir = ProductIdentity.projectDir
 
 /** Eligible sources in priority order, including paths that may appear later. */
@@ -23,6 +28,8 @@ export interface Sources {
   readonly explicit?: AbsolutePath
   readonly direct: readonly AbsolutePath[]
   readonly project: readonly { readonly path: AbsolutePath; readonly present: boolean }[]
+  /** Read-only OpenCode project config files, loaded below every Panacode source. */
+  readonly legacy: readonly AbsolutePath[]
   readonly claude: readonly AbsolutePath[]
   readonly agents: readonly AbsolutePath[]
 }
@@ -84,7 +91,7 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
     globalRoots.slice(0, configDirectories.length).includes(current) || options?.project === false
       ? []
       : yield* fs.up({ targets: ["."], start: location.directory }).pipe(Effect.orDie)
-  const candidates = [".claude", ".agents", projectDir, ...names.toReversed()]
+  const candidates = [".claude", ".agents", projectDir, legacyDir, ...names.toReversed(), ...legacyNames.toReversed()]
   const discovered = yield* Effect.forEach(
     directories,
     (directory) =>
@@ -146,7 +153,10 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
     global: globalEnabled ? globalDirectory : undefined,
     explicit: options?.file ? AbsolutePath.make(path.resolve(options.file)) : undefined,
     direct: visible
-      .filter((item) => ![".agents", ".claude", projectDir].includes(path.basename(item)))
+      .filter(
+        (item) =>
+          ![".agents", ".claude", projectDir, legacyDir, ...legacyNames].includes(path.basename(item)),
+      )
       .toReversed(),
     project: yield* Effect.forEach(
       visibleEntries.filter((entry) => path.basename(entry.item) === projectDir).toReversed(),
@@ -155,6 +165,22 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
           ? Effect.succeed({ path: entry.item, present: false })
           : fs.isDir(entry.item).pipe(Effect.map((present) => ({ path: entry.item, present }))),
       { concurrency: "unbounded" },
+    ),
+    legacy: yield* Effect.forEach(
+      visibleEntries
+        .filter((entry) => {
+          const name = path.basename(entry.item)
+          return name === legacyDir || (legacyNames as readonly string[]).includes(name)
+        })
+        .sort((a, b) => depth(a.item) - depth(b.item) || legacyPriority(a.item) - legacyPriority(b.item)),
+      (entry) =>
+        path.basename(entry.item) === legacyDir
+          ? Effect.succeed(legacyNames.map((name) => AbsolutePath.make(path.join(entry.item, name))))
+          : Effect.succeed([entry.item]),
+      { concurrency: "unbounded" },
+    ).pipe(
+      Effect.map((items) => items.flat()),
+      Effect.flatMap((files) => Effect.filter(files, (file) => fs.isFile(file))),
     ),
     claude:
       options?.claude === false
@@ -173,3 +199,16 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
     ],
   } satisfies Sources
 })
+
+function depth(file: string) {
+  return file.split(path.sep).length
+}
+
+// Lower priority loads first. Inside one project, `.opencode/opencode.json` overrides the
+// direct `opencode.json`, and the nearer project overrides its ancestors.
+function legacyPriority(file: string) {
+  // The `.opencode` directory is expanded to its files, so rank the directory itself below the
+  // direct file; its files then override `opencode.json` in the same project.
+  if (path.basename(file) === legacyDir) return 2
+  return (path.basename(path.dirname(file)) === legacyDir ? 2 : 0) + (path.basename(file) === "opencode.json" ? 1 : 0)
+}
