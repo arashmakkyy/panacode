@@ -14,7 +14,7 @@ const target = `cli${nodeBuild ? "-node" : ""}-${process.platform === "win32" ? 
 const directory = path.join(import.meta.dir, "..", "dist", ...(nodeBuild ? ["node"] : []), target, "bin")
 const binary = path.join(
   directory,
-  `${nodeBuild ? "opencode2-node" : "opencode"}${process.platform === "win32" ? ".exe" : ""}`,
+  `${nodeBuild ? "panacode-node" : "panacode"}${process.platform === "win32" ? ".exe" : ""}`,
 )
 if (!(await Bun.file(binary).exists())) throw new Error(`Missing compiled CLI in ${directory}`)
 
@@ -23,8 +23,8 @@ const env = {
   ...process.env,
   HOME: root,
   USERPROFILE: root,
-  OPENCODE_DB: path.join(root, "opencode.db"),
-  OPENCODE_TEST_HOME: root,
+  PANACODE_DB: path.join(root, "panacode.db"),
+  PANACODE_TEST_HOME: root,
   XDG_CACHE_HOME: path.join(root, "cache"),
   XDG_CONFIG_HOME: path.join(root, "config"),
   XDG_DATA_HOME: path.join(root, "data"),
@@ -34,7 +34,7 @@ const processes: Array<ReturnType<typeof Bun.spawn>> = []
 const errors: Array<Promise<string>> = []
 let failure: unknown
 try {
-  await fs.mkdir(path.join(root, ".opencode", "plugins"), { recursive: true })
+  await fs.mkdir(path.join(root, ".panacode", "plugins"), { recursive: true })
   spawnService()
   spawnService()
   const registration = await waitForRegistration()
@@ -56,7 +56,7 @@ try {
   if (tokenOpenApi.status !== 200) throw new Error("Compiled application rejected query authentication")
   await verifyWebUi(info.url)
   if ((await pluginIDs(info.url, headers)).includes("smoke")) throw new Error("Smoke plugin existed before creation")
-  const plugin = path.join(root, ".opencode", "plugins", "smoke.ts")
+  const plugin = path.join(root, ".panacode", "plugins", "smoke.ts")
   await fs.writeFile(plugin, pluginSource())
   await waitForPlugin(info.url, headers, plugin)
 
@@ -92,7 +92,7 @@ try {
   processes.forEach((process) => process.kill())
   await Promise.all(processes.map((process) => process.exited))
   if (failure)
-    errors.push(fs.readFile(path.join(root, "data", "opencode", "log", "opencode.log"), "utf8").catch(() => ""))
+    errors.push(serverLogs())
 }
 
 const output = await Promise.all(errors)
@@ -114,7 +114,7 @@ function spawnService() {
 }
 
 async function waitForRegistration() {
-  const directory = path.join(root, "state", "opencode")
+  const directory = path.join(root, "state", "panacode")
   for (let attempt = 0; attempt < 400; attempt++) {
     const files = await fs.readdir(directory).catch(() => [])
     const file = files.find(
@@ -182,6 +182,16 @@ function exitsWithin(process: Bun.Subprocess, milliseconds: number) {
 
 function pluginSource() {
   return 'export default { id: "smoke", setup: async () => {} }\n'
+}
+
+// Release builds write panacode.log; local builds write panacode-<channel>.log. Read whatever exists.
+async function serverLogs() {
+  const directory = path.join(root, "data", "panacode", "log")
+  const files = await fs.readdir(directory).catch(() => [])
+  const logs = await Promise.all(
+    files.filter((file) => file.endsWith(".log")).map((file) => fs.readFile(path.join(directory, file), "utf8")),
+  )
+  return logs.join("\n")
 }
 
 async function pluginIDs(url: string, headers: HeadersInit) {

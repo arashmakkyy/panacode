@@ -77,7 +77,7 @@ test("explains when the server predates heap dumps", async () => {
   using server = fake(() => new Response(null, { status: 404 }))
 
   const result = await cli(root.path, ["debug", "heap-dump", "--server", server.url.href], {
-    OPENCODE_PASSWORD: "secret",
+    PANACODE_PASSWORD: "secret",
   })
 
   expect(result.stderr.trim()).toBe(

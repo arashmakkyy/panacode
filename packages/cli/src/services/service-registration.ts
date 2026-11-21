@@ -23,6 +23,7 @@ export const register = Effect.fnUntraced(function* (options: {
   yield* fs.makeDirectory(path.dirname(options.file), { recursive: true })
   const info = {
     id: options.id,
+    product: "panacode" as const,
     version: OPENCODE_VERSION,
     url: HttpServer.formatAddress(options.address),
     pid: process.pid,

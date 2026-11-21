@@ -95,9 +95,9 @@ export default Runtime.handler(Commands, (input) =>
     const service = server.service
     yield* run({
       app: {
-        name: process.env.OPENCODE_CLIENT ?? OPENCODE_ARTIFACT,
+        name: process.env.PANACODE_CLIENT ?? OPENCODE_ARTIFACT,
         version: OPENCODE_VERSION,
-        channel: process.env.OPENCODE_TUI_CHANNEL ?? OPENCODE_CHANNEL,
+        channel: process.env.PANACODE_TUI_CHANNEL ?? OPENCODE_CHANNEL,
         highlights: OPENCODE_HIGHLIGHTS,
       },
       server: {

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import "./product-env-bootstrap"
+import "./env-bootstrap"
 import { ensurePluginRuntime } from "@opencode/plugin/runtime"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Cause, Effect } from "effect"
@@ -35,7 +35,7 @@ process.env.no_proxy = noProxy
 
 ensurePluginRuntime()
 
-if (process.env.OPENCODE_SSH_ASKPASS_PORT) {
+if (process.env.PANACODE_SSH_ASKPASS_PORT) {
   const { askpass } = await import("./ssh-askpass")
   process.exit(await Effect.runPromise(askpass.pipe(Effect.provide(NodeServices.layer))))
 }
@@ -143,7 +143,7 @@ Effect.gen(function* () {
     LayerNode.compile(LayerNode.group([Global.node, AppProcess.node, Npm.node, EffectFlock.node]), {
       replacements: [
         Global.node.replace(
-          Global.layerWith(process.env.OPENCODE_CONFIG_DIR ? { config: process.env.OPENCODE_CONFIG_DIR } : {}),
+          Global.layerWith(process.env.PANACODE_CONFIG_DIR ? { config: process.env.PANACODE_CONFIG_DIR } : {}),
         ),
       ],
     }),
@@ -152,7 +152,7 @@ Effect.gen(function* () {
     Observability.layer({
       endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
       headers: process.env.OTEL_EXPORTER_OTLP_HEADERS,
-      client: process.env.OPENCODE_CLIENT ?? OPENCODE_ARTIFACT,
+      client: process.env.PANACODE_CLIENT ?? OPENCODE_ARTIFACT,
       version: OPENCODE_VERSION,
       channel: OPENCODE_CHANNEL,
     }),

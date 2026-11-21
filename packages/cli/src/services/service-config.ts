@@ -1,4 +1,5 @@
 import { Global } from "@opencode/util/global"
+import { ProductIdentity } from "@opencode/util/product-identity"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../version"
 import { Hash } from "@opencode/util/hash"
 import { Service } from "@opencode/client/effect/service"
@@ -152,7 +153,11 @@ const paths = Effect.gen(function* () {
 export function processEnv(env: Info["env"]) {
   if (env === undefined) return undefined
   const { XDG_STATE_HOME: _state, ...rest } = env
-  return rest
+  // A saved service environment is Panacode's own. Drop upstream runtime overrides so a value
+  // persisted by an older build cannot move the service back onto OpenCode's paths or credentials.
+  return Object.fromEntries(
+    Object.entries(rest).filter(([key]) => !key.toUpperCase().startsWith(`${ProductIdentity.upstreamEnvPrefix}_`)),
+  )
 }
 
 export const options = Effect.fnUntraced(function* (input: { readonly checkVersion?: boolean } = {}) {

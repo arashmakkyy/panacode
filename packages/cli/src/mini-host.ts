@@ -47,7 +47,7 @@ function createTrace(
   logPath: string,
   diagnostics: { pid: number; cwd: string; argv: string[] },
 ): MiniHost["diagnostics"]["trace"] {
-  if (!process.env.OPENCODE_DIRECT_TRACE) return
+  if (!process.env.PANACODE_DIRECT_TRACE) return
   const stamp = new Date()
     .toISOString()
     .replace(/[-:]/g, "")
@@ -161,7 +161,7 @@ export function createMiniHost(input: {
       sigusr2: signal("SIGUSR2"),
     },
     startup: {
-      showTiming: ["1", "true"].includes(process.env.OPENCODE_SHOW_TTFD?.toLowerCase() ?? ""),
+      showTiming: ["1", "true"].includes(process.env.PANACODE_SHOW_TTFD?.toLowerCase() ?? ""),
       now: () => performance.now(),
     },
     diagnostics: {

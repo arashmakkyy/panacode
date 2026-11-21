@@ -232,7 +232,6 @@ print_message() {
 
 check_version() {
     if command -v "$APP" >/dev/null 2>&1; then
-        opencode_path=$(which "$APP")
 
         ## Check the installed version
         installed_version=$("$APP" --version 2>/dev/null || echo "")

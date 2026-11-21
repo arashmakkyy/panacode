@@ -118,7 +118,7 @@ serviceTest(
     )
     expect(conflict).toContain(
       `Managed service port ${home.port} on 127.0.0.1 is already in use by ${
-        process.platform !== "win32" && Bun.which("lsof") ? `PID ${process.pid} (` : "another process"
+        process.platform === "win32" || Bun.which("lsof") ? `PID ${process.pid} (` : "another process"
       }`,
     )
     expect(conflict).toContain("panacode service set port <port>")
@@ -186,7 +186,7 @@ async function serviceHome(options: { readonly failBoot?: boolean } = {}) {
   // Servers spawned through this home's entry carry its path, so `servers()` sees only this home.
   const homeEntry = path.join(root, "opencode.ts")
   await fs.writeFile(homeEntry, `import ${JSON.stringify(entry)}\n`)
-  const overrides = options.failBoot ? { OPENCODE_DB: path.join(root, "database") } : {}
+  const overrides = options.failBoot ? { PANACODE_DB: path.join(root, "database") } : {}
   const home = {
     root,
     port,

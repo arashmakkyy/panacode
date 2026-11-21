@@ -188,14 +188,14 @@ test("service config manages environment variables", async () => {
   const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })
   try {
     await Effect.runPromise(
-      ServiceConfig.set("env", "OPENCODE_SERVICE_ENV_TEST", "configured").pipe(
+      ServiceConfig.set("env", "PANACODE_SERVICE_ENV_TEST", "configured").pipe(
         Effect.provide(layer),
         Effect.provide(NodeFileSystem.layer),
       ),
     )
     expect(
       await Effect.runPromise(
-        ServiceConfig.get("env", "OPENCODE_SERVICE_ENV_TEST").pipe(
+        ServiceConfig.get("env", "PANACODE_SERVICE_ENV_TEST").pipe(
           Effect.provide(layer),
           Effect.provide(NodeFileSystem.layer),
         ),
@@ -207,10 +207,10 @@ test("service config manages environment variables", async () => {
           ServiceConfig.options().pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer)),
         )
       ).env,
-    ).toEqual({ OPENCODE_SERVICE_ENV_TEST: "configured" })
+    ).toEqual({ PANACODE_SERVICE_ENV_TEST: "configured" })
 
     await Effect.runPromise(
-      ServiceConfig.unset("env", "OPENCODE_SERVICE_ENV_TEST").pipe(
+      ServiceConfig.unset("env", "PANACODE_SERVICE_ENV_TEST").pipe(
         Effect.provide(layer),
         Effect.provide(NodeFileSystem.layer),
       ),
@@ -675,6 +675,8 @@ test("unresponsive managed port occupancy reports a bounded conflict", async () 
   await fs.writeFile(registration, JSON.stringify(stale))
   // The port lookup is a child of the service, so it shows the state directory tools would inherit.
   const lsof = process.platform === "win32" ? null : Bun.which("lsof")
+  // Windows names the owner through netstat and tasklist instead of lsof.
+  const namesOwner = process.platform === "win32" || lsof !== null
   if (lsof) {
     await Bun.write(
       path.join(root, "bin", "lsof"),
@@ -695,7 +697,7 @@ test("unresponsive managed port occupancy reports a bounded conflict", async () 
     const output = (await new Response(contender.stdout).text()) + (await new Response(contender.stderr).text())
     expect(output).toContain(
       `Managed service port ${listener.port} on 127.0.0.1 is already in use by ${
-        lsof ? `PID ${process.pid} (` : "another process"
+        namesOwner ? `PID ${process.pid} (` : "another process"
       }`,
     )
     if (lsof) expect(await Bun.file(path.join(root, "inherited-state")).text()).toBe(path.join(root, "state"))
@@ -785,6 +787,7 @@ test("service registration replaces a stale owner with the bound address", async
     )
     expect(await Bun.file(registration).json()).toEqual({
       id: "owner",
+      product: "panacode",
       version: OPENCODE_VERSION,
       url: "http://127.0.0.1:4321",
       pid: process.pid,
@@ -804,7 +807,7 @@ test("a failed service stays registered and owns the selected port until stopped
   await fs.mkdir(database)
   await fs.mkdir(path.join(root, "config", "panacode"), { recursive: true })
   await fs.writeFile(path.join(root, "config", "panacode", "service-local.json"), JSON.stringify({ port }))
-  const env = { ...serviceEnv(root), OPENCODE_DB: database }
+  const env = { ...serviceEnv(root), PANACODE_DB: database }
   const command = [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"]
   const registration = path.join(root, "state", "panacode", "service-local.json")
   const owner = Bun.spawn(command, { env, stderr: "pipe", stdout: "ignore" })
@@ -896,9 +899,9 @@ function serviceEnv(root: string) {
     ...process.env,
     BUN_RUNTIME_TRANSPILER_CACHE_PATH: transpilerCache,
     HOME: root,
-    OPENCODE_CONFIG_DIR: undefined,
-    OPENCODE_DB: path.join(root, "opencode.db"),
-    OPENCODE_TEST_HOME: root,
+    PANACODE_CONFIG_DIR: undefined,
+    PANACODE_DB: path.join(root, "panacode.db"),
+    PANACODE_TEST_HOME: root,
     XDG_CACHE_HOME: path.join(root, "cache"),
     XDG_CONFIG_HOME: path.join(root, "config"),
     XDG_DATA_HOME: path.join(root, "data"),
@@ -914,7 +917,7 @@ async function startManagedService(prefix: string, failBoot = false) {
   if (failBoot) await fs.mkdir(path.join(root, "database"))
   await fs.writeFile(path.join(root, "config", "panacode", "service-local.json"), JSON.stringify({ port }))
   const owner = Bun.spawn([process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"], {
-    env: failBoot ? { ...serviceEnv(root), OPENCODE_DB: path.join(root, "database") } : serviceEnv(root),
+    env: failBoot ? { ...serviceEnv(root), PANACODE_DB: path.join(root, "database") } : serviceEnv(root),
     stderr: "pipe",
     stdout: "ignore",
   })
