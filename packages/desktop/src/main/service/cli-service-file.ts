@@ -1,3 +1,5 @@
+import { resolveStateRoot } from "./state-root"
+
 /**
  * Registration file the packaged CLI writes for `serve --service`.
  * Must stay in sync with `packages/cli/src/services/service-config.ts` `filename()`.
@@ -7,15 +9,36 @@
  * `service-<channel>.json` instead of `service.json`. Desktop ensure/discover
  * must open that same path or it times out waiting forever.
  */
-export function cliServiceRegistrationFile(input: {
+export type ServiceRegistrationInput = {
   readonly join: (...parts: string[]) => string
   readonly home: string
   readonly cliVersion: string
   readonly stateHome?: string
+  readonly isolatedRoot?: string
   readonly productSlug?: string
-}) {
-  const state = input.stateHome ?? input.join(input.home, ".local", "state")
-  const dir = input.join(state, input.productSlug ?? "panacode")
+  /** The local development channel always registers in `service-local.json`. */
+  readonly local?: boolean
+}
+
+/** Resolve the state root and the registration file that both the probe and ensure must agree on. */
+export function serviceRegistration(input: ServiceRegistrationInput) {
+  const stateRoot = resolveStateRoot({
+    home: input.home,
+    inherited: input.stateHome,
+    isolatedRoot: input.isolatedRoot,
+  })
+  return {
+    stateRoot,
+    file: input.join(stateRoot, input.productSlug ?? "panacode", registrationName(input)),
+  }
+}
+
+export function cliServiceRegistrationFile(input: ServiceRegistrationInput) {
+  return serviceRegistration(input).file
+}
+
+function registrationName(input: Pick<ServiceRegistrationInput, "cliVersion" | "local">) {
+  if (input.local) return "service-local.json"
   const channel = previewChannel(input.cliVersion)
   if (
     !channel ||
@@ -25,9 +48,9 @@ export function cliServiceRegistrationFile(input: {
     channel === "beta" ||
     channel === "next"
   ) {
-    return input.join(dir, "service.json")
+    return "service.json"
   }
-  return input.join(dir, `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`)
+  return `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
 }
 
 function previewChannel(version: string) {

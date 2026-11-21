@@ -25,7 +25,7 @@ export interface Resolved {
 }
 
 export interface Interface {
-  readonly resolve: Effect.Effect<Resolved>
+  readonly resolve: Effect.Effect<Resolved, Error>
   readonly install: Effect.Effect<string, Error>
 }
 
@@ -37,8 +37,12 @@ export const layer = Layer.effect(
     const path = yield* Path.Path
 
     // A failed lookup (for example a stage copy that antivirus held open) runs again on the next use.
+    // The failure is typed so the renderer can show an actionable Panacode message instead of a defect.
     const resolve = yield* DesktopCliState.make(
-      make().pipe(Effect.provide(yield* Effect.context<FileSystem.FileSystem | Path.Path>()), Effect.orDie),
+      make().pipe(
+        Effect.provide(yield* Effect.context<FileSystem.FileSystem | Path.Path>()),
+        Effect.mapError(startupFailure),
+      ),
     )
 
     const install = Effect.gen(function* () {
@@ -87,6 +91,11 @@ const resolveBundledCli = Effect.fn("DesktopCli.resolveBundled")(function* (isol
   const bundled = app.isPackaged
     ? path.join(process.resourcesPath, executableName())
     : path.join(paths.developmentResourcesRoot, isolated ? developmentExecutableName() : executableName())
+
+  if (!existsSync(bundled))
+    return yield* Effect.fail(
+      new Error("The bundled Panacode CLI is missing. Reinstall Panacode to restore it."),
+    )
 
   yield* Effect.logInfo("v2 CLI executable resolved", { bundled, packaged: app.isPackaged })
   const version = yield* bundledVersion(bundled)
@@ -229,6 +238,17 @@ const runInstaller = Effect.fn("DesktopCli.installForUser")(function* (binary: s
 
 function executableName() {
   return process.platform === "win32" ? `${ProductIdentity.cli}-cli.exe` : `${ProductIdentity.cli}-cli`
+}
+
+// Keep the actionable missing-file message; any other platform failure becomes one bounded
+// explanation instead of leaking an absolute install path into the renderer.
+function startupFailure(cause: unknown) {
+  if (cause instanceof Error && cause.message.startsWith("The bundled Panacode CLI")) return cause
+
+  return new Error(
+    "The bundled Panacode CLI could not be started. Restart Panacode; if it continues, reinstall Panacode.",
+    { cause },
+  )
 }
 
 function developmentExecutableName() {

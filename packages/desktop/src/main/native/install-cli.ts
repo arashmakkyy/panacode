@@ -24,8 +24,8 @@ export const createCliInstaller = Effect.fn("CliInstaller.make")(function* (desk
   const perform = (command: InstallCliCommand) => {
     const attempt = command.attempt
 
-    // `DesktopCli.resolve` dies on failure, so a defect also reaches the user as a failed install. An interrupt only
-    // happens on disposal, which the machine already left.
+    // A missing CLI is a typed failure, so the renderer shows it; a defect also reaches the user as a failed
+    // install. An interrupt only happens on disposal, which the machine already left.
     if (command.type === "run-install")
       return void run(
         desktopCli.install.pipe(

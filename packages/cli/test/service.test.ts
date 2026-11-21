@@ -505,6 +505,7 @@ test("service restart replaces a managed service with a fresh instance", async (
 
     const restarted = await waitForInfo(first.registration, (info) => info.id !== first.info.id)
     expect(restarted.pid).not.toBe(first.info.pid)
+    expect(new URL(restarted.url).port).toBe(String(first.port))
     expect(await waitForExit(first.owner)).toBe(true)
     await Effect.runPromise(Service.stop({ file: first.registration }).pipe(Effect.provide(NodeFileSystem.layer)))
     expect(await Bun.file(first.registration).exists()).toBe(false)

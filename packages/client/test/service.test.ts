@@ -2,7 +2,8 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { expect, test } from "bun:test"
 import { Effect, FileSystem } from "effect"
 import { writeFile } from "node:fs/promises"
-import { Service, type EnsureReason } from "../src/effect/service"
+import { Service, type EnsureDiagnostic, type EnsureReason } from "../src/effect/service"
+import { withEnsureTiming } from "../src/service-timing"
 import {
   serviceFixture,
   stopSignal,
@@ -430,6 +431,73 @@ test("reports a bounded contender stderr tail", async () => {
   if (!(error instanceof Error)) throw error
   expect(error.message).toContain("actionable startup failure")
   expect(error.message.length).toBeLessThan(9_000)
+}, 10_000)
+
+test("reports a monotonic, path-free boot record", async () => {
+  await using fixture = await serviceFixture()
+  const diagnostics: EnsureDiagnostic[] = []
+  const endpoint = await run(
+    ensure({
+      file: fixture.registration,
+      version: (version) => version.startsWith("2."),
+      command: fixture.command("delayed-compatible", "10"),
+      onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+    }),
+  )
+  const info = await Bun.file(fixture.registration).json()
+  fixture.track(info.pid)
+
+  expect(endpoint.url).toBe(info.url)
+  expect(diagnostics.map((diagnostic) => diagnostic.stage)).toEqual(["spawn", "register", "health", "ready"])
+  expect(diagnostics.map((diagnostic) => diagnostic.elapsed)).toEqual(
+    [...diagnostics.map((diagnostic) => diagnostic.elapsed)].sort((left, right) => left - right),
+  )
+  expect(diagnostics[0]?.pid).toBe(info.pid)
+  expect(diagnostics.at(-1)).toMatchObject({ stage: "ready", pid: info.pid })
+  expect(JSON.stringify(diagnostics)).not.toContain(fixture.directory)
+  expect(JSON.stringify(diagnostics)).not.toContain(info.password)
+})
+
+test("reports a sanitized exit reason", async () => {
+  await using fixture = await serviceFixture()
+  const diagnostics: EnsureDiagnostic[] = []
+  const error = await run(
+    ensure({
+      file: fixture.registration,
+      version: "test",
+      command: fixture.command("stderr-secrets"),
+      onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+    }),
+  ).catch((error: unknown) => error)
+
+  expect(error).toBeInstanceOf(Error)
+  if (!(error instanceof Error)) throw error
+  expect(error.message).not.toContain("service-password")
+  expect(error.message).not.toContain("control-token")
+  expect(error.message).not.toContain("dXNlcjpwYXNz")
+  expect(diagnostics.at(-1)).toMatchObject({ stage: "exit", reason: "Server process exited with code 1" })
+  expect(JSON.stringify(diagnostics)).not.toContain(fixture.directory)
+})
+
+test("reports a startup timeout without the registration path", async () => {
+  await using fixture = await serviceFixture()
+  const error = await run(
+    Service.ensure(
+      withEnsureTiming(
+        {
+          file: fixture.registration,
+          version: "test",
+          command: fixture.command("controlled"),
+        },
+        { promiseTimeout: 300, spawnDelay: 50, requestTimeout: 50 },
+      ),
+    ),
+  ).catch((error: unknown) => error)
+
+  expect(error).toBeInstanceOf(Error)
+  if (!(error instanceof Error)) throw error
+  expect(error.message).toContain("No ready service registered in the Panacode state directory")
+  expect(error.message).not.toContain(fixture.directory)
 }, 10_000)
 
 test("reports a contender terminated by a signal", async () => {

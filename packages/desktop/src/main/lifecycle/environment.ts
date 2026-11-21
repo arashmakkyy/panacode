@@ -4,6 +4,7 @@ import { app } from "electron"
 import { Effect, Path } from "effect"
 import { DesktopPaths } from "../paths"
 import { getUserShell, loadShellEnv } from "../service/shell-env"
+import { resolveStateRoot } from "../service/state-root"
 import { registerRendererProtocol, setDockIcon, setProtocolReporter } from "../windows"
 import { scoped } from "../native/logging"
 import { applySpellcheck, spellcheckMenuItems } from "../native/spellcheck"
@@ -45,13 +46,22 @@ export const preferApplicationEnvironment = Effect.gen(function* () {
   const shell = process.platform === "win32" ? null : getUserShell()
   const shellEnv = shell ? yield* loadShellEnv(shell) : null
   yield* Effect.sync(() => {
-    if (!shellEnv?.XDG_STATE_HOME) delete process.env.XDG_STATE_HOME
+    // An absolute XDG_STATE_HOME inherited from the launcher is the caller's explicit choice and
+    // outranks the login shell. Windows has no login shell, so a null shellEnv must never delete it.
+    // Relative values are invalid XDG roots; resolving what remains also gives every spawned CLI the
+    // same absolute value the desktop uses, instead of letting it fall back on its own.
+    const stateRoot = resolveStateRoot({
+      home: app.getPath("home"),
+      inherited: process.env.XDG_STATE_HOME,
+      shell: shellEnv?.XDG_STATE_HOME,
+    })
     Object.assign(process.env, {
       ...shellEnv,
       PANACODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
       PANACODE_EXPERIMENTAL_FILEWATCHER: "true",
       PANACODE_CLIENT: "desktop",
     })
+    process.env.XDG_STATE_HOME = stateRoot
   })
 })
 

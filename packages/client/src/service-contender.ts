@@ -45,7 +45,7 @@ export function spawnServiceContender(
     child,
     error: () => error,
     closed: () => closed,
-    stderr: () => stderr.toString("utf8").trim(),
+    stderr: () => sanitizeServiceOutput(stderr.toString("utf8").trim()),
     release: () => {
       child.stderr?.off("data", onStderr)
       child.stderr?.resume()
@@ -112,15 +112,15 @@ export function contenderPool(timing: EnsureTiming) {
       lastSpawn = Date.now()
     },
     /**
-     * Startup timeout. Names the registration file that never appeared and keeps the stderr of any attempt still
-     * running, so a server that started but registered somewhere else (or hung before listening) is diagnosable from
-     * the error alone instead of only "timed out".
+     * Startup timeout. Keeps the stderr of any attempt still running, so a server that started but
+     * registered somewhere else (or hung before listening) is diagnosable. The registration path
+     * itself stays out of the error: it is a private location and the renderer exports this message.
      */
-    timeout(file: string) {
+    timeout() {
       const alive = [...contenders].filter((item) => !contenderFinished(item))
       const lines = [
         "Timed out waiting for the background service to start",
-        `No ready service registered at ${file}` +
+        "No ready service registered in the Panacode state directory" +
           (alive.length > 0 ? `; ${alive.length} server process(es) still running without registering there.` : "."),
         ...alive.map((item) => item.stderr()).filter((text) => text.length > 0),
       ]
@@ -148,4 +148,12 @@ export function contenderFinished(contender: ServiceContender) {
 
 function startupError(message: string, stderr: string) {
   return new Error(stderr ? `${message}\n${stderr}` : message)
+}
+
+/** Remove terminal escape codes and credential-bearing fragments before a boot record is exported. */
+export function sanitizeServiceOutput(output: string) {
+  return output
+    .replace(/\u001b\[[0-9;]*m/g, "")
+    .replace(/\bBasic\s+[A-Za-z0-9+/=]+/gi, "Basic [redacted]")
+    .replace(/((?:password|token|secret|authorization|api[_-]?key)\s*[=:]\s*)\S+/gi, "$1[redacted]")
 }

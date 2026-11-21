@@ -24,6 +24,18 @@ export type DiscoverOptions = {
 /** Reason ensuring the service requires a new process. */
 export type EnsureReason = "missing" | "version-mismatch"
 
+/** A stage in the monotonic boot record of one `ensure()` attempt. */
+export type EnsureDiagnostic = {
+  /** `spawn` starts a contender, `register` sees a registration, `health` classifies an answer. */
+  readonly stage: "spawn" | "register" | "health" | "exit" | "ready"
+  /** Monotonic milliseconds since this ensure attempt began. */
+  readonly elapsed: number
+  readonly pid?: number
+  readonly state?: "waiting" | "ready" | "failed"
+  /** Bounded, redacted first cause of an exit or timeout. */
+  readonly reason?: string
+}
+
 /** Options used to ensure the local OpenCode service is running. */
 export type EnsureOptions = DiscoverOptions & {
   /** Service command and arguments. Defaults to `opencode serve --service`. */
@@ -32,6 +44,8 @@ export type EnsureOptions = DiscoverOptions & {
   readonly env?: Readonly<Record<string, string>>
   /** Called once before spawning a new service process. */
   readonly onStart?: (reason: EnsureReason, previousVersion?: string) => void
+  /** Receives a bounded boot record without registration paths or credentials. */
+  readonly onDiagnostic?: (diagnostic: EnsureDiagnostic) => void
 }
 
 /** Options used to stop the local OpenCode service. */

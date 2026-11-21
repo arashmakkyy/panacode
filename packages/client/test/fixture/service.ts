@@ -10,6 +10,12 @@ if (mode === "stderr-failed") {
   process.stderr.write("x".repeat(16_384) + "\nactionable startup failure\n")
   process.exit(1)
 }
+if (mode === "stderr-secrets") {
+  process.stderr.write(
+    "password=service-password\ntoken: control-token\nAuthorization: Basic dXNlcjpwYXNz\n",
+  )
+  process.exit(1)
+}
 if (mode === "record-start") {
   await writeFile(registration + ".started", "")
   process.exit(1)

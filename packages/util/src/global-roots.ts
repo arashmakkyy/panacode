@@ -2,10 +2,17 @@ import os from "os"
 import path from "path"
 
 const home = os.homedir()
-const data = process.env.XDG_DATA_HOME || (home ? path.join(home, ".local", "share") : undefined)
-const cache = process.env.XDG_CACHE_HOME || (home ? path.join(home, ".cache") : undefined)
-const config = process.env.XDG_CONFIG_HOME || (home ? path.join(home, ".config") : undefined)
-const state = process.env.XDG_STATE_HOME || (home ? path.join(home, ".local", "state") : undefined)
+
+// XDG base directories must be absolute. A relative value is ignored here so the CLI and Desktop
+// resolve the same state directory instead of one honoring it and the other falling back.
+function xdg(value: string | undefined, fallback: () => string | undefined) {
+  return value !== undefined && path.isAbsolute(value) ? value : fallback()
+}
+
+const data = xdg(process.env.XDG_DATA_HOME, () => (home ? path.join(home, ".local", "share") : undefined))
+const cache = xdg(process.env.XDG_CACHE_HOME, () => (home ? path.join(home, ".cache") : undefined))
+const config = xdg(process.env.XDG_CONFIG_HOME, () => (home ? path.join(home, ".config") : undefined))
+const state = xdg(process.env.XDG_STATE_HOME, () => (home ? path.join(home, ".local", "state") : undefined))
 
 /** The XDG base directories that root opencode's global paths. */
 export function roots(app: string) {

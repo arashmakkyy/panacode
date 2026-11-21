@@ -1,5 +1,5 @@
 import { app } from "electron"
-import type { Endpoint } from "@opencode/client/service"
+import type { Endpoint, EnsureDiagnostic } from "@opencode/client/service"
 import { Context, Effect, FileSystem, Layer, Option, Path, Schema } from "effect"
 import { SidecarChanged } from "../../shared/ipc-rpc/events"
 import { CHANNEL } from "../constants"
@@ -12,8 +12,8 @@ import { DesktopCli } from "./desktop-cli"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { takeSidecarProbe } from "./sidecar-probe"
 import { withEnsureTiming } from "@opencode/client/service"
-import { ProductIdentity } from "@opencode/util/product-identity"
-import { cliServiceRegistrationFile } from "./cli-service-file"
+import { serviceRegistration } from "./cli-service-file"
+import { resolveStateRoot } from "./state-root"
 
 export * as BackgroundService from "./background-service"
 
@@ -49,12 +49,16 @@ export const layer = Layer.effect(
 // A compatible service the entry module already found is adopted at once; the machine still verifies it with
 // `ensure("initial")` (which also completes a terminal handoff), off the renderer's path.
 const probe = Effect.fn("BackgroundService.probe")(function* () {
-  const service = yield* Effect.promise(takeSidecarProbe)
-
-  if (!service) return undefined
   const setup = yield* prepare("initial")
+  const result = yield* Effect.promise(() => takeSidecarProbe(setup.key))
 
-  return (yield* adopt(setup, service, true)).credentials
+  if (result.status === "discarded") {
+    yield* Effect.logWarning("discarding speculative v2 CLI service probe", { reason: result.reason })
+    return undefined
+  }
+  if (result.status === "miss") return undefined
+
+  return (yield* adopt(setup, result.endpoint, true)).credentials
 })
 
 const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: BackgroundServiceMachine.ConnectMode) {
@@ -64,24 +68,20 @@ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: Background
   // health probe; the ensure loop then kills a still-starting server. Use a safer port, longer
   // probes, and skip the models.dev fetch so packaged Windows reaches /api/info ready in time.
   const windowsPackaged = app.isPackaged && process.platform === "win32"
-  // Panacode: the CLI's Windows default is 0x70AC (28844). Upstream OpenCode uses 0x70DE (28894);
-  // sharing it made Panacode fail to start while OpenCode was open.
-  // The CLI owns port precedence: a saved `panacode service set port` wins over its default.
-  // Only the isolated dev bench pins a port so it cannot collide with an installed service.
-  const servicePort = setup.isolated ? 0x0c0c : undefined
 
   const run = (version = setup.version) => {
     const options = {
       file: setup.file,
       version,
-      // A fixed port makes a second contender fail to bind and back off; port 0 never collides, so two
-      // services could boot against the same database.
+      // The CLI owns port precedence: a saved `panacode service set port` wins over its channel
+      // default, and the managed service must never ask for port 0 or a random port. A fixed port
+      // also makes a second contender fail to bind and back off instead of booting a second writer
+      // against the same database.
       command: [
         ...setup.cli.command,
         "serve",
         "--service",
         ...(setup.isolated || windowsPackaged ? ["--hostname", "127.0.0.1"] : []),
-        ...(servicePort !== undefined ? ["--port", String(servicePort)] : []),
       ],
       env: windowsPackaged
         ? {
@@ -91,6 +91,8 @@ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: Background
         : undefined,
       onStart: (reason: "missing" | "version-mismatch", previousVersion?: string) =>
         runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion })),
+      onDiagnostic: (diagnostic: EnsureDiagnostic) =>
+        runFork(Effect.logInfo("v2 CLI background service boot", diagnostic)),
     }
     return setup.client.Service.ensure(
       windowsPackaged
@@ -132,29 +134,51 @@ const prepare = Effect.fn("BackgroundService.prepare")(function* (mode: Backgrou
   const path = yield* Path.Path
   const desktopCli = yield* DesktopCli.Service
   const isolated = !app.isPackaged && process.env.PANACODE_DESKTOP_ISOLATED_SERVER === "1"
-  const cli = yield* desktopCli.resolve
-  const version = serviceVersion({ channel: CHANNEL, isolated, mode, version: cli.version })
+  const home = app.getPath("home")
+  const stateRoot = resolveStateRoot({
+    home,
+    inherited: process.env.XDG_STATE_HOME,
+    isolatedRoot: isolated ? app.getPath("userData") : undefined,
+  })
+  // The CLI and every process this desktop spawns must resolve the same state directory. Writing
+  // the effective value also replaces a relative inherited value, which neither side may honor.
+  process.env.XDG_STATE_HOME = stateRoot
 
-  if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
+  const cli = yield* desktopCli.resolve
+  const local = process.env.PANACODE_DESKTOP_SERVER_CHANNEL === "local"
+  const version = serviceVersion({ channel: CHANNEL, isolated, mode, version: cli.version })
+  const registration = serviceRegistration({
+    join: path.join,
+    home,
+    cliVersion: cli.version,
+    stateHome: stateRoot,
+    local,
+  })
   const client = yield* Effect.promise(() => import("@opencode/client/service"))
 
-  const file =
-    process.env.PANACODE_DESKTOP_SERVER_CHANNEL === "local"
-      ? path.join(
-          process.env.XDG_STATE_HOME ?? path.join(app.getPath("home"), ".local", "state"),
-          ProductIdentity.slug,
-          "service-local.json",
-        )
-      : cliServiceRegistrationFile({
-          join: path.join,
-          home: app.getPath("home"),
-          cliVersion: cli.version,
-          stateHome: process.env.XDG_STATE_HOME,
-        })
+  yield* Effect.logInfo("v2 CLI service registration", {
+    channel: CHANNEL,
+    filename: path.basename(registration.file),
+    stateRoot: path.basename(registration.stateRoot),
+    cliVersion: cli.version,
+    isolated,
+  })
 
-  yield* Effect.logInfo("v2 CLI service registration file", { file, cliVersion: cli.version })
-
-  return { cli, client, file, isolated, version }
+  return {
+    cli,
+    client,
+    file: registration.file,
+    isolated,
+    local,
+    stateRoot: registration.stateRoot,
+    version,
+    key: {
+      stateRoot: registration.stateRoot,
+      file: registration.file,
+      version,
+      local,
+    },
+  }
 })
 
 const adopt = Effect.fn("BackgroundService.adopt")(function* (

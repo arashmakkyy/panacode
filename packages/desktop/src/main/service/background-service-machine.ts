@@ -271,8 +271,8 @@ export const make = Effect.fn("BackgroundServiceMachine.make")(function* (input:
     next.commands.forEach(perform)
   }
 
-  // A failure of `ensure` can be a defect (`DesktopCli.resolve` dies), so every exit reports back as an event. An
-  // interrupt only happens on disposal, which the machine already left.
+  // A failure of `ensure` (including a typed CLI resolution error) reports back as an event, so every exit
+  // settles its caller. An interrupt only happens on disposal, which the machine already left.
   const report = (effect: Effect.Effect<Event, unknown>, failed: (error: Error) => Event) =>
     run(
       effect.pipe(

@@ -1,5 +1,5 @@
 import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
-import type { DiscoverOptions, EnsureOptions, StopOptions } from "../service.js"
+import type { DiscoverOptions, EnsureDiagnostic, EnsureOptions, StopOptions } from "../service.js"
 import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
@@ -73,8 +73,13 @@ export const verified = Effect.fn("service.verified")(function* (options: Discov
 export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOptions = {}) {
   const timing = ensureTiming(options)
   const pool = contenderPool(timing)
+  const started = performance.now()
   let timeouts: { readonly info: Info; readonly count: number } | undefined
   let announced = false
+  let observedRegistration: string | undefined
+  let observedHealth: string | undefined
+  const report = (diagnostic: Omit<EnsureDiagnostic, "elapsed">) =>
+    Effect.sync(() => options.onDiagnostic?.({ ...diagnostic, elapsed: Math.round(performance.now() - started) }))
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) =>
     Effect.sync(() => {
       if (announced) return
@@ -85,12 +90,14 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     const [command, ...args] = options.command ?? ["panacode", "serve", "--service"]
     if (command === undefined) return yield* Effect.fail(new Error("Missing service command"))
     const env = yield* Effect.tryPromise(() => PtyHandoff.environment(options.file ?? fallback(), options.env))
-    return yield* Effect.try({
+    const contender = yield* Effect.try({
       try: () => {
         return spawnServiceContender(command, args, env)
       },
       catch: (cause) => new Error("Failed to start server", { cause }),
     })
+    yield* report({ stage: "spawn", pid: contender.child.pid })
+    return contender
   })
   const found = yield* Effect.gen(function* () {
     const registration = yield* registered(options.file, timing.requestTimeout)
@@ -106,6 +113,13 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     }
     const info = registration.info
     const service = registration.service
+    if (info !== undefined) {
+      const identity = `${info.id ?? "?"}:${info.pid}`
+      if (identity !== observedRegistration) {
+        observedRegistration = identity
+        yield* report({ stage: "register", pid: info.pid, state: service?.state })
+      }
+    }
     if (registration.timedOut && info !== undefined) {
       timeouts = {
         info,
@@ -123,10 +137,16 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     } else timeouts = undefined
     if (service !== undefined) {
       pool.serviceAnswered()
+      const identity = `${service.info.id ?? "?"}:${service.info.pid}:${service.state}`
+      if (identity !== observedHealth) {
+        observedHealth = identity
+        yield* report({ stage: "health", pid: service.info.pid, state: service.state })
+      }
       const decision = decide(service, options)
       if (decision._tag === "fail") return yield* Effect.fail(decision.error)
       if (decision._tag === "reuse") {
         yield* Effect.tryPromise(() => PtyHandoff.complete(options.file ?? fallback(), service.info))
+        yield* report({ stage: "ready", pid: service.info.pid })
         return Option.some(service)
       }
       if (decision._tag === "replace") {
@@ -147,6 +167,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     }
     return Option.none()
   }).pipe(
+    Effect.tapError((error) => report({ stage: "exit", reason: error.message.split("\n", 1)[0] })),
     Effect.repeat({
       until: Option.isSome,
       // Probes run sequentially, so a slow probe stretches each iteration; bound the loop by wall clock
@@ -155,8 +176,11 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     }),
     Effect.ensuring(Effect.sync(() => pool.releaseAll())),
   )
-  if (Option.isNone(found))
-    return yield* Effect.fail(pool.failure() ?? pool.timeout(options.file ?? fallback()))
+  if (Option.isNone(found)) {
+    const failure = pool.failure() ?? pool.timeout()
+    yield* report({ stage: "exit", reason: failure.message.split("\n", 1)[0] })
+    return yield* Effect.fail(failure)
+  }
   return found.value.endpoint
 })
 

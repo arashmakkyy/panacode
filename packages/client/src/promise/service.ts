@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises"
-import type { DiscoverOptions, Endpoint, Info, EnsureOptions, StopOptions } from "../service.js"
+import type { DiscoverOptions, Endpoint, EnsureDiagnostic, Info, EnsureOptions, StopOptions } from "../service.js"
 import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, withEnsureTiming, type EnsureTiming } from "../service-timing.js"
 export { withEnsureTiming }
@@ -34,9 +34,14 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   const timing = ensureTiming(options)
   const deadline = Date.now() + timing.promiseTimeout
   const pool = contenderPool(timing)
+  const started = performance.now()
   let timeouts: { readonly info: Info; readonly count: number } | undefined
   let announced = false
+  let observedRegistration: string | undefined
+  let observedHealth: string | undefined
 
+  const report = (diagnostic: Omit<EnsureDiagnostic, "elapsed">) =>
+    options.onDiagnostic?.({ ...diagnostic, elapsed: Math.round(performance.now() - started) })
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) => {
     if (announced) return
     announced = true
@@ -46,7 +51,13 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
     const [command, ...args] = options.command ?? ["panacode", "serve", "--service"]
     if (command === undefined) throw new Error("Missing service command")
     try {
-      return spawnServiceContender(command, args, await PtyHandoff.environment(options.file ?? fallback(), options.env))
+      const contender = spawnServiceContender(
+        command,
+        args,
+        await PtyHandoff.environment(options.file ?? fallback(), options.env),
+      )
+      report({ stage: "spawn", pid: contender.child.pid })
+      return contender
     } catch (cause) {
       throw new Error("Failed to start server", { cause })
     }
@@ -54,9 +65,15 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
 
   try {
     while (true) {
-      if (Date.now() >= deadline)
-        throw pool.failure() ?? pool.timeout(options.file ?? fallback())
+      if (Date.now() >= deadline) throw pool.failure() ?? pool.timeout()
       const registration = await registered(options.file, timing.requestTimeout)
+      if (registration.info !== undefined) {
+        const identity = `${registration.info.id ?? "?"}:${registration.info.pid}`
+        if (identity !== observedRegistration) {
+          observedRegistration = identity
+          report({ stage: "register", pid: registration.info.pid, state: registration.service?.state })
+        }
+      }
       if (registration.problem !== undefined) {
         // A damaged record is never adopted or controlled. When its loopback endpoint still accepts
         // connections, another process may own the port, so refuse. A free port is safe to reuse: the
@@ -86,10 +103,16 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       if (registration.service !== undefined) {
         pool.serviceAnswered()
         const service = registration.service
+        const identity = `${service.info.id ?? "?"}:${service.info.pid}:${service.state}`
+        if (identity !== observedHealth) {
+          observedHealth = identity
+          report({ stage: "health", pid: service.info.pid, state: service.state })
+        }
         const decision = decide(service, options)
         if (decision._tag === "fail") throw decision.error
         if (decision._tag === "reuse") {
           await PtyHandoff.complete(options.file ?? fallback(), service.info)
+          report({ stage: "ready", pid: service.info.pid })
           return service.endpoint
         }
         if (decision._tag === "replace") {
@@ -109,6 +132,12 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       }
       await delay(timing.pollInterval)
     }
+  } catch (error) {
+    report({
+      stage: "exit",
+      reason: error instanceof Error ? error.message.split("\n", 1)[0] : "Background service startup failed",
+    })
+    throw error
   } finally {
     pool.releaseAll()
   }

@@ -43,6 +43,25 @@ describe("global roots", () => {
       tmp: path.join(os.tmpdir(), "panacode"),
     })
   })
+  test("relative XDG overrides are ignored", () => {
+    const home = path.join(os.tmpdir(), "opencode-xdg-relative")
+
+    expect(
+      run({
+        XDG_DATA_HOME: "relative/data",
+        XDG_CACHE_HOME: "relative/cache",
+        XDG_CONFIG_HOME: "relative/config",
+        XDG_STATE_HOME: "relative/state",
+        ...(process.platform === "win32" ? { USERPROFILE: home } : { HOME: home }),
+      }),
+    ).toEqual({
+      data: path.join(home, ".local", "share", "panacode"),
+      cache: path.join(home, ".cache", "panacode"),
+      config: path.join(home, ".config", "panacode"),
+      state: path.join(home, ".local", "state", "panacode"),
+      tmp: path.join(os.tmpdir(), "panacode"),
+    })
+  })
 })
 
 function run(env: Record<string, string>) {
