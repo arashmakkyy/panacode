@@ -13,9 +13,9 @@ import { CLI_BINARIES, nodePtyPackage } from "./script/utils"
 const { FileMatcher } = createRequire(import.meta.resolve("electron-builder"))("app-builder-lib/out/fileMatcher")
 
 const channels = [
-  { channel: "dev", appId: "ai.panacode.desktop.dev" },
-  { channel: "beta", appId: "ai.panacode.desktop.beta" },
-  { channel: "prod", appId: "ai.panacode.desktop" },
+  { channel: "dev", appId: "ai.panacode.desktop.dev", productName: "Panacode Dev", protocolName: "Panacode" },
+  { channel: "beta", appId: "ai.panacode.desktop.beta", productName: "Panacode Beta", protocolName: "Panacode Beta" },
+  { channel: "prod", appId: "ai.panacode.desktop", productName: "Panacode", protocolName: "Panacode" },
 ] as const
 
 function load(channel: string, target?: string): Configuration {
@@ -47,9 +47,14 @@ function trimFilter(dir: string, config: Configuration) {
   ]).createFilter()
 }
 
-test.each(channels)("channel identity for $channel", ({ channel, appId }) => {
+test.each(channels)("channel identity for $channel", ({ channel, appId, productName, protocolName }) => {
   const config = load(channel)
   expect(config.appId).toBe(appId)
+  expect(config.productName).toBe(productName)
+  // The protocol handler belongs to Panacode on every channel, and the registration name never
+  // points at the upstream product. The channel-specific appId keeps separate installs apart.
+  expect(config.protocols).toEqual({ name: protocolName, schemes: ["panacode"] })
+  expect(config.protocols?.name).not.toMatch(/opencode/i)
   // Panacode has no update feed yet; never point packaged builds at the upstream one. Keep this null
   // rather than undefined so electron-builder cannot infer a provider from GH_TOKEN in CI.
   expect(config.publish).toBeNull()

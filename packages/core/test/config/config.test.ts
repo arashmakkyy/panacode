@@ -1,5 +1,6 @@
 import path from "path"
 import fs from "fs/promises"
+import { createHash } from "node:crypto"
 import { describe, expect, test } from "bun:test"
 import { Arbitrary, Effect, Fiber, Layer, Logger, Schema, Stream } from "effect"
 import { Config } from "@opencode/core/config"
@@ -82,6 +83,37 @@ function testLayer(
   // Merge the watcher layer by reference so Watcher.Test resolves to the same
   // memoized instance the built graph uses.
   return Layer.mergeAll(built, watcher)
+}
+
+// A path-and-bytes snapshot: a legacy operation that creates a dependency directory or an empty
+// cache directory must fail the same comparison as a rewritten file.
+async function snapshotTree(root: string) {
+  const snapshot = new Map<string, string>()
+
+  async function walk(directory: string) {
+    for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+      const file = path.join(directory, entry.name)
+      const relative = path.relative(root, file).split(path.sep).join("/")
+
+      if (entry.isDirectory()) {
+        snapshot.set(`${relative}/`, "directory")
+        await walk(file)
+        continue
+      }
+
+      snapshot.set(relative, createHash("sha256").update(await fs.readFile(file)).digest("hex"))
+    }
+  }
+
+  await walk(root)
+  return snapshot
+}
+
+async function readOptional(file: string) {
+  return fs.readFile(file, "utf8").catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return undefined
+    throw error
+  })
 }
 
 const tool = (effect: "allow" | "deny") => ({ action: "tool.use", resource: "shell:*", effect })
@@ -716,6 +748,204 @@ describe("Config", () => {
               expect(legacy).toHaveLength(2)
               expect(legacy.map((entry) => entry.info.tool_output)).toEqual([{ max_lines: 42, max_bytes: 4096 }, { max_lines: 7 }])
             }).pipe(Effect.provide(testLayer(project, global))),
+          ),
+        )
+      }),
+    ),
+  )
+
+  it.live("keeps a legacy-only project to the tool_output allowlist without imports or writes", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "project")
+        const legacy = path.join(project, ".opencode")
+        const plugin = path.join(project, "legacy-plugin.ts")
+        const imported = path.join(tmp.path, "PLUGIN_IMPORTED_MARKER")
+        const commandRan = path.join(tmp.path, "LEGACY_COMMAND_MARKER")
+        return Effect.promise(async () => {
+          await fs.mkdir(legacy, { recursive: true })
+          await fs.mkdir(global, { recursive: true })
+          // The marker module writes only if a loader imports it. A legacy plugin entry must never get that far.
+          await fs.writeFile(
+            plugin,
+            `import { writeFileSync } from "node:fs"\nwriteFileSync(${JSON.stringify(imported)}, "imported")\n`,
+          )
+          await fs.writeFile(
+            path.join(project, "opencode.json"),
+            JSON.stringify({
+              shell: "legacy-shell",
+              model: "legacy/model",
+              plugins: [plugin],
+              instructions: [path.join(legacy, "LEGACY_INSTRUCTION.md")],
+              commands: {
+                marker: {
+                  template: `node -e "require('node:fs').writeFileSync(${JSON.stringify(commandRan)}, 'ran')"`,
+                },
+              },
+              agents: { marker: { mode: "primary", prompt: "LEGACY_AGENT_MARKER" } },
+              mcp: { marker: { type: "local", command: ["node", "LEGACY_MCP_MARKER"], enabled: true } },
+              providers: { marker: { package: "native", models: {} } },
+              permissions: { marker: "LEGACY_PERMISSION_MARKER" },
+              // Unknown keys inside tool_output must not survive the allowlisted schema.
+              tool_output: { max_lines: 42, max_bytes: 4096, extra: 999 },
+            }),
+          )
+          await fs.writeFile(
+            path.join(legacy, "opencode.json"),
+            JSON.stringify({
+              plugins: [plugin],
+              commands: { marker: { template: "LEGACY_NESTED_COMMAND" } },
+              tool_output: { max_lines: 7 },
+            }),
+          )
+          await fs.writeFile(path.join(legacy, "LEGACY_INSTRUCTION.md"), "LEGACY_INSTRUCTION_MARKER\n")
+        }).pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              const before = yield* Effect.promise(() => snapshotTree(project))
+              const config = yield* Config.Service
+              const entries = yield* config.entries()
+
+              expect(Config.latest(entries, "tool_output")).toEqual({ max_lines: 7 })
+              for (const key of [
+                "shell",
+                "model",
+                "plugins",
+                "instructions",
+                "commands",
+                "agents",
+                "mcp",
+                "providers",
+                "permissions",
+              ] as const)
+                expect(Config.latest(entries, key), key).toBeUndefined()
+
+              const documents = entries.filter(
+                (entry): entry is Document => entry.type === "document" && entry.legacy === true,
+              )
+              expect(documents).toHaveLength(2)
+              expect(documents.map((entry) => entry.info.tool_output)).toEqual([
+                { max_lines: 42, max_bytes: 4096 },
+                { max_lines: 7 },
+              ])
+
+              expect(yield* Effect.promise(() => readOptional(imported))).toBeUndefined()
+              expect(yield* Effect.promise(() => readOptional(commandRan))).toBeUndefined()
+              expect(yield* Effect.promise(() => snapshotTree(project))).toEqual(before)
+            }).pipe(Effect.provide(testLayer(project, global))),
+          ),
+        )
+      }),
+    ),
+  )
+
+  it.live("keeps both products' project files byte-stable across save, watch and reload", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const parent = path.join(tmp.path, "project")
+        const child = path.join(parent, "child")
+        const plugin = path.join(parent, "legacy-plugin.ts")
+        const imported = path.join(tmp.path, "PLUGIN_IMPORTED_MARKER")
+        const childLegacy = path.join(child, ".opencode")
+        return Effect.promise(async () => {
+          await fs.mkdir(path.join(parent, ".opencode"), { recursive: true })
+          await fs.mkdir(path.join(parent, ".panacode"), { recursive: true })
+          await fs.mkdir(path.join(child, ".opencode"), { recursive: true })
+          await fs.mkdir(path.join(child, ".panacode"), { recursive: true })
+          await fs.mkdir(global, { recursive: true })
+          await fs.writeFile(
+            plugin,
+            `import { writeFileSync } from "node:fs"\nwriteFileSync(${JSON.stringify(imported)}, "imported")\n`,
+          )
+          await fs.writeFile(
+            path.join(parent, "opencode.json"),
+            JSON.stringify({ shell: "parent-legacy-shell", tool_output: { max_lines: 10 }, plugins: [plugin] }),
+          )
+          await fs.writeFile(
+            path.join(parent, ".opencode", "opencode.json"),
+            JSON.stringify({ shell: "parent-legacy-dir-shell", tool_output: { max_lines: 20 }, plugins: [plugin] }),
+          )
+          await fs.writeFile(
+            path.join(parent, "panacode.json"),
+            JSON.stringify({ shell: "parent-panacode" }),
+          )
+          await fs.writeFile(
+            path.join(parent, ".panacode", "panacode.json"),
+            JSON.stringify({ shell: "parent-panacode-dir" }),
+          )
+          await fs.writeFile(
+            path.join(child, "opencode.jsonc"),
+            JSON.stringify({
+              shell: "child-legacy-shell",
+              tool_output: { max_lines: 40 },
+              instructions: ["LEGACY_INSTRUCTION_MARKER"],
+            }),
+          )
+          await fs.writeFile(
+            path.join(child, ".opencode", "opencode.json"),
+            JSON.stringify({ shell: "child-legacy-dir-shell", tool_output: { max_lines: 50 }, plugins: [plugin] }),
+          )
+          await fs.writeFile(
+            path.join(child, "panacode.jsonc"),
+            JSON.stringify({ shell: "child-panacode" }),
+          )
+          await fs.writeFile(
+            path.join(child, ".panacode", "panacode.json"),
+            JSON.stringify({ shell: "child-panacode-dir" }),
+          )
+        }).pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              const before = yield* Effect.promise(() => snapshotTree(parent))
+              const config = yield* Config.Service
+              const bus = yield* Bus.Service
+              const watcher = yield* Watcher.Test
+
+              // Every Panacode source outranks legacy, so the child's Panacode shell wins over the legacy
+              // shell in the same directory. The legacy files still supply the allowlisted tool_output.
+              expect(Config.latest(yield* config.entries(), "shell")).toBe("child-panacode-dir")
+              expect(Config.latest(yield* config.entries(), "tool_output")).toEqual({ max_lines: 50 })
+              expect(Config.latest(yield* config.entries(), "plugins")).toBeUndefined()
+              expect(Config.latest(yield* config.entries(), "instructions")).toBeUndefined()
+
+              const saved = yield* bus
+                .subscribe(Event.Updated)
+                .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+              yield* config.update!({ shell: "saved-panacode" })
+              expect(yield* Fiber.join(saved)).toHaveLength(1)
+
+              // The write landed in the Panacode global root, not in either project's legacy tree.
+              const globalConfig = yield* Effect.promise(() => readOptional(path.join(global, "panacode.jsonc")))
+              expect(globalConfig).toContain('"shell": "saved-panacode"')
+              // Neither project tree, its direct legacy files nor its Panacode files changed.
+              expect(yield* Effect.promise(() => snapshotTree(parent))).toEqual(before)
+
+              // A legacy file still reloads, but only its allowlisted tool_output changes meaning.
+              const reloaded = yield* bus
+                .subscribe(Event.Updated)
+                .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+              yield* Effect.promise(() =>
+                fs.writeFile(
+                  path.join(childLegacy, "opencode.json"),
+                  JSON.stringify({ tool_output: { max_lines: 77 }, plugins: [plugin] }),
+                ),
+              )
+              yield* watcher.emit({ type: "update", path: path.join(childLegacy, "opencode.json") })
+              expect(yield* Fiber.join(reloaded)).toHaveLength(1)
+              expect(Config.latest(yield* config.entries(), "tool_output")).toEqual({ max_lines: 77 })
+              expect(Config.latest(yield* config.entries(), "plugins")).toBeUndefined()
+              expect(yield* Effect.promise(() => readOptional(imported))).toBeUndefined()
+
+              // The reload created no dependency tree, cache or other file; only the fixture's own edit differs.
+              const after = yield* Effect.promise(() => snapshotTree(parent))
+              expect(
+                [...after].filter(([file, digest]) => before.get(file) !== digest).map(([file]) => file),
+              ).toEqual(["child/.opencode/opencode.json"])
+              expect([...after.keys()].filter((file) => !before.has(file))).toEqual([])
+              expect(after.size).toBe(before.size)
+            }).pipe(Effect.provide(testLayer(child, global, child))),
           ),
         )
       }),

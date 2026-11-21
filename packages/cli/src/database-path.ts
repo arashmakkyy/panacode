@@ -49,7 +49,7 @@ function assertPrivate(file: string) {
     const candidate = `${file}${suffix}`
     const target = canonical(candidate)
     if (protectedRoots.some((root) => contained(root, target))) {
-      throw refusal("that path belongs to OpenCode data")
+      throw refusal("that path belongs to another application's data")
     }
     refuseSharedFile(candidate)
   }
