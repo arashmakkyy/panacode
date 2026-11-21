@@ -770,8 +770,8 @@ export const dict = {
   "project.settings.color.description":
     "გამოიყენება პროექტის იკონისთვის, როდესაც არ არის მითითებული პერსონალური სურათი",
   "project.settings.worktree.startup.description": "चलता ერთჯერადად ახალი სამუშაო ნიშის შექმნის შემდეგ",
-  "project.settings.worktree.startup.hint.base": "გამოიყენეთ $OPENCODE_WORKTREE_BASE ბაზური სამუშაო ნიშისთვის.",
-  "project.settings.worktree.startup.hint.new": "გამოიყენეთ $OPENCODE_WORKTREE_PATH ახალი სამუშაო ნიშისთვის.",
+  "project.settings.worktree.startup.hint.base": "გამოიყენეთ $PANACODE_WORKTREE_BASE ბაზური სამუშაო ნიშისთვის.",
+  "project.settings.worktree.startup.hint.new": "გამოიყენეთ $PANACODE_WORKTREE_PATH ახალი სამუშაო ნიშისთვის.",
   "project.settings.extensions.empty.mcps.title": "ჯერ არ არსებობს MCPs",
   "project.settings.extensions.empty.mcps.description": "MCPs, რომლებიც ხელმისაწვდომია Panacode-ისთვის, გამოჩნდება აქ",
   "project.settings.extensions.empty.plugins.title": "ჯერ არ არის პლაგინები",

@@ -280,7 +280,7 @@ describe("Worktree", () => {
         .set({
           commands: {
             start:
-              "bun -e \"await Bun.write('setup.json', JSON.stringify([process.env.OPENCODE_WORKTREE_BASE, process.env.OPENCODE_WORKTREE_PATH, process.cwd()]))\"",
+              "bun -e \"await Bun.write('setup.json', JSON.stringify([process.env.PANACODE_WORKTREE_BASE, process.env.PANACODE_WORKTREE_PATH, process.cwd()]))\"",
           },
         })
         .where(eq(ProjectTable.id, input.projectID))
@@ -335,7 +335,7 @@ describe("Worktree", () => {
         projectID: initial.id,
         commands: {
           start:
-            "bun -e \"await Bun.write('setup.json', JSON.stringify([process.env.OPENCODE_WORKTREE_BASE, process.env.OPENCODE_WORKTREE_PATH, process.cwd()]))\"",
+            "bun -e \"await Bun.write('setup.json', JSON.stringify([process.env.PANACODE_WORKTREE_BASE, process.env.PANACODE_WORKTREE_PATH, process.cwd()]))\"",
         },
       })
 

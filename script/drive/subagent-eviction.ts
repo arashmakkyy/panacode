@@ -6,7 +6,7 @@ import { Database } from "bun:sqlite"
 const label = process.env.DEMO_LABEL ?? "AFTER"
 const evict = process.env.DEMO_EVICT !== "false"
 
-// Run with OPENCODE_DRIVE_DB=proof.sqlite. Only model output and fixture_hold are
+// Run with PANACODE_DRIVE_DB=proof.sqlite. Only model output and fixture_hold are
 // simulated. The debug endpoint closes the real graph without waiting an hour.
 // Dynamic tools avoid the static adapter issue: anomalyco/opencode-drive#116.
 export default OpenCodeDriver.use(

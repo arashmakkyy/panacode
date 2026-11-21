@@ -776,8 +776,8 @@ export const dict = {
   "project.settings.color.description":
     "Барои тасвири лоиҳа истифода мешавад, вақте ки ягон тасвири фармоишӣ муқаррар карда нашудааст",
   "project.settings.worktree.startup.description": "Пас аз сохтани дарахти нави корӣ як маротиба иҷро мешавад",
-  "project.settings.worktree.startup.hint.base": "Барои дарахти кории асосӣ $OPENCODE_WORKTREE_BASE-ро истифода баред.",
-  "project.settings.worktree.startup.hint.new": "Барои дарахти нави корӣ $OPENCODE_WORKTREE_PATH-ро истифода баред.",
+  "project.settings.worktree.startup.hint.base": "Барои дарахти кории асосӣ $PANACODE_WORKTREE_BASE-ро истифода баред.",
+  "project.settings.worktree.startup.hint.new": "Барои дарахти нави корӣ $PANACODE_WORKTREE_PATH-ро истифода баред.",
   "project.settings.extensions.empty.mcps.title": "Ҳанӯз MCP нест",
   "project.settings.extensions.empty.mcps.description": "MCP-ҳои барои Panacode дастрас дар ин ҷо пайдо мешаванд",
   "project.settings.extensions.empty.plugins.title": "Ҳоло ягон плагинҳо нест",

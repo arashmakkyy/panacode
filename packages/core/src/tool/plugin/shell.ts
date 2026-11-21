@@ -46,7 +46,7 @@ const description = (shell?: string) =>
     "Rely on automatic truncation unless filtering the output is more useful.",
     "Commands still running after their timeout move to the background.",
     "Background commands return immediately, and you will be notified when they complete.",
-    "The current session ID is available in the OPENCODE_SESSION_ID environment variable.",
+    "The current session ID is available in the PANACODE_SESSION_ID environment variable.",
   ].join(" ")
 
 export const Input = Schema.Struct({
@@ -388,7 +388,7 @@ export const Plugin = {
                         invocation.env.AGENT = "1"
                         invocation.env.OPENCODE = "1"
                         invocation.env.AI_AGENT ||= "opencode"
-                        invocation.env.OPENCODE_SESSION_ID = context.sessionID
+                        invocation.env.PANACODE_SESSION_ID = context.sessionID
                         // Asking for permission can take a while; a stop then ends the call before any command starts.
                         finalTimeout = yield* restore(
                           Effect.raceFirst(

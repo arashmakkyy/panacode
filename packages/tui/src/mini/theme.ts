@@ -320,8 +320,9 @@ async function themeSource(
 ): Promise<ThemeDocumentSource> {
   if (name === "system" && colors) return generateSystem(colors, mode)
   const { Global } = await import("@opencode/util/global")
+  const { productEnv } = await import("@opencode/util/product-env")
   const custom = await discoverThemes(
-    configDirectories(process.env.OPENCODE_CONFIG_DIR ?? Global.Path.config, process.cwd()),
+    configDirectories(productEnv("CONFIG_DIR") ?? Global.Path.config, process.cwd()),
   )
   const source = custom[name] ?? allThemes()[name] ?? getOpenCodeTheme()
   return isThemeSource(source) ? source : getOpenCodeTheme()

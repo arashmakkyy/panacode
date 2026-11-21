@@ -6,6 +6,7 @@ import { Effect, Latch } from "effect"
 import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { OpenCode, type SessionInfo } from "@opencode/client"
 import { Global } from "@opencode/util/global"
+import { productEnv } from "@opencode/util/product-env"
 import { noTimeoutFetch } from "@opencode/util/no-timeout-fetch"
 import { ClipboardProvider, useClipboard } from "./context/clipboard"
 import { LogProvider, type LogSink } from "./context/log"
@@ -272,7 +273,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
             }),
           )
         }
-        if (process.env.OPENCODE_DRIVE) {
+        if (process.env.PANACODE_DRIVE) {
           const { Drive } = yield* Effect.promise(() => import("@opencode/simulation/frontend"))
           return yield* Drive.create(options, input.app.version)
         }
@@ -366,21 +367,21 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                             >
                               <TuiStartupProvider
                                 value={{
-                                  initialRoute: process.env.OPENCODE_STORY
+                                  initialRoute: productEnv("STORY")
                                     ? {
                                         type: "plugin",
                                         id: "opencode.storybook",
                                         name: "storybook",
-                                        // OPENCODE_STORY=1 opens the index; any other value opens that story.
+                                        // PANACODE_STORY=1 opens the index; any other value opens that story.
                                         data:
-                                          process.env.OPENCODE_STORY === "1"
+                                          productEnv("STORY") === "1"
                                             ? undefined
-                                            : { story: process.env.OPENCODE_STORY },
+                                            : { story: productEnv("STORY") },
                                       }
-                                    : process.env.OPENCODE_ROUTE
-                                      ? JSON.parse(process.env.OPENCODE_ROUTE)
+                                    : process.env.PANACODE_ROUTE
+                                      ? JSON.parse(process.env.PANACODE_ROUTE)
                                       : undefined,
-                                  skipInitialLoading: Boolean(process.env.OPENCODE_FAST_BOOT),
+                                  skipInitialLoading: Boolean(process.env.PANACODE_FAST_BOOT),
                                 }}
                               >
                                 <ClipboardProvider value={clipboard}>
@@ -735,7 +736,7 @@ function App() {
     if (config.data.highlights === false) return
     if (route.data.type !== "home" || dialog.stack.length > 0 || promptRef.current?.current.text) return
     if (args.prompt || args.continue || args.sessionID || args.newSessionID) return
-    if (process.env.OPENCODE_DRIVE || process.env.OPENCODE_STORY || process.env.OPENCODE_ROUTE) return
+    if (process.env.PANACODE_DRIVE || productEnv("STORY") || process.env.PANACODE_ROUTE) return
     void claim(storage, {
       version: app.version,
       count: items.length,

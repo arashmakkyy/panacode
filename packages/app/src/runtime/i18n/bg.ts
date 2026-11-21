@@ -775,8 +775,8 @@ export const dict = {
   "project.settings.color.description":
     "Използва се за иконата на проекта, когато няма зададено персонализирано изображение",
   "project.settings.worktree.startup.description": "Изпълнява се веднъж след създаването на ново работно дърво",
-  "project.settings.worktree.startup.hint.base": "Използвайте $OPENCODE_WORKTREE_BASE за основното работно дърво.",
-  "project.settings.worktree.startup.hint.new": "Използвайте $OPENCODE_WORKTREE_PATH за новото работно дърво.",
+  "project.settings.worktree.startup.hint.base": "Използвайте $PANACODE_WORKTREE_BASE за основното работно дърво.",
+  "project.settings.worktree.startup.hint.new": "Използвайте $PANACODE_WORKTREE_PATH за новото работно дърво.",
   "project.settings.extensions.empty.mcps.title": "Все още няма MCP сървъри",
   "project.settings.extensions.empty.mcps.description": "Наличните за Panacode MCP сървъри ще се показват тук",
   "project.settings.extensions.empty.plugins.title": "Все още няма добавки",

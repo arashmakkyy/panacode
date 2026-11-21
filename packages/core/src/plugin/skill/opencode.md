@@ -41,7 +41,7 @@ that section.
 CLI and TUI preferences are separate from OpenCode's server and project
 configuration. They live in the global `~/.config/opencode/cli.json`, or
 `$XDG_CONFIG_HOME/opencode/cli.json` when `XDG_CONFIG_HOME` is set. There is no
-project-local CLI configuration. Set `OPENCODE_CLI_CONFIG_CONTENT` to merge
+project-local CLI configuration. Set `PANACODE_CLI_CONFIG_CONTENT` to merge
 inline JSON over the global settings. Most preferences can also be changed from
 the TUI by pressing `Ctrl+P` and selecting **Open settings**.
 
@@ -253,14 +253,14 @@ Effect applications. For Cloudflare Durable Objects, use the
 OpenCode runs a client and a background server. Start by determining whether a
 problem belongs to the client, the shared server, or one project.
 
-- Check the service with `opencode service status` and verify the API with
-  `opencode api get /api/info`.
-- Compare with `opencode --standalone`, which runs the TUI with a private
+- Check the service with `panacode service status` and verify the API with
+  `panacode api get /api/info`.
+- Compare with `panacode --standalone`, which runs the TUI with a private
   server, to isolate shared-service issues.
-- Inspect `~/.local/share/opencode/log/opencode.log`. Filter `role=cli` for
+- Inspect `~/.local/share/panacode/log/panacode.log`. Filter `role=cli` for
   client startup and `role=server` for sessions, providers, plugins,
   permissions, and tools.
-- Run one reproduction with `OPENCODE_LOG_LEVEL=DEBUG` when normal logs are not
+- Run one reproduction with `PANACODE_LOG_LEVEL=DEBUG` when normal logs are not
   sufficient.
 - Do not delete or edit the database, service registration, or service config
   while diagnosing a problem. Back up persistent data before inspecting it

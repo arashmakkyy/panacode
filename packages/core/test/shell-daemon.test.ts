@@ -65,7 +65,7 @@ describe("Shell on the process daemon", () => {
               timeoutDeadline: expect.any(Number),
             },
           })
-          expect(request?.env).toMatchObject({ TERM: "xterm-256color", OPENCODE_TERMINAL: "1" })
+          expect(request?.env).toMatchObject({ TERM: "xterm-256color", PANACODE_TERMINAL: "1" })
           expect(request?.env).not.toHaveProperty("OPENCODE_TEST_REMOVED")
           expect(request?.env).not.toHaveProperty("OPENCODE_TEST_UNSET")
           expect(info).toMatchObject({ status: "running", pid: 1001, cwd: path.join(env.directory, "sub") })
@@ -492,7 +492,7 @@ describe("Shell on the process daemon", () => {
 })
 
 // Against the real opencode-pty, like server/test/persistent-pty.test.ts.
-const binary = process.env.OPENCODE_PTY_BIN ?? binaryPath
+const binary = process.env.PANACODE_PTY_BIN ?? binaryPath
 const real = binary !== undefined && existsSync(binary) ? it.live : it.live.skip
 
 describe("Shell on a real process daemon", () => {

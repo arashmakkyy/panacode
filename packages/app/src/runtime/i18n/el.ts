@@ -771,8 +771,8 @@ export const dict = {
     "Χρησιμοποιείται για το εικονίδιο του έργου όταν δεν έχει οριστεί προσαρμοσμένη εικόνα",
   "project.settings.worktree.startup.description": "Εκτελείται μία φορά μετά τη δημιουργία ενός νέου δέντρου εργασίας",
   "project.settings.worktree.startup.hint.base":
-    "Χρησιμοποιήστε το $OPENCODE_WORKTREE_BASE για το βασικό δέντρο εργασίας.",
-  "project.settings.worktree.startup.hint.new": "Χρησιμοποιήστε το $OPENCODE_WORKTREE_PATH για το νέο δέντρο εργασίας.",
+    "Χρησιμοποιήστε το $PANACODE_WORKTREE_BASE για το βασικό δέντρο εργασίας.",
+  "project.settings.worktree.startup.hint.new": "Χρησιμοποιήστε το $PANACODE_WORKTREE_PATH για το νέο δέντρο εργασίας.",
   "project.settings.extensions.empty.mcps.title": "Όχι MCPs ακόμα",
   "project.settings.extensions.empty.mcps.description": "Το MCPs διαθέσιμο στο Panacode θα εμφανιστεί εδώ",
   "project.settings.extensions.empty.plugins.title": "Δεν υπάρχουν πρόσθετα ακόμα",

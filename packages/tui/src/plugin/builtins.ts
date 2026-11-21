@@ -13,6 +13,7 @@ import Storybook from "../feature-plugins/system/storybook"
 import Stats from "../feature-plugins/system/stats"
 import Latex from "@opencode/latex/plugin"
 import Merman from "@opencode/merman/plugin"
+import { productEnv } from "@opencode/util/product-env"
 
 export const builtins = [
   HomeFooter,
@@ -29,7 +30,7 @@ export const builtins = [
   Merman,
   Latex,
   // The storybook is a development tool; keep its route and palette commands out of
-  // normal launches and register it only for OPENCODE_STORY runs.
-  ...(process.env.OPENCODE_STORY ? [Storybook] : []),
+  // normal launches and register it only for PANACODE_STORY runs.
+  ...(productEnv("STORY") ? [Storybook] : []),
   DiffViewer,
 ]

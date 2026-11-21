@@ -5,7 +5,7 @@ import { Logging } from "@opencode/util/observability/logging"
 
 describe("Logging", () => {
   test("uses a local-specific log file for local installs", () => {
-    expect(Logging.file(true, "local")).toBe(path.join(Global.Path.log, "opencode-local.log"))
+    expect(Logging.file(true, "local")).toBe(path.join(Global.Path.log, "panacode-local.log"))
   })
 
   test("keeps non-local installs on the default log file", () => {
