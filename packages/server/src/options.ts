@@ -10,6 +10,7 @@ export const ServerOptions = Schema.Struct({
       name: Schema.optional(Schema.String),
       version: Schema.optional(Schema.String),
       channel: Schema.optional(Schema.String),
+      instance: Schema.optional(Schema.String),
     }),
   ),
   hostname: Schema.optional(Schema.String),

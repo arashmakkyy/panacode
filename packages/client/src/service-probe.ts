@@ -7,6 +7,10 @@ import { matchesVersion } from "./service-version.js"
 /** Keep in sync with `@opencode/util/product-identity` (`ProductIdentity.slug`). */
 const productSlug = "panacode"
 
+// Windows accepts process ids up to the signed 32-bit range. A larger value cannot name a real
+// process on any supported platform.
+const maxPID = 2_147_483_647
+
 // Shared by the Effect and Promise clients. Keep this module free of Effect so the
 // Promise client never loads the Effect runtime.
 
@@ -16,19 +20,24 @@ export type LocalService = {
   readonly version?: string
   readonly state: "ready" | "waiting" | "failed"
   readonly compatible: boolean
+  /** A definite reason this endpoint must not be reused or controlled. */
+  readonly error?: string
 }
+
+const protocolError =
+  "Background service uses an incompatible health protocol. Update this client or explicitly restart the service."
 
 /**
  * What `ensure()` does with a registered service that answered: return it, keep polling while
  * it starts, replace it because its version does not meet the requirement, or fail.
  */
 export function decide(service: LocalService, options: DiscoverOptions) {
+  // Ownership and payload validity come first: an incompatible or unverified endpoint must never
+  // reach replacement or handoff logic.
+  if (service.error !== undefined) return fail(service.error)
+  if (!service.compatible) return fail(protocolError)
   if (!matchesVersion(service.version, options))
     return { _tag: "replace", pty: service.state === "ready" ? "handoff" : "clear" } as const
-  if (!service.compatible)
-    return fail(
-      "Background service uses an incompatible health protocol. Update this client or explicitly restart the service.",
-    )
   if (service.state === "ready") return { _tag: "reuse" } as const
   if (service.state === "failed") return fail("Background service failed to start")
   return { _tag: "wait" } as const
@@ -55,12 +64,93 @@ export function same(left: Info, right: Info) {
 }
 
 /**
+ * Validate a registration value before it is trusted. Unknown values stay untyped at this boundary;
+ * every other module receives a checked `Info`.
+ */
+export function parseInfo(input: unknown): Info | undefined {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) return undefined
+  if (!("url" in input) || typeof input.url !== "string") return undefined
+  if (localEndpoint({ url: input.url }) === undefined) return undefined
+  if (!("pid" in input) || typeof input.pid !== "number" || !Number.isInteger(input.pid)) return undefined
+  if (input.pid <= 0 || input.pid > maxPID) return undefined
+  if ("id" in input && input.id !== undefined && (typeof input.id !== "string" || input.id.length === 0)) return undefined
+  if ("version" in input && input.version !== undefined && typeof input.version !== "string") return undefined
+  if ("product" in input && input.product !== undefined && input.product !== "panacode") return undefined
+  if (
+    "password" in input &&
+    input.password !== undefined &&
+    (typeof input.password !== "string" || input.password.length === 0)
+  )
+    return undefined
+  const control = "control" in input ? parseControl(input.control) : undefined
+  if ("control" in input && input.control !== undefined && control === undefined) return undefined
+  return {
+    id: "id" in input && typeof input.id === "string" ? input.id : undefined,
+    product: "product" in input && input.product === "panacode" ? ("panacode" as const) : undefined,
+    version: "version" in input && typeof input.version === "string" ? input.version : undefined,
+    url: input.url,
+    pid: input.pid,
+    password: "password" in input && typeof input.password === "string" ? input.password : undefined,
+    control,
+  }
+}
+
+function parseControl(input: unknown): Info["control"] | undefined {
+  if (typeof input !== "object" || input === null) return undefined
+  if (!("path" in input) || typeof input.path !== "string" || input.path.length === 0) return undefined
+  if (!("token" in input) || typeof input.token !== "string" || input.token.length === 0) return undefined
+  return { path: input.path, token: input.token }
+}
+
+/** A registration file read result. `problem` means the file exists but is not a Panacode owner. */
+export type Registration = {
+  readonly info?: Info
+  /** A validated loopback endpoint from a record that is otherwise unusable. */
+  readonly url?: string
+  readonly problem?: string
+}
+
+/**
+ * Parse a registration file. A record without Panacode's product and instance identity is
+ * deliberately not upgraded into a controllable service: it may belong to another product or
+ * another user's install.
+ */
+export function parseRegistration(text: string): Registration {
+  let value: unknown
+  try {
+    value = JSON.parse(text)
+  } catch {
+    return { problem: "The local service registration is not valid JSON." }
+  }
+  const info = parseInfo(value)
+  if (info === undefined)
+    return {
+      problem: "The local service registration is not a valid Panacode record.",
+      url: recordOrigin(value),
+    }
+  if (info.product !== "panacode" || info.id === undefined || info.password === undefined)
+    return {
+      problem: "The local service registration does not identify a Panacode instance.",
+      url: info.url,
+    }
+  return { info }
+}
+
+// A damaged record is never adopted, but a loopback URL it still names lets callers distinguish a
+// live endpoint from a free port before a replacement publishes its own registration.
+function recordOrigin(input: unknown) {
+  if (typeof input !== "object" || input === null || !("url" in input) || typeof input.url !== "string")
+    return undefined
+  return localEndpoint({ url: input.url })
+}
+
+/**
  * The loopback endpoint for a local registration. A wildcard address is normalized only here,
  * for a registration read from Panacode's own state directory. Anything that is not loopback is
  * rejected before a credential is attached: automatic local discovery must never authenticate to
  * a remote or redirected endpoint.
  */
-export function localEndpoint(info: Info) {
+export function localEndpoint(info: { readonly url: string }) {
   let url: URL
   try {
     url = new URL(info.url)
@@ -80,56 +170,94 @@ export function localEndpoint(info: Info) {
   return info.url
 }
 
+/** Whether a loopback port currently accepts any HTTP response, without sending a credential. */
+export async function occupied(url: string, timeout = defaultEnsureTiming.requestTimeout) {
+  if (localEndpoint({ url }) === undefined) return false
+  return fetch(new URL("/api/info", url), {
+    signal: AbortSignal.timeout(timeout),
+    redirect: "manual",
+  })
+    .then((response) => {
+      void response.body?.cancel()
+      return true
+    })
+    .catch(() => false)
+}
+
 /** Ask a registered owner for its health and classify the answer. */
 export async function probeResult(info: Info, timeout = defaultEnsureTiming.requestTimeout) {
-  if (info.product !== undefined && info.product !== "panacode") return { service: undefined, timedOut: false }
+  if (info.product !== "panacode" || info.id === undefined || info.password === undefined)
+    return { service: undefined, timedOut: false }
   const origin = localEndpoint(info)
   if (origin === undefined) return { service: undefined, timedOut: false }
   const endpoint = {
     url: origin,
-    auth: info.password === undefined ? undefined : { type: "basic", username: "opencode", password: info.password },
+    auth: { type: "basic", username: "opencode", password: info.password },
   } satisfies Endpoint
   const signal = AbortSignal.timeout(timeout)
   const result = await fetch(new URL("/api/info", origin), {
     headers: headers(endpoint),
     signal,
-    redirect: "error",
+    // Inspect redirects instead of following them. A redirect to another loopback port is still a
+    // different endpoint and cannot inherit this registration's identity.
+    redirect: "manual",
   })
     .then(async (response) => ({
       response,
-      body: response.status === 404 ? undefined : ((await response.json()) as unknown),
+      body: response.status === 404 || response.status === 401 || response.status === 403 ? undefined : await readJSON(response),
     }))
     .catch(() => undefined)
   if (result === undefined) return { service: undefined, timedOut: signal.aborted }
   const response = result.response
-  // A missing health endpoint identifies protocol incompatibility, not an older
-  // version. Only an unmet version requirement lets ensure replace this owner.
+  if (response.status >= 300 && response.status < 400)
+    return denied(info, origin, "The registered endpoint redirected the health check; refusing to reuse or control it.")
+  if (response.status === 401 || response.status === 403)
+    return denied(
+      info,
+      origin,
+      "The registered endpoint rejected the service credential. Another process may own the registered endpoint.",
+    )
+  // A missing health endpoint identifies protocol incompatibility, not an older version. It must
+  // not become a replacement or handoff target.
   if (response.status === 404)
     return {
-      service: {
-        info,
-        endpoint,
-        version: info.version,
-        state: "ready",
-        compatible: false,
-      } satisfies LocalService,
+      service: { info, endpoint, version: info.version, state: "ready", compatible: false } satisfies LocalService,
       timedOut: false,
     }
-  const serverInfo = decodeInfo(result.body)
-  if (serverInfo === undefined) return { service: undefined, timedOut: false }
-  if (serverInfo.pid !== info.pid) return { service: undefined, timedOut: false }
+  const serverInfo = decodeHealth(result.body)
+  if (serverInfo === undefined)
+    return denied(info, origin, "The registered endpoint returned an invalid health response; refusing to reuse it.")
+  if (serverInfo.pid !== info.pid)
+    return denied(info, origin, "The registered endpoint is owned by another process; refusing to reuse or control it.")
+  if (serverInfo.instance !== info.id)
+    return denied(info, origin, "The registered endpoint reports a different service instance; refusing to reuse it.")
   if (serverInfo.product !== undefined && serverInfo.product !== "panacode")
-    return { service: undefined, timedOut: false }
-  if (info.product !== undefined && serverInfo.product !== undefined && info.product !== serverInfo.product)
-    return { service: undefined, timedOut: false }
-  if (info.version !== undefined && serverInfo.version !== info.version) return { service: undefined, timedOut: false }
+    return denied(info, origin, "The registered endpoint belongs to another product; refusing to reuse it.")
+  if (info.version !== undefined && serverInfo.version !== info.version)
+    return denied(info, origin, "The registered endpoint reports a different version than its registration; refusing to reuse it.")
+  if (response.status !== 200 && response.status !== 500 && response.status !== 503)
+    return denied(info, origin, `The registered endpoint returned an unexpected status ${response.status}.`)
   return {
     service: {
       info,
       endpoint,
       version: serverInfo.version,
-      state: response.ok ? "ready" : response.status === 500 ? "failed" : "waiting",
+      state: response.status === 200 ? "ready" : response.status === 500 ? "failed" : "waiting",
       compatible: true,
+    } satisfies LocalService,
+    timedOut: false,
+  }
+}
+
+function denied(info: Info, origin: string, message: string) {
+  return {
+    service: {
+      info,
+      endpoint: { url: origin },
+      version: info.version,
+      state: "failed",
+      compatible: true,
+      error: message,
     } satisfies LocalService,
     timedOut: false,
   }
@@ -143,13 +271,19 @@ export function headers(endpoint: Endpoint) {
   }
 }
 
-function decodeInfo(input: unknown) {
+async function readJSON(response: Response): Promise<unknown> {
+  return response.json().catch(() => undefined)
+}
+
+function decodeHealth(input: unknown) {
   if (typeof input !== "object" || input === null) return
-  if (!("version" in input) || typeof input.version !== "string") return
+  if (!("version" in input) || typeof input.version !== "string" || input.version.length === 0) return
+  if (!("instance" in input) || typeof input.instance !== "string" || input.instance.length === 0) return
   if (!("pid" in input) || typeof input.pid !== "number" || !Number.isInteger(input.pid) || input.pid < 0) return
   if ("product" in input && input.product !== undefined && input.product !== "panacode") return
   return {
     version: input.version,
+    instance: input.instance,
     pid: input.pid,
     product: "product" in input && input.product === "panacode" ? ("panacode" as const) : undefined,
   }

@@ -4,7 +4,7 @@ import { decide, type LocalService } from "../src/service-probe"
 const protocolError =
   "Background service uses an incompatible health protocol. Update this client or explicitly restart the service."
 
-function service(input: Pick<LocalService, "state" | "compatible" | "version">) {
+function service(input: Pick<LocalService, "state" | "compatible" | "version"> & { error?: string }) {
   return {
     info: { url: "http://127.0.0.1:4096", pid: 4242, version: input.version },
     endpoint: { url: "http://127.0.0.1:4096" },
@@ -12,7 +12,7 @@ function service(input: Pick<LocalService, "state" | "compatible" | "version">) 
   } satisfies LocalService
 }
 
-test("a missing health endpoint fails unless the caller requires a different version", () => {
+test("a missing health endpoint always fails before replacement is considered", () => {
   const missing = service({ version: "2.0.0", state: "ready", compatible: false })
   expect(decide(missing, {})).toEqual({ _tag: "fail", error: new Error(protocolError) })
   expect(decide(missing, { version: "2.0.0" })).toEqual({ _tag: "fail", error: new Error(protocolError) })
@@ -20,11 +20,17 @@ test("a missing health endpoint fails unless the caller requires a different ver
     _tag: "fail",
     error: new Error(protocolError),
   })
-  expect(decide(missing, { version: "3.0.0" })).toEqual({ _tag: "replace", pty: "handoff" })
+  expect(decide(missing, { version: "3.0.0" })).toEqual({ _tag: "fail", error: new Error(protocolError) })
   expect(decide(service({ state: "ready", compatible: false }), { version: "3.0.0" })).toEqual({
-    _tag: "replace",
-    pty: "handoff",
+    _tag: "fail",
+    error: new Error(protocolError),
   })
+})
+
+test("an ownership or payload error wins over version replacement and readiness", () => {
+  const denied = service({ version: "1.0.0", state: "ready", compatible: true, error: "different instance" })
+  expect(decide(denied, { version: "2.0.0" })).toEqual({ _tag: "fail", error: new Error("different instance") })
+  expect(decide(denied, {})).toEqual({ _tag: "fail", error: new Error("different instance") })
 })
 
 test("a compatible service is reused when ready, awaited while starting, and fails when it failed", () => {

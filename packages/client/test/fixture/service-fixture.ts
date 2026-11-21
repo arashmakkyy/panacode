@@ -4,11 +4,11 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { waitForExit } from "./service-timing"
 
-// Windows has no catchable SIGTERM: process.kill ends the target at once with exit code 1, so the
-// service's SIGTERM handler (record the signal, unregister a lingering server, exit 0) runs only on POSIX.
-export const catchesSigterm = process.platform !== "win32"
-export const stopSignal = catchesSigterm ? "SIGTERM" : undefined
-export const stoppedExitCode = catchesSigterm ? 0 : 1
+// The private control channel works on every platform; the service exits in response to its own
+// authenticated shutdown request rather than an OS signal.
+export const catchesSigterm = true
+export const stopSignal = "CONTROL"
+export const stoppedExitCode = 0
 
 export async function serviceFixture() {
   const directory = await mkdtemp(join(tmpdir(), "opencode-client-service-"))

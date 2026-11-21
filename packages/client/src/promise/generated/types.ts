@@ -2,6 +2,8 @@ export type JsonValue = null | boolean | number | string | Array<JsonValue> | { 
 
 export type ServerInfo = {
   version: string
+  product?: string | undefined
+  instance?: string | undefined
   pid: number
   hostname?: string | undefined
   urls: Array<string>
@@ -2614,6 +2616,7 @@ export type ConfigEntry =
           }>
         }
       }
+      legacy?: boolean
     }
   | { type: "directory"; path: AbsolutePath }
 

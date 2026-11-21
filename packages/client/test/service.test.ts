@@ -4,8 +4,6 @@ import { Effect, FileSystem } from "effect"
 import { writeFile } from "node:fs/promises"
 import { Service, type EnsureReason } from "../src/effect/service"
 import {
-  catchesSigterm,
-  expectNotListening,
   serviceFixture,
   stopSignal,
   stoppedExitCode,
@@ -73,7 +71,7 @@ test("adds configured environment variables when starting a service", async () =
       file: registration,
       version: "test",
       command: fixture.command("environment"),
-      env: { OPENCODE_SERVICE_ENV_TEST: "configured" },
+      env: { PANACODE_SERVICE_ENV_TEST: "configured" },
     }),
   )
   const info = await Bun.file(registration).json()
@@ -199,7 +197,7 @@ test("evicts an unresponsive registered service before starting its replacement"
   expect(await status(endpoint.url)).toMatchObject({ version: "test", pid: replacement.pid })
 })
 
-test("signals an unresponsive registered service process", async () => {
+test("shuts down an unresponsive registered service over the private control channel", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration
   const process = fixture.spawn("hanging")
@@ -211,24 +209,26 @@ test("signals an unresponsive registered service process", async () => {
   expect(await Bun.file(registration).exists()).toBe(false)
 })
 
-test("stop escalates when the registration disappears before the process exits", async () => {
+test("stop leaves a service that ignores authenticated shutdown running and reports it", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration
   const existing = fixture.spawn("lingering", "5000")
   await fixture.waitForFile()
   const original = await Bun.file(registration).json()
 
-  await run(stop({ file: registration }))
+  await expect(run(stop({ file: registration }))).rejects.toThrow(
+    `Server process ${original.pid} did not stop after an authenticated shutdown request`,
+  )
 
   expect(await fixture.signal()).toBe(stopSignal)
-  expect(() => process.kill(original.pid, 0)).toThrow()
-  await expectNotListening(original.url)
+  expect(() => process.kill(original.pid, 0)).not.toThrow()
   expect(await Bun.file(registration).exists()).toBe(false)
+  existing.kill("SIGKILL")
   await existing.exited
 }, 15_000)
 
 test.skipIf(process.platform === "win32")(
-  "stop fails when the process survives SIGKILL",
+  "stop reports a process that survives the shutdown request",
   async () => {
     await using fixture = await serviceFixture()
     const registration = fixture.registration
@@ -236,46 +236,47 @@ test.skipIf(process.platform === "win32")(
     await fixture.waitForFile()
     const original = await Bun.file(registration).json()
 
-    await expect(run(stop({ file: registration }))).rejects.toThrow(`Server process ${original.pid} is still running`)
-    expect(await Bun.file(registration + ".signal").text()).toBe("SIGTERM")
+    await expect(run(stop({ file: registration }))).rejects.toThrow(
+      `Server process ${original.pid} did not stop after an authenticated shutdown request`,
+    )
+    expect(await Bun.file(registration + ".signal").text()).toBe(stopSignal)
   },
   15_000,
 )
 
-// On Windows the original process cannot outlive SIGTERM, so no successor can register before it exits.
-test.skipIf(!catchesSigterm)(
-  "stop waits for the original process while preserving a newly registered successor",
-  async () => {
-    await using fixture = await serviceFixture()
-    const registration = fixture.registration
-    const existing = fixture.spawn("lingering", "15000")
+// The control channel decides when the original exits, so a successor can register while the
+// original is still winding down. Stopping A must never delete B's registration.
+test("stop waits for the original process while preserving a newly registered successor", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  const existing = fixture.spawn("lingering", "15000")
+  await fixture.waitForFile()
+  const original = await Bun.file(registration).json()
+  const stopping = run(Service.stop({ file: registration })).catch((error: unknown) => error)
+
+  try {
+    await fixture.waitForFile(registration + ".unregistered")
+    const successor = fixture.spawn("graceful")
     await fixture.waitForFile()
-    const original = await Bun.file(registration).json()
-    // Default timing keeps the grace period open long enough for the successor to register first.
-    const stopping = run(Service.stop({ file: registration }))
+    const replacement = await Bun.file(registration).json()
+    expect(existing.exitCode).toBe(null)
+    expect(replacement.pid).toBe(successor.pid)
 
-    try {
-      await fixture.waitForFile(registration + ".unregistered")
-      const successor = fixture.spawn("graceful")
-      await fixture.waitForFile()
-      const replacement = await Bun.file(registration).json()
-      expect(existing.exitCode).toBe(null)
-      expect(replacement.pid).toBe(successor.pid)
+    const error = await stopping
+    expect(error).toBeInstanceOf(Error)
+    if (!(error instanceof Error)) throw error
+    expect(error.message).toContain("did not stop after an authenticated shutdown request")
 
-      await stopping
-
-      expect(() => process.kill(original.pid, 0)).toThrow()
-      await expectNotListening(original.url)
-      expect(await Bun.file(registration).json()).toEqual(replacement)
-      expect(await status(replacement.url)).toMatchObject({ pid: successor.pid })
-      expect(successor.exitCode).toBe(null)
-    } finally {
-      existing.kill("SIGKILL")
-      await stopping
-    }
-  },
-  20_000,
-)
+    expect(() => process.kill(original.pid, 0)).not.toThrow()
+    expect(await Bun.file(registration).json()).toEqual(replacement)
+    expect(await status(replacement.url)).toMatchObject({ pid: successor.pid, instance: replacement.id })
+    expect(successor.exitCode).toBe(null)
+  } finally {
+    existing.kill("SIGKILL")
+    await existing.exited
+    await stopping
+  }
+}, 20_000)
 
 test("signals an incompatible service before starting its replacement", async () => {
   await using fixture = await serviceFixture()

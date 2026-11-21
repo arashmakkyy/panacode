@@ -12,6 +12,7 @@ import { tmpdir } from "./fixture/tmpdir"
 test("prints the snapshot path from the registered server without replacing it", async () => {
   await using root = await tmpdir()
   const requests: Array<{ method: string; path: string; authorization: string | null }> = []
+  const instance = crypto.randomUUID()
   using server = fake((request) => {
     requests.push({
       method: request.method,
@@ -19,8 +20,8 @@ test("prints the snapshot path from the registered server without replacing it",
       authorization: request.headers.get("authorization"),
     })
     return Response.json({ path: "/server/log/heap-1-2.heapsnapshot", pid: process.pid })
-  })
-  const registration = await register(root.path, server.url.href)
+  }, instance)
+  const registration = await register(root.path, server.url.href, instance)
 
   const result = await cli(root.path, ["debug", "heap-dump"])
 
@@ -40,6 +41,7 @@ test("sends --directory as an absolute path and warns only when the server ignor
   // The command runs from packages/cli (see `cli`), so a relative directory resolves there.
   const directory = path.join(import.meta.dir, "..", "snapshots")
   const sent: Array<string | null> = []
+  const instance = crypto.randomUUID()
   using server = fake((request) => {
     const requested = new URL(request.url).searchParams.get("directory") ?? ""
     sent.push(requested)
@@ -47,8 +49,8 @@ test("sends --directory as an absolute path and warns only when the server ignor
     // that predates `directory` for the second.
     const folder = sent.length === 1 ? requested : "/server/log"
     return Response.json({ path: path.join(folder, "heap-1-2.heapsnapshot"), pid: process.pid })
-  })
-  await register(root.path, server.url.href)
+  }, instance)
+  await register(root.path, server.url.href, instance)
 
   // A trailing separator is not a different directory.
   const current = await cli(root.path, ["debug", "heap-dump", "--directory", directory + path.sep])
@@ -87,20 +89,20 @@ test("explains when the server predates heap dumps", async () => {
 })
 
 // Answers the health probe like a ready V2 server and passes every other request to `handle`.
-function fake(handle: (request: Request) => Response) {
+function fake(handle: (request: Request) => Response, instance?: string) {
   return Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     fetch: (request) =>
       new URL(request.url).pathname === "/api/info"
-        ? Response.json({ version: OPENCODE_VERSION, pid: process.pid, urls: [] })
+        ? Response.json({ version: OPENCODE_VERSION, instance, pid: process.pid, product: "panacode", urls: [] })
         : handle(request),
   })
 }
 
-async function register(root: string, url: string) {
+async function register(root: string, url: string, id: string) {
   const file = path.join(root, "state", "panacode", ServiceConfig.filename())
-  const info = { version: OPENCODE_VERSION, url, pid: process.pid, password: "secret" }
+  const info = { id, product: "panacode", version: OPENCODE_VERSION, url, pid: process.pid, password: "secret" }
   await fs.mkdir(path.dirname(file), { recursive: true })
   await fs.writeFile(file, JSON.stringify(info))
   return { file, info }

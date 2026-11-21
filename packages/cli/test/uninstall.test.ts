@@ -1,0 +1,103 @@
+import { expect, test } from "bun:test"
+import fs from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+
+test("uninstall --dry-run reports a service and cache without stopping or deleting anything", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "panacode-uninstall-dry-"))
+  const state = path.join(root, "state", "panacode")
+  const cache = path.join(root, "cache", "panacode")
+  const heartbeat = path.join(root, "heartbeat")
+  await fs.mkdir(state, { recursive: true })
+  await fs.mkdir(cache, { recursive: true })
+  await fs.writeFile(path.join(cache, "marker"), "cache")
+  const witness = Bun.spawn([process.execPath, path.join(import.meta.dir, "fixture/witness.ts"), heartbeat], {
+    stdio: ["ignore", "ignore", "ignore"],
+  })
+  const registration = path.join(state, "service-local.json")
+  try {
+    await waitForHeartbeat(heartbeat)
+    const info = { url: "http://127.0.0.1:1/", pid: witness.pid, version: "test", password: "legacy-secret" }
+    await fs.writeFile(registration, JSON.stringify(info))
+    const before = await fs.readFile(registration, "utf8")
+
+    const result = await cli(["uninstall", "--dry-run"], root)
+
+    expect({ exitCode: result.exitCode, stderr: result.stderr }).toEqual({ exitCode: 0, stderr: "" })
+    expect(result.stdout).toContain("Dry run - no changes made")
+    expect(result.stdout).toContain(`Stop background service and persistent terminals: ${registration}`)
+    expect(result.stdout).toContain(`Cache: ${cache}`)
+    expect(await fs.readFile(registration, "utf8")).toBe(before)
+    expect(await fs.readFile(path.join(cache, "marker"), "utf8")).toBe("cache")
+    expect(() => process.kill(witness.pid, 0)).not.toThrow()
+  } finally {
+    witness.kill()
+    await witness.exited
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+test("uninstall refuses to stop a legacy record and leaves the cache and process intact", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "panacode-uninstall-legacy-"))
+  const state = path.join(root, "state", "panacode")
+  const cache = path.join(root, "cache", "panacode")
+  const heartbeat = path.join(root, "heartbeat")
+  await fs.mkdir(state, { recursive: true })
+  await fs.mkdir(cache, { recursive: true })
+  await fs.writeFile(path.join(cache, "marker"), "cache")
+  const witness = Bun.spawn([process.execPath, path.join(import.meta.dir, "fixture/witness.ts"), heartbeat], {
+    stdio: ["ignore", "ignore", "ignore"],
+  })
+  const registration = path.join(state, "service-local.json")
+  try {
+    await waitForHeartbeat(heartbeat)
+    const info = { url: "http://127.0.0.1:1/", pid: witness.pid, version: "test", password: "legacy-secret" }
+    await fs.writeFile(registration, JSON.stringify(info))
+    const before = await fs.readFile(registration, "utf8")
+
+    const result = await cli(["uninstall", "--force"], root)
+
+    expect(result.exitCode).not.toBe(0)
+    expect(result.stdout + result.stderr).toContain("Refusing to stop an unidentified process")
+    expect(await fs.readFile(registration, "utf8")).toBe(before)
+    expect(await fs.readFile(path.join(cache, "marker"), "utf8")).toBe("cache")
+    expect(() => process.kill(witness.pid, 0)).not.toThrow()
+  } finally {
+    witness.kill()
+    await witness.exited
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+async function waitForHeartbeat(file: string) {
+  for (let attempt = 0; attempt < 300; attempt++) {
+    if ((await Bun.file(file).text().catch(() => "")) !== "") return
+    await Bun.sleep(10)
+  }
+  throw new Error("witness did not start")
+}
+
+async function cli(args: string[], root: string) {
+  const child = Bun.spawn([process.execPath, "run", path.join(import.meta.dir, "../src/index.ts"), ...args], {
+    cwd: path.join(import.meta.dir, ".."),
+    env: {
+      ...process.env,
+      HOME: root,
+      USERPROFILE: root,
+      XDG_DATA_HOME: path.join(root, "data"),
+      XDG_CONFIG_HOME: path.join(root, "config"),
+      XDG_CACHE_HOME: path.join(root, "cache"),
+      XDG_STATE_HOME: path.join(root, "state"),
+      PANACODE_CONFIG_DIR: path.join(root, "config", "panacode"),
+      PANACODE_TEST_HOME: root,
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ])
+  return { stdout, stderr, exitCode }
+}

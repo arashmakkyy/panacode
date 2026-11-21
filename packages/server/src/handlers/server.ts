@@ -3,6 +3,7 @@ import { Duration, Effect } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { PersistentPty } from "@opencode/core/persistent-pty"
+import { ProductIdentity } from "@opencode/util/product-identity"
 import { UnauthorizedError } from "@opencode/protocol/errors"
 import { Api } from "../api"
 import { ServerAuth } from "../auth"
@@ -20,6 +21,8 @@ export const ServerHandler = HttpApiBuilder.group(Api, "server.server", (handler
           const info = yield* ServerInfo.Service
           return {
             version: info.app.version ?? "unknown",
+            product: ProductIdentity.slug,
+            instance: info.app.instance,
             pid: process.pid ?? 0,
             hostname: hostname() || undefined,
             urls: info.urls(),

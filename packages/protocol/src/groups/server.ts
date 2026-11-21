@@ -4,6 +4,10 @@ import { UnauthorizedError } from "../errors.js"
 
 export const ServerInfo = Schema.Struct({
   version: Schema.String,
+  // The product that owns this process. Optional for servers that predate the field.
+  product: Schema.optional(Schema.String),
+  // The instance identity registered for this boot. Optional for servers that predate it.
+  instance: Schema.optional(Schema.String),
   // 0 means the runtime has no OS process identity (e.g. workerd).
   pid: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   // The machine's name, absent where the runtime has none (e.g. workerd).

@@ -100,7 +100,12 @@ export const migrateRegistration = Effect.fnUntraced(function* (
   if (Option.isNone(text)) return
   const registration = yield* decodeRegistration(text.value).pipe(Effect.option)
   if (Option.isNone(registration)) return
-  if (!versionBelongsToChannel(registration.value.version, channel, installedVersion)) return
+  const info = registration.value
+  // A version, filename, or location is not proof of ownership. Only a record that carries
+  // Panacode's own product and instance identity may move to the live registration path; an
+  // ambiguous legacy record stays where it is instead of being promoted.
+  if (info.product !== "panacode" || info.id === undefined || info.password === undefined) return
+  if (!versionBelongsToChannel(info.version, channel, installedVersion)) return
   yield* fs.writeFileString(file, text.value, { flag: "wx", mode: 0o600 }).pipe(Effect.ignore)
 })
 

@@ -337,43 +337,55 @@ test("service config migrates from the hashed channel filename", async () => {
   }
 })
 
-test("preview registration migration never moves stable discovery", async () => {
+test("registration migration requires Panacode ownership and never moves stable discovery", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-migration-"))
   const legacy = path.join(root, "service.json")
   const target = path.join(root, ServiceConfig.filename("preview-a"))
-  try {
-    await fs.writeFile(
-      legacy,
-      JSON.stringify({ id: "old-preview", version: "0.0.0-preview-a-1234", url: "http://localhost:4096", pid: 1 }),
-    )
-    await Effect.runPromise(
+  const owned = {
+    id: "old-preview",
+    product: "panacode",
+    version: "0.0.0-preview-a-1234",
+    url: "http://127.0.0.1:4096",
+    pid: 1,
+    password: "preview-secret",
+  }
+  const write = (value: unknown) => fs.writeFile(legacy, JSON.stringify(value))
+  const migrate = () =>
+    Effect.runPromise(
       ServiceConfig.migrateRegistration(legacy, target, "preview-a", "0.0.0-preview-a-5678").pipe(
         Effect.provide(NodeFileSystem.layer),
       ),
     )
+  try {
+    await write(owned)
+    await migrate()
     expect(await Bun.file(legacy).exists()).toBe(true)
     expect(await Bun.file(target).json()).toMatchObject({ id: "old-preview" })
 
     await fs.rm(target)
-    await fs.writeFile(legacy, JSON.stringify({ id: "stable", version: "1.2.3", url: "http://localhost:4096", pid: 1 }))
-    await Effect.runPromise(
-      ServiceConfig.migrateRegistration(legacy, target, "preview-a", "0.0.0-preview-a-5678").pipe(
-        Effect.provide(NodeFileSystem.layer),
-      ),
-    )
-    expect(await Bun.file(legacy).exists()).toBe(true)
+    await write({ ...owned, version: "1.2.3" })
+    await migrate()
     expect(await Bun.file(target).exists()).toBe(false)
 
-    await fs.writeFile(
-      legacy,
-      JSON.stringify({ id: "old-preview", version: "0.0.0-preview-a-1234", url: "http://localhost:4096", pid: 1 }),
-    )
+    await write({ ...owned, product: undefined })
+    await migrate()
+    expect(await Bun.file(target).exists()).toBe(false)
+
+    await write({ ...owned, product: "opencode" })
+    await migrate()
+    expect(await Bun.file(target).exists()).toBe(false)
+
+    await write({ ...owned, id: undefined })
+    await migrate()
+    expect(await Bun.file(target).exists()).toBe(false)
+
+    await write({ ...owned, password: undefined })
+    await migrate()
+    expect(await Bun.file(target).exists()).toBe(false)
+
+    await write(owned)
     await fs.writeFile(target, JSON.stringify({ id: "current-preview" }))
-    await Effect.runPromise(
-      ServiceConfig.migrateRegistration(legacy, target, "preview-a", "0.0.0-preview-a-5678").pipe(
-        Effect.provide(NodeFileSystem.layer),
-      ),
-    )
+    await migrate()
     expect(await Bun.file(legacy).exists()).toBe(true)
     expect(await Bun.file(target).json()).toMatchObject({ id: "current-preview" })
   } finally {
@@ -412,6 +424,23 @@ it.effect("replacing a managed service registration stops its owner and preserve
   }),
 )
 
+it.effect("an owner cleanup leaves a newer Panacode registration in place", () =>
+  Effect.gen(function* () {
+    const service = yield* registered()
+    const newer = JSON.stringify({
+      id: "new-owner",
+      product: "panacode",
+      version: "test",
+      url: "http://127.0.0.1:4322",
+      pid: process.pid + 1,
+      password: "new-secret",
+    })
+    yield* service.fileSystem.writeFileString(service.file, newer)
+    yield* service.cleanup
+    expect(yield* service.fileSystem.readFileString(service.file)).toBe(newer)
+  }),
+)
+
 // Real process: a server whose boot failed must still be watching its registration.
 test("deleting a failed service registration stops its owner", async () => {
   const service = await startManagedService("opencode-service-failed-delete-", true)
@@ -425,16 +454,73 @@ test("deleting a failed service registration stops its owner", async () => {
   }
 }, 30_000)
 
-test("clean managed service shutdown removes its registration", async () => {
+test("clean managed service shutdown removes its registration and a second stop is a no-op", async () => {
   const service = await startManagedService("opencode-service-clean-")
+  const stop = () =>
+    Effect.runPromise(Service.stop({ file: service.registration }).pipe(Effect.provide(NodeFileSystem.layer)))
   try {
-    await Effect.runPromise(Service.stop({ file: service.registration }).pipe(Effect.provide(NodeFileSystem.layer)))
+    await stop()
     expect(await waitForExit(service.owner)).toBe(true)
     expect(await Bun.file(service.registration).exists()).toBe(false)
+    await stop()
   } finally {
     await stopManagedService(service)
   }
 }, 30_000)
+
+test("a restarted managed service publishes a new instance identity and never exposes its secrets", async () => {
+  const first = await startManagedService("opencode-service-restart-a-")
+  let second: Awaited<ReturnType<typeof startManagedService>> | undefined
+  try {
+    second = await startManagedService("opencode-service-restart-b-")
+    expect(second.info.id).not.toBe(first.info.id)
+
+    const health = await fetch(new URL("/api/info", second.info.url), {
+      headers: { authorization: "Basic " + btoa(`opencode:${second.info.password}`) },
+      signal: AbortSignal.timeout(5_000),
+    }).then((response) => response.json())
+    expect(health).toMatchObject({ instance: second.info.id, pid: second.info.pid })
+    expect(health).not.toHaveProperty("password")
+    expect(health).not.toHaveProperty("control")
+    const body = JSON.stringify(health)
+    expect(body).not.toContain(second.info.password)
+    expect(second.info.control).toBeDefined()
+    if (second.info.control === undefined) throw new Error("missing control registration")
+    expect(body).not.toContain(second.info.control.token)
+  } finally {
+    if (second !== undefined) await stopManagedService(second)
+    await stopManagedService(first)
+  }
+}, 60_000)
+
+test("service restart replaces a managed service with a fresh instance", async () => {
+  const first = await startManagedService("opencode-service-restart-command-")
+  try {
+    const restart = Bun.spawn(
+      [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "service", "restart"],
+      { env: serviceEnv(first.root), stdout: "pipe", stderr: "pipe" },
+    )
+    const [code, stderr] = await Promise.all([restart.exited, new Response(restart.stderr).text()])
+    expect({ code, stderr }).toEqual({ code: 0, stderr: "" })
+
+    const restarted = await waitForInfo(first.registration, (info) => info.id !== first.info.id)
+    expect(restarted.pid).not.toBe(first.info.pid)
+    expect(await waitForExit(first.owner)).toBe(true)
+    await Effect.runPromise(Service.stop({ file: first.registration }).pipe(Effect.provide(NodeFileSystem.layer)))
+    expect(await Bun.file(first.registration).exists()).toBe(false)
+  } finally {
+    const running = await Bun.file(first.registration)
+      .json()
+      .then((info: { pid?: number }) => info.pid)
+      .catch(() => undefined)
+    if (running !== undefined) {
+      try {
+        process.kill(running, "SIGTERM")
+      } catch {}
+    }
+    await stopManagedService(first)
+  }
+}, 60_000)
 
 test("concurrent service processes elect one server", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-election-"))
@@ -720,7 +806,14 @@ test("port contender recognizes an incumbent registered during the bind race", a
       requests.count += 1
       if (requests.count === 2) recognizing.resolve()
       return Response.json(
-        { version: OPENCODE_VERSION, pid: process.pid, urls: [], paths: { tmp: "/tmp/panacode" } },
+        {
+          version: OPENCODE_VERSION,
+          instance: "incumbent",
+          product: "panacode",
+          pid: process.pid,
+          urls: [],
+          paths: { tmp: "/tmp/panacode" },
+        },
         { status: 503 },
       )
     },
@@ -751,6 +844,7 @@ test("port contender recognizes an incumbent registered during the bind race", a
     await Bun.sleep(8_000)
     const info = {
       id: "incumbent",
+      product: "panacode",
       version: OPENCODE_VERSION,
       url: `http://127.0.0.1:${listener.port}`,
       pid: process.pid,
@@ -785,7 +879,16 @@ test("service registration replaces a stale owner with the bound address", async
         shutdown: Effect.never,
       }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer)),
     )
-    expect(await Bun.file(registration).json()).toEqual({
+    const info = (await Bun.file(registration).json()) as {
+      id: string
+      product: string
+      version: string
+      url: string
+      pid: number
+      password: string
+      control: { path: string; token: string }
+    }
+    expect(info).toMatchObject({
       id: "owner",
       product: "panacode",
       version: OPENCODE_VERSION,
@@ -793,8 +896,11 @@ test("service registration replaces a stale owner with the bound address", async
       pid: process.pid,
       password: "secret",
     })
+    expect(info.control.path).toBeString()
+    expect(info.control.token).toBeString()
     await Effect.runPromise(cleanup.pipe(Effect.provide(NodeFileSystem.layer)))
     expect(await Bun.file(registration).exists()).toBe(false)
+    if (process.platform !== "win32") expect(await Bun.file(info.control.path).exists()).toBe(false)
   } finally {
     await fs.rm(root, { recursive: true, force: true })
   }

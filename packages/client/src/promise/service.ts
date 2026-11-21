@@ -1,11 +1,13 @@
-import { readFile, rm } from "node:fs/promises"
+import { readFile } from "node:fs/promises"
 import type { DiscoverOptions, Endpoint, Info, EnsureOptions, StopOptions } from "../service.js"
 import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, withEnsureTiming, type EnsureTiming } from "../service-timing.js"
 export { withEnsureTiming }
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { request } from "../service-control.js"
+import { removeOwned } from "../service-file.js"
+import { decide, fallback, headers, occupied, parseRegistration, probeResult, same } from "../service-probe.js"
 
 export * from "../service.js"
 export { fallback, headers }
@@ -18,7 +20,9 @@ export { fallback, headers }
 
 /** Discover a healthy, compatible local service without starting one. */
 export async function discover(options: DiscoverOptions = {}) {
-  const found = (await registered(options.file)).service
+  const registration = await registered(options.file)
+  if (registration.problem !== undefined) return undefined
+  const found = registration.service
   if (found?.state !== "ready") return undefined
   if (!found.compatible) return undefined
   if (!matchesVersion(found.version, options)) return undefined
@@ -53,6 +57,16 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       if (Date.now() >= deadline)
         throw pool.failure() ?? pool.timeout(options.file ?? fallback())
       const registration = await registered(options.file, timing.requestTimeout)
+      if (registration.problem !== undefined) {
+        // A damaged record is never adopted or controlled. When its loopback endpoint still accepts
+        // connections, another process may own the port, so refuse. A free port is safe to reuse: the
+        // replacement publishes its own owned registration atomically once it binds.
+        const origin = registration.url
+        if (origin !== undefined && (await occupied(origin)))
+          throw new Error(
+            `${registration.problem} The registered endpoint still accepts connections; refusing to reuse or replace it.`,
+          )
+      }
       if (registration.timedOut && registration.info !== undefined) {
         timeouts = {
           info: registration.info,
@@ -62,7 +76,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
           announce("missing")
           console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
           await PtyHandoff.clear(options.file ?? fallback())
-          await terminate(registration.info, options, timing)
+          await terminate(registration.info, options, timing, false)
           pool.evict(registration.info.pid)
           pool.recruitNow()
           timeouts = undefined
@@ -102,36 +116,40 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
 
 /** Stop the registered local service. */
 export async function stop(options: StopOptions = {}) {
-  const info = await read(options.file)
-  // Terminal handoff is best-effort; it must never keep the old service running.
+  const registration = await read(options.file)
+  if (registration.problem !== undefined)
+    throw new Error(`${registration.problem} Refusing to stop an unidentified process.`)
+  const info = registration.info
+  const ping = info === undefined ? undefined : await request(info, "ping", defaultEnsureTiming.requestTimeout)
+  // Persistent-terminal work reaches the service over HTTP, so it happens only after the private
+  // control channel confirms the same instance and process.
   await (
-    options.pty === "handoff" && info !== undefined
+    ping?.ok === true && options.pty === "handoff" && info !== undefined
       ? PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout)
       : PtyHandoff.clear(options.file ?? fallback())
   ).catch((cause: unknown) => console.warn("Failed to prepare persistent terminals for replacement", cause))
-  if (info !== undefined) await terminate(info, options, ensureTiming(options))
+  if (info !== undefined) await terminate(info, options, ensureTiming(options), ping?.ok === true)
 }
 
 async function read(file?: string) {
   const text = await readFile(file ?? fallback(), "utf8").catch(() => undefined)
-  if (text === undefined) return undefined
-  try {
-    return JSON.parse(text) as Info
-  } catch {
-    return undefined
-  }
+  if (text === undefined) return {}
+  return parseRegistration(text)
 }
 
 async function registered(file?: string, timeout?: number) {
-  const info = await read(file)
+  const registration = await read(file)
+  if (registration.problem !== undefined)
+    return {
+      info: undefined,
+      service: undefined,
+      timedOut: false,
+      problem: registration.problem,
+      url: registration.url,
+    }
+  const info = registration.info
   if (info === undefined) return { info: undefined, service: undefined, timedOut: false }
   return { info, ...(await probeResult(info, timeout)) }
-}
-
-function signal(pid: number, name: NodeJS.Signals) {
-  try {
-    process.kill(pid, name)
-  } catch {}
 }
 
 function stopped(pid: number) {
@@ -151,19 +169,20 @@ async function waitUntilStopped(pid: number, timing: EnsureTiming) {
   return false
 }
 
-async function terminate(info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
-  const current = await read(options.file)
+async function terminate(info: Info, options: { readonly file?: string }, timing: EnsureTiming, verified: boolean) {
+  const current = (await read(options.file)).info
   if (current === undefined || !same(current, info)) return
-  signal(info.pid, "SIGTERM")
-  // The registration can disappear or change hands before this process exits. Only the PID we
-  // signalled can tell us whether it has stopped, so escalate based on that process.
-  if (!(await waitUntilStopped(info.pid, timing))) {
-    signal(info.pid, "SIGKILL")
-    if (!(await waitUntilStopped(info.pid, timing))) throw new Error(`Server process ${info.pid} is still running`)
+  if (!verified) {
+    const ping = await request(info, "ping", timing.requestTimeout)
+    if (!ping.ok) throw new Error(ping.message)
   }
-  const latest = await read(options.file)
-  if (latest === undefined || !same(latest, info)) return
-  await rm(options.file ?? fallback(), { force: true })
+  const shutdown = await request(info, "shutdown", timing.requestTimeout)
+  if (!shutdown.ok) throw new Error(shutdown.message)
+  // Waiting for the process to exit is observation only. A service that does not honor its own
+  // authenticated shutdown request is left running with a clear error, never killed by PID.
+  if (!(await waitUntilStopped(info.pid, timing)))
+    throw new Error(`Server process ${info.pid} did not stop after an authenticated shutdown request`)
+  await removeOwned(options.file ?? fallback(), info)
 }
 
 function delay(milliseconds: number) {
@@ -171,4 +190,4 @@ function delay(milliseconds: number) {
 }
 
 /** Promise-based local service lifecycle operations. */
-export const Service = { discover, ensure, stop, headers }
+export const Service = { discover, ensure, stop, headers, removeOwned }

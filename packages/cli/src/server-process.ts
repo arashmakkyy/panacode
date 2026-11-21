@@ -107,6 +107,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
             name: process.env.PANACODE_CLIENT ?? OPENCODE_ARTIFACT,
             version: OPENCODE_VERSION,
             channel: OPENCODE_CHANNEL,
+            instance: instanceID,
           },
           hostname,
           port,

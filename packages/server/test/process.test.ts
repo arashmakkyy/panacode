@@ -1,4 +1,5 @@
 import { expect } from "bun:test"
+import { randomUUID } from "node:crypto"
 import { Effect } from "effect"
 import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { it } from "../../core/test/lib/effect"
@@ -226,6 +227,52 @@ it.live("pairing links sign in browsers with a cookie and API clients with a tok
     ).toBe(200)
     expect((yield* request(`/auth/connect/${client.code}`)).status).toBe(401)
     expect((yield* request("/auth/connect/unknown")).status).toBe(401)
+  }),
+)
+
+it.live("reports the registered instance identity before and after ready", () =>
+  Effect.gen(function* () {
+    const instance = randomUUID()
+    const readInfo = (address: Parameters<typeof HttpServer.formatAddress>[0]) =>
+      Effect.promise(async () => {
+        const response = await fetch(new URL("/api/info", HttpServer.formatAddress(address)), {
+          headers: { authorization: `Basic ${btoa("opencode:secret")}` },
+        })
+        const body: unknown = await response.json()
+        return {
+          status: response.status,
+          product:
+            typeof body === "object" && body !== null && "product" in body && typeof body.product === "string"
+              ? body.product
+              : undefined,
+          instance:
+            typeof body === "object" && body !== null && "instance" in body && typeof body.instance === "string"
+              ? body.instance
+              : undefined,
+          pid: typeof body === "object" && body !== null && "pid" in body ? body.pid : undefined,
+        }
+      })
+    let before: { status: number; product?: string; instance?: string; pid?: unknown } | undefined
+    const server = yield* ServerProcess.start<never, never>(
+      {
+        hostname: "127.0.0.1",
+        port: 0,
+        password: "secret",
+        app: { version: "test-version", instance },
+        database: { path: ":memory:" },
+      },
+      {
+        onListen: (address) =>
+          readInfo(address).pipe(
+            Effect.tap((result) => Effect.sync(() => (before = result))),
+            Effect.as(Effect.void),
+          ),
+      },
+    )
+
+    const after = yield* readInfo(server.address)
+    expect(before).toMatchObject({ status: 503, product: "panacode", instance, pid: process.pid })
+    expect(after).toMatchObject({ status: 200, product: "panacode", instance, pid: process.pid })
   }),
 )
 

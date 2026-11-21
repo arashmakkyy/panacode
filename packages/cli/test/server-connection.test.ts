@@ -14,14 +14,16 @@ import { ServiceConfig } from "../src/services/service-config"
 import { isolatedEnv } from "./fixture/environment"
 
 test("resolution groups Effect-native lifecycle operations only for the managed service", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-server-resolution-"))
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "panacode-server-resolution-"))
   const id = "server-resolution-test"
   const server = Bun.serve({
     port: 0,
     fetch() {
       return Response.json({
         version: OPENCODE_VERSION,
+        instance: id,
         pid: process.pid,
+        product: "panacode",
         urls: [],
       })
     },
@@ -37,9 +39,11 @@ test("resolution groups Effect-native lifecycle operations only for the managed 
       registration,
       JSON.stringify({
         id,
+        product: "panacode",
         version: OPENCODE_VERSION,
         url: server.url.toString(),
         pid: process.pid,
+        password: "resolution-secret",
       }),
     )
     const resolved = await runPromise(ServerConnection.resolve())
@@ -65,7 +69,7 @@ test("resolution groups Effect-native lifecycle operations only for the managed 
 })
 
 test("service options only require a matching version when requested", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-options-"))
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "panacode-service-options-"))
   const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })
   const runPromise = <A, E>(effect: Effect.Effect<A, E, Global.Service | FileSystem.FileSystem | Scope.Scope>) =>
     Effect.runPromise(effect.pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer), Effect.scoped))
@@ -129,28 +133,28 @@ test("global --server and --standalone flags parse in any position for server-co
 
   const url = "http://127.0.0.1:43210"
   const serverCases: ReadonlyArray<readonly [ReadonlyArray<string>, string]> = [
-    [["--server", url, "session", "list"], "opencode session list"],
-    [["session", "--server", url, "list"], "opencode session list"],
-    [["session", "list", "--server", url], "opencode session list"],
-    [["session", "--server", url, "delete", "ses_123"], "opencode session delete"],
-    [["--server", url, "plugin", "list"], "opencode plugin list"],
-    [["plugin", "--server", url, "list"], "opencode plugin list"],
-    [["plugin", "list", "--server", url], "opencode plugin list"],
-    [["plugin", "--server", url, "check"], "opencode plugin check"],
-    [["plugin", "--server", url, "update"], "opencode plugin update"],
-    [["--server", url, "mcp", "list"], "opencode mcp list"],
-    [["mcp", "--server", url, "list"], "opencode mcp list"],
-    [["mcp", "list", "--server", url], "opencode mcp list"],
-    [["mcp", "--server", url, "auth", "linear"], "opencode mcp auth"],
-    [["mcp", "--server", url, "logout", "linear"], "opencode mcp logout"],
-    [["auth", "--server", url, "list"], "opencode auth list"],
-    [["debug", "--server", url, "config"], "opencode debug config"],
-    [["debug", "--server", url, "agents"], "opencode debug agents"],
-    [["debug", "--server", url, "heap-dump"], "opencode debug heap-dump"],
-    [["--server", url, "models"], "opencode models"],
-    [["models", "--server", url], "opencode models"],
-    [["--server", url, "run", "hello"], "opencode run"],
-    [["run", "hello", "--server", url], "opencode run"],
+    [["--server", url, "session", "list"], "panacode session list"],
+    [["session", "--server", url, "list"], "panacode session list"],
+    [["session", "list", "--server", url], "panacode session list"],
+    [["session", "--server", url, "delete", "ses_123"], "panacode session delete"],
+    [["--server", url, "plugin", "list"], "panacode plugin list"],
+    [["plugin", "--server", url, "list"], "panacode plugin list"],
+    [["plugin", "list", "--server", url], "panacode plugin list"],
+    [["plugin", "--server", url, "check"], "panacode plugin check"],
+    [["plugin", "--server", url, "update"], "panacode plugin update"],
+    [["--server", url, "mcp", "list"], "panacode mcp list"],
+    [["mcp", "--server", url, "list"], "panacode mcp list"],
+    [["mcp", "list", "--server", url], "panacode mcp list"],
+    [["mcp", "--server", url, "auth", "linear"], "panacode mcp auth"],
+    [["mcp", "--server", url, "logout", "linear"], "panacode mcp logout"],
+    [["auth", "--server", url, "list"], "panacode auth list"],
+    [["debug", "--server", url, "config"], "panacode debug config"],
+    [["debug", "--server", url, "agents"], "panacode debug agents"],
+    [["debug", "--server", url, "heap-dump"], "panacode debug heap-dump"],
+    [["--server", url, "models"], "panacode models"],
+    [["models", "--server", url], "panacode models"],
+    [["--server", url, "run", "hello"], "panacode run"],
+    [["run", "hello", "--server", url], "panacode run"],
   ]
 
   for (const [args, expectedPath] of serverCases) {
@@ -161,7 +165,7 @@ test("global --server and --standalone flags parse in any position for server-co
 
   captured.length = 0
   await runArgs(["session", "--standalone", "list"])
-  expect(captured).toEqual([{ path: "opencode session list", server: undefined, standalone: true }])
+  expect(captured).toEqual([{ path: "panacode session list", server: undefined, standalone: true }])
 
   await expect(runArgs(["plugin", "add", "some-plugin", "--server", url])).rejects.toThrow()
   await expect(runArgs(["plugin", "remove", "some-plugin", "--server", url])).rejects.toThrow()
@@ -173,7 +177,7 @@ test("global --server and --standalone flags parse in any position for server-co
 })
 
 test("local config commands do not start or require a server", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-local-config-cmd-"))
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "panacode-local-config-cmd-"))
   try {
     const env = isolatedEnv(root)
     const child = Bun.spawn(

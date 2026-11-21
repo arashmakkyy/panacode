@@ -56,4 +56,11 @@ export type Info = {
   readonly pid: number
   /** Private service password, when authentication is enabled. */
   readonly password?: string
+  /** Private per-instance control channel. Never exposed by the public health endpoint. */
+  readonly control?: {
+    /** Unix socket path or Windows named pipe owned by the service account. */
+    readonly path: string
+    /** Random secret stored only in the owner-only registration file. */
+    readonly token: string
+  }
 }

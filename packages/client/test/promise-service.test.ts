@@ -1,8 +1,6 @@
 import { expect, test } from "bun:test"
 import { Service, type EnsureReason } from "../src/promise/service"
 import {
-  catchesSigterm,
-  expectNotListening,
   serviceFixture,
   stopSignal,
   stoppedExitCode,
@@ -278,7 +276,7 @@ test("stops the registered service even when terminal handoff fails", async () =
   expect((await Bun.file(registration + ".pty-handoff").json()).handoff).toBeNull()
 })
 
-test("signals the registered service process", async () => {
+test("requests graceful shutdown over the private control channel", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration
   fixture.spawn("graceful")
@@ -290,24 +288,26 @@ test("signals the registered service process", async () => {
   expect(await Bun.file(registration).exists()).toBe(false)
 })
 
-test("stop escalates when the registration disappears before the process exits", async () => {
+test("stop leaves a service that ignores authenticated shutdown running and reports it", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration
   const existing = fixture.spawn("lingering", "5000")
   await fixture.waitForFile()
   const original = await Bun.file(registration).json()
 
-  await stop({ file: registration })
+  await expect(stop({ file: registration })).rejects.toThrow(
+    `Server process ${original.pid} did not stop after an authenticated shutdown request`,
+  )
 
   expect(await fixture.signal()).toBe(stopSignal)
-  expect(() => process.kill(original.pid, 0)).toThrow()
-  await expectNotListening(original.url)
+  expect(() => process.kill(original.pid, 0)).not.toThrow()
   expect(await Bun.file(registration).exists()).toBe(false)
+  existing.kill("SIGKILL")
   await existing.exited
 }, 15_000)
 
 test.skipIf(process.platform === "win32")(
-  "stop fails when the process survives SIGKILL",
+  "stop reports a process that survives the shutdown request",
   async () => {
     await using fixture = await serviceFixture()
     const registration = fixture.registration
@@ -315,45 +315,47 @@ test.skipIf(process.platform === "win32")(
     await fixture.waitForFile()
     const original = await Bun.file(registration).json()
 
-    await expect(stop({ file: registration })).rejects.toThrow(`Server process ${original.pid} is still running`)
-    expect(await Bun.file(registration + ".signal").text()).toBe("SIGTERM")
+    await expect(stop({ file: registration })).rejects.toThrow(
+      `Server process ${original.pid} did not stop after an authenticated shutdown request`,
+    )
+    expect(await Bun.file(registration + ".signal").text()).toBe(stopSignal)
   },
   15_000,
 )
 
-// On Windows the original process cannot outlive SIGTERM, so no successor can register before it exits.
-test.skipIf(!catchesSigterm)(
-  "stop waits for the original process while preserving a newly registered successor",
-  async () => {
-    await using fixture = await serviceFixture()
-    const registration = fixture.registration
-    const existing = fixture.spawn("lingering", "15000")
+// The control channel decides when the original exits, so a successor can register while the
+// original is still winding down. Stopping A must never delete B's registration.
+test("stop waits for the original process while preserving a newly registered successor", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  const existing = fixture.spawn("lingering", "15000")
+  await fixture.waitForFile()
+  const original = await Bun.file(registration).json()
+  const stopping = Service.stop({ file: registration }).catch((error: unknown) => error)
+
+  try {
+    await fixture.waitForFile(registration + ".unregistered")
+    const successor = fixture.spawn("graceful")
     await fixture.waitForFile()
-    const original = await Bun.file(registration).json()
-    // Default timing keeps the grace period open long enough for the successor to register first.
-    const stopping = Service.stop({ file: registration })
+    const replacement = await Bun.file(registration).json()
+    expect(existing.exitCode).toBe(null)
+    expect(replacement.pid).toBe(successor.pid)
 
-    try {
-      await fixture.waitForFile(registration + ".unregistered")
-      const successor = fixture.spawn("graceful")
-      await fixture.waitForFile()
-      const replacement = await Bun.file(registration).json()
-      expect(existing.exitCode).toBe(null)
-      expect(replacement.pid).toBe(successor.pid)
+    const error = await stopping
+    expect(error).toBeInstanceOf(Error)
+    if (!(error instanceof Error)) throw error
+    expect(error.message).toContain("did not stop after an authenticated shutdown request")
 
-      await stopping
-
-      expect(() => process.kill(original.pid, 0)).toThrow()
-      await expectNotListening(original.url)
-      expect(await Bun.file(registration).json()).toEqual(replacement)
-      expect(await fetch(new URL("/api/info", replacement.url)).then((response) => response.json())).toMatchObject({
-        pid: successor.pid,
-      })
-      expect(successor.exitCode).toBe(null)
-    } finally {
-      existing.kill("SIGKILL")
-      await stopping
-    }
-  },
-  20_000,
-)
+    expect(() => process.kill(original.pid, 0)).not.toThrow()
+    expect(await Bun.file(registration).json()).toEqual(replacement)
+    expect(await fetch(new URL("/api/info", replacement.url)).then((response) => response.json())).toMatchObject({
+      pid: successor.pid,
+      instance: replacement.id,
+    })
+    expect(successor.exitCode).toBe(null)
+  } finally {
+    existing.kill("SIGKILL")
+    await existing.exited
+    await stopping
+  }
+}, 20_000)

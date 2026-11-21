@@ -1,4 +1,7 @@
-import { appendFile, rename, rm, writeFile } from "node:fs/promises"
+import { createHash, randomBytes } from "node:crypto"
+import { appendFile, chmod, mkdir, rename, rm, unlink, writeFile } from "node:fs/promises"
+import { createServer } from "node:net"
+import path from "node:path"
 
 const [registration, mode, delay] = process.argv.slice(2)
 if (registration === undefined || mode === undefined) throw new Error("Missing service fixture arguments")
@@ -48,6 +51,45 @@ if (mode === "old" || mode === "handoff") version = "old"
 if (mode === "incompatible") version = "1.9.0"
 if (mode === "compatible" || mode === "delayed-compatible") version = "2.1.0-next.1"
 const id = crypto.randomUUID()
+const controlPath =
+  process.platform === "win32"
+    ? `\\\\.\\pipe\\panacode-fixture-${createHash("sha256").update(registration).digest("hex").slice(0, 12)}-${process.pid}`
+    : path.join(path.dirname(registration), `${id}.sock`)
+const controlToken = randomBytes(24).toString("base64url")
+const control = createServer((socket) => {
+  let input = ""
+  socket.setEncoding("utf8")
+  socket.on("data", async (chunk: string) => {
+    input += chunk
+    const newline = input.indexOf("\n")
+    if (newline < 0) return
+    let request: Record<string, unknown>
+    try {
+      request = JSON.parse(input.slice(0, newline))
+    } catch {
+      return socket.end(JSON.stringify({ ok: false, error: "invalid" }) + "\n")
+    }
+    if (request.id !== id || request.token !== controlToken || request.version !== 1)
+      return socket.end(JSON.stringify({ ok: false, error: "denied" }) + "\n")
+    if (request.action !== "ping" && request.action !== "shutdown")
+      return socket.end(JSON.stringify({ ok: false, error: "denied" }) + "\n")
+    socket.end(JSON.stringify({ ok: true, id, pid: process.pid, action: request.action }) + "\n")
+    if (request.action === "shutdown") setImmediate(() => void shutdown("CONTROL"))
+  })
+})
+if (process.platform !== "win32") {
+  await mkdir(path.dirname(controlPath), { recursive: true, mode: 0o700 })
+  await chmod(path.dirname(controlPath), 0o700)
+  await unlink(controlPath).catch(() => undefined)
+}
+await new Promise<void>((resolve, reject) => {
+  control.once("error", reject)
+  control.listen(controlPath, () => {
+    control.off("error", reject)
+    resolve()
+  })
+})
+if (process.platform !== "win32") await chmod(controlPath, 0o600)
 const handoff = {
   directory: registration + ".daemon",
   instanceID: crypto.randomUUID(),
@@ -71,6 +113,9 @@ const server = Bun.serve({
     if (pathname === "/api/experimental/persistent-pty/handoff" && mode === "handoff-broken")
       return new Response(null, { status: 500 })
     if (pathname !== "/api/info") return new Response(null, { status: 404 })
+    if (mode === "unauthorized") return new Response(null, { status: 401 })
+    if (mode === "redirect") return new Response(null, { status: 302, headers: { location: "http://127.0.0.1:1/" } })
+    if (mode === "invalid-health") return new Response("not json", { status: 200 })
     if (mode === "protocol" && (await Bun.file(registration + ".missing-health").exists()))
       return new Response(null, { status: 404 })
     requests += 1
@@ -79,24 +124,31 @@ const server = Bun.serve({
       await appendFile(registration + ".requests", process.pid + "\n")
       return new Promise<Response>(() => {})
     }
+    const product = mode === "opencode" ? "opencode" : "panacode"
+    const instance = mode === "wrong-instance" ? crypto.randomUUID() : mode === "no-instance" ? undefined : id
     if (mode === "modern" && requests === 1) {
       await writeFile(registration + ".first-request", "")
       while (!(await Bun.file(registration + ".release").exists())) await Bun.sleep(5)
-      return new Response(null, { status: 503 })
+      return Response.json(
+        { version, pid: process.pid, instance, product, urls: [server.url.toString()], paths: { tmp: "/tmp/opencode" } },
+        { status: 503 },
+      )
     }
     if (mode === "starting" && !(await Bun.file(registration + ".release").exists()))
       return Response.json(
-        { version, pid: process.pid, urls: [server.url.toString()], paths: { tmp: "/tmp/opencode" } },
+        { version, pid: process.pid, instance, product, urls: [server.url.toString()], paths: { tmp: "/tmp/opencode" } },
         { status: 503 },
       )
     if (mode === "failed-owner")
       return Response.json(
-        { version, pid: process.pid, urls: [server.url.toString()], paths: { tmp: "/tmp/opencode" } },
+        { version, pid: process.pid, instance, product, urls: [server.url.toString()], paths: { tmp: "/tmp/opencode" } },
         { status: 500 },
       )
     return Response.json({
       version,
       pid: process.pid,
+      instance,
+      product,
       urls: [server.url.toString()],
       paths: { tmp: "/tmp/opencode" },
     })
@@ -113,23 +165,27 @@ await writeFile(
   registration + ".tmp",
   JSON.stringify({
     id,
+    product: "panacode",
     version,
     url: server.url.toString(),
     pid: process.pid,
     password: "private",
+    control: { path: controlPath, token: controlToken },
   }),
   { mode: 0o600 },
 )
 await rename(registration + ".tmp", registration)
 
-async function shutdown(signal?: NodeJS.Signals) {
-  if (signal !== undefined) await writeFile(registration + ".signal", signal)
-  // A lingering server unregisters on SIGTERM but keeps running, and holds its port, until killed.
+async function shutdown(source: string = "CONTROL") {
+  await writeFile(registration + ".signal", source)
+  // A lingering server unregisters on shutdown but keeps running, and holds its port, until killed.
   if (mode === "lingering") {
     await rm(registration, { force: true })
     await writeFile(registration + ".unregistered", "")
     await Bun.sleep(Number(delay))
   }
   server.stop(true)
+  control.close()
+  if (process.platform !== "win32") await unlink(controlPath).catch(() => undefined)
   process.exit()
 }

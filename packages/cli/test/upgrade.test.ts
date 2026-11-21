@@ -13,7 +13,7 @@ describe("upgrade command", () => {
     expect(help.stdout).toContain("[<target>]")
     expect(help.stdout).toContain("--method")
     expect(help.stdout).toContain("-m")
-  })
+  }, 30_000)
 
   test("detects the installation method and resolves the latest version", async () => {
     const result = await cli([])

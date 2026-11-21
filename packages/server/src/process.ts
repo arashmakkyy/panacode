@@ -9,6 +9,7 @@ import { hasPtyConnectTicketURL } from "@opencode/protocol/groups/pty"
 import { hasPersistentPtyConnectTicketURL } from "@opencode/protocol/groups/persistent-pty"
 import { hasMcpClientTicketURL } from "@opencode/protocol/groups/mcp"
 import { isPairingConnectURL } from "@opencode/protocol/groups/server"
+import { ProductIdentity } from "@opencode/util/product-identity"
 import { Global } from "@opencode/util/global"
 import { Cause, Context, Effect, Exit, Latch, Layer, Option, Ref, Scope } from "effect"
 import { HttpMiddleware, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
@@ -68,7 +69,15 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   }
   const urls = () => [...localURLs(), ...(remoteURLs?.() ?? [])]
   const application = yield* Ref.make(Option.none<App>())
-  const app = dispatch(password, status, application, options.app?.version ?? "unknown", urls, Global.Path.tmp)
+  const app = dispatch(
+    password,
+    status,
+    application,
+    options.app?.version ?? "unknown",
+    options.app?.instance,
+    urls,
+    Global.Path.tmp,
+  )
   // Request fibers may continue inbound trace context, but must not inherit the server startup parent.
   yield* bound.http
     .serve(
@@ -184,6 +193,7 @@ function dispatch(
   status: Status.Interface,
   application: Ref.Ref<Option.Option<App>>,
   version: string,
+  instance: string | undefined,
   urls: () => ReadonlyArray<string>,
   tmp: string,
 ): App {
@@ -196,7 +206,7 @@ function dispatch(
     const ready = state.type === "ready" && Option.isSome(app)
     if (request.method === "GET" && url.pathname === "/api/info" && !ready) {
       if (!(yield* authorizedRequest(request, auth))) return unauthorizedResponse(request)
-      return yield* infoResponse(status, version, urls, tmp)
+      return yield* infoResponse(status, version, instance, urls, tmp)
     }
     if (
       !isPairingConnectURL(url) &&
@@ -213,12 +223,13 @@ function dispatch(
 const infoResponse = Effect.fnUntraced(function* (
   status: Status.Interface,
   version: string,
+  instance: string | undefined,
   urls: () => ReadonlyArray<string>,
   tmp: string,
 ) {
   const state = yield* status.current
   return HttpServerResponse.jsonUnsafe(
-    { version, pid: process.pid, urls: urls(), paths: { tmp } },
+    { version, product: ProductIdentity.slug, instance, pid: process.pid, urls: urls(), paths: { tmp } },
     {
       status: state.type === "ready" ? 200 : state.type === "failed" ? 500 : 503,
       headers: state.type === "starting" || state.type === "stopping" ? { "retry-after": "1" } : undefined,

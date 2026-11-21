@@ -6,6 +6,7 @@ import { Effect, FileSystem, Schedule, Schema } from "effect"
 import { HttpServer } from "effect/http"
 import { NetAddress } from "effect/net"
 import { OPENCODE_VERSION } from "../version"
+import { ServiceControl } from "./service-control"
 
 const infoJson = Schema.fromJsonString(Service.Info)
 const encodeInfo = Schema.encodeEffect(infoJson)
@@ -21,6 +22,8 @@ export const register = Effect.fnUntraced(function* (options: {
   const fs = yield* FileSystem.FileSystem
   const temp = options.file + "." + options.id + ".tmp"
   yield* fs.makeDirectory(path.dirname(options.file), { recursive: true })
+  const control = yield* ServiceControl.start({ file: options.file, id: options.id, shutdown: options.shutdown })
+  yield* Effect.addFinalizer(() => control.close)
   const info = {
     id: options.id,
     product: "panacode" as const,
@@ -28,6 +31,7 @@ export const register = Effect.fnUntraced(function* (options: {
     url: HttpServer.formatAddress(options.address),
     pid: process.pid,
     password: options.password,
+    control: control.control,
   }
   const encoded = yield* encodeInfo(info)
   const current = fs.readFileString(options.file).pipe(Effect.flatMap(decodeInfo))
@@ -36,7 +40,9 @@ export const register = Effect.fnUntraced(function* (options: {
     found.version === info.version &&
     found.url === info.url &&
     found.pid === info.pid &&
-    found.password === info.password
+    found.password === info.password &&
+    found.control?.path === info.control.path &&
+    found.control?.token === info.control.token
   yield* fs
     .writeFileString(temp, encoded, { mode: 0o600 })
     .pipe(
@@ -73,8 +79,8 @@ export const register = Effect.fnUntraced(function* (options: {
     Effect.andThen(options.shutdown),
     Effect.forkScoped,
   )
-  return current.pipe(
-    Effect.flatMap((found) => (owns(found) ? fs.remove(options.file) : Effect.void)),
+  return Effect.tryPromise(() => Service.removeOwned(options.file, info)).pipe(
+    Effect.andThen(control.close),
     Effect.ignore,
   )
 })

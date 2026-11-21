@@ -4,7 +4,9 @@ import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { request } from "../service-control.js"
+import { removeOwned } from "../service-file.js"
+import { decide, fallback, headers, occupied, parseRegistration, probeResult, same } from "../service-probe.js"
 
 export * from "../service.js"
 export { headers }
@@ -23,7 +25,9 @@ export type Info = typeof Info.Type
 // Never spawns; escalation to ensure() is the caller's policy.
 /** Discover a healthy, compatible local service without starting one. */
 export const discover = Effect.fn("service.discover")(function* (options: DiscoverOptions = {}) {
-  const found = (yield* registered(options.file)).service
+  const registration = yield* registered(options.file)
+  if (registration.problem !== undefined) return undefined
+  const found = registration.service
   if (found?.state !== "ready") return undefined
   if (!found.compatible) return undefined
   if (!matchesVersion(found.version, options)) return undefined
@@ -34,7 +38,14 @@ export const discover = Effect.fn("service.discover")(function* (options: Discov
 export const incumbent = Effect.fn("service.incumbent")(function* (
   options: DiscoverOptions & { readonly url: string },
 ) {
-  const info = yield* read(options.file)
+  const registration = yield* read(options.file)
+  if (registration.problem !== undefined) {
+    // An unidentified registration is never adopted. Probe the configured port without a
+    // credential so the caller can still distinguish an occupied port from a free one.
+    yield* Effect.promise(() => occupied(options.url))
+    return undefined
+  }
+  const info = registration.info
   if (info === undefined) return undefined
   const found = (yield* Effect.promise(() => probeResult({ ...info, url: options.url }))).service
   if (!found?.compatible) return undefined
@@ -45,6 +56,19 @@ export const incumbent = Effect.fn("service.incumbent")(function* (
 // Idempotent ensure-running: reuses a healthy compatible server, replaces a
 // version-mismatched one, and otherwise spawns small contenders until a server
 // becomes discoverable. A contender is never killed merely for slow startup.
+/** Discover a healthy, compatible local service that also answers on its private control channel. */
+export const verified = Effect.fn("service.verified")(function* (options: DiscoverOptions = {}) {
+  const registration = yield* read(options.file)
+  if (registration.problem !== undefined) return undefined
+  const info = registration.info
+  if (info === undefined) return undefined
+  const service = (yield* Effect.promise(() => probeResult(info))).service
+  if (service?.state !== "ready" || !service.compatible) return undefined
+  if (!matchesVersion(service.version, options)) return undefined
+  const ping = yield* Effect.tryPromise(() => request(info, "ping", defaultEnsureTiming.requestTimeout))
+  return ping.ok ? service.endpoint : undefined
+})
+
 /** Ensure a healthy, compatible local service is running. */
 export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOptions = {}) {
   const timing = ensureTiming(options)
@@ -70,6 +94,16 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
   })
   const found = yield* Effect.gen(function* () {
     const registration = yield* registered(options.file, timing.requestTimeout)
+    if (registration.problem !== undefined) {
+      // A damaged record is never adopted or controlled. When its loopback endpoint still accepts
+      // connections, another process may own the port, so refuse. A free port is safe to reuse: the
+      // replacement publishes its own owned registration atomically once it binds.
+      const origin = registration.url
+      if (origin !== undefined && (yield* Effect.promise(() => occupied(origin))))
+        return yield* Effect.fail(
+          new Error(`${registration.problem} The registered endpoint still accepts connections; refusing to reuse or replace it.`),
+        )
+    }
     const info = registration.info
     const service = registration.service
     if (registration.timedOut && info !== undefined) {
@@ -81,7 +115,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
         yield* announce("missing")
         yield* Effect.logWarning("Background service is unresponsive; recovery cannot preserve persistent terminals")
         yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
-        yield* terminate(info, options, timing)
+        yield* terminate(info, options, timing, false)
         pool.evict(info.pid)
         pool.recruitNow()
         timeouts = undefined
@@ -128,14 +162,22 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
 
 /** Stop the registered local service. */
 export const stop = Effect.fn("service.stop")(function* (options: StopOptions = {}) {
-  const info = yield* read(options.file)
-  // Terminal handoff is best-effort; it must never keep the old service running.
+  const registration = yield* read(options.file)
+  if (registration.problem !== undefined)
+    return yield* Effect.fail(new Error(`${registration.problem} Refusing to stop an unidentified process.`))
+  const info = registration.info
+  const ping =
+    info === undefined
+      ? undefined
+      : yield* Effect.tryPromise(() => request(info, "ping", defaultEnsureTiming.requestTimeout))
+  // Terminal handoff reaches the service over HTTP, so it follows a successful private-channel
+  // ping for the same instance and process.
   yield* Effect.tryPromise(() =>
-    options.pty === "handoff" && info !== undefined
+    ping?.ok === true && options.pty === "handoff" && info !== undefined
       ? PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout)
       : PtyHandoff.clear(options.file ?? fallback()),
   ).pipe(Effect.catch((cause) => Effect.logWarning("Failed to prepare persistent terminals for replacement", cause)))
-  if (info !== undefined) yield* terminate(info, options, ensureTiming(options))
+  if (info !== undefined) yield* terminate(info, options, ensureTiming(options), ping?.ok === true)
 })
 
 /** Schema for the local service registration file. */
@@ -146,20 +188,34 @@ export const Info = Schema.Struct({
   url: Schema.String,
   pid: Schema.Int.check(Schema.isGreaterThan(0)),
   password: Schema.optional(Schema.String),
+  control: Schema.optional(
+    Schema.Struct({
+      path: Schema.String,
+      token: Schema.String,
+    }),
+  ),
 })
 
-const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(Info))
-// A missing or corrupt file means no valid info; callers treat both
-// the same (the registering server self-evicts, clients rediscover).
+// A missing file means no service. An unreadable or foreign file is a distinct "unowned"
+// problem, so lifecycle operations do not treat it as permission to start or stop anything.
 const read = Effect.fnUntraced(function* (file?: string) {
   const fs = yield* FileSystem.FileSystem
   const text = yield* fs.readFileString(file ?? fallback()).pipe(Effect.option)
-  if (Option.isNone(text)) return undefined
-  return yield* decode(text.value).pipe(Effect.option, Effect.map(Option.getOrUndefined))
+  if (Option.isNone(text)) return {}
+  return parseRegistration(text.value)
 })
 
 const registered = Effect.fnUntraced(function* (file?: string, timeout?: number) {
-  const info = yield* read(file)
+  const registration = yield* read(file)
+  if (registration.problem !== undefined)
+    return {
+      info: undefined,
+      service: undefined,
+      timedOut: false,
+      problem: registration.problem,
+      url: registration.url,
+    }
+  const info = registration.info
   if (info === undefined) return { info: undefined, service: undefined, timedOut: false }
   return { info, ...(yield* Effect.promise(() => probeResult(info, timeout))) }
 })
@@ -169,9 +225,6 @@ const registered = Effect.fnUntraced(function* (file?: string, timeout?: number)
 const poll = (timing: EnsureTiming) =>
   Schedule.max([Schedule.spaced(timing.stopPollInterval), Schedule.recurs(timing.stopPollAttempts)])
 
-const signal = (pid: number, name: NodeJS.Signals) =>
-  Effect.try({ try: () => process.kill(pid, name), catch: (cause) => cause }).pipe(Effect.ignore)
-
 const stopped = Effect.fnUntraced(function* (pid: number) {
   const running = yield* Effect.try({ try: () => process.kill(pid, 0), catch: () => false }).pipe(
     Effect.orElseSucceed(() => false),
@@ -180,22 +233,29 @@ const stopped = Effect.fnUntraced(function* (pid: number) {
   return yield* Effect.fail(new Error(`Server process ${pid} is still running`))
 })
 
-const terminate = Effect.fnUntraced(function* (info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
-  const current = yield* read(options.file)
+const terminate = Effect.fnUntraced(function* (
+  info: Info,
+  options: { readonly file?: string },
+  timing: EnsureTiming,
+  verified: boolean,
+) {
+  const current = (yield* read(options.file)).info
   if (current === undefined || !same(current, info)) return
-  yield* signal(info.pid, "SIGTERM")
-  const done = yield* stopped(info.pid).pipe(Effect.retry(poll(timing)), Effect.option)
-  // The registration can disappear or change hands before this process exits. Only the PID we
-  // signalled can tell us whether it has stopped, so escalate based on that process.
-  if (Option.isNone(done)) {
-    yield* signal(info.pid, "SIGKILL")
-    yield* stopped(info.pid).pipe(Effect.retry(poll(timing)))
+  if (!verified) {
+    const ping = yield* Effect.tryPromise(() => request(info, "ping", timing.requestTimeout))
+    if (!ping.ok) return yield* Effect.fail(new Error(ping.message))
   }
-  const latest = yield* read(options.file)
-  if (latest === undefined || !same(latest, info)) return
-  const fs = yield* FileSystem.FileSystem
-  yield* fs.remove(options.file ?? fallback()).pipe(Effect.ignore)
+  const shutdown = yield* Effect.tryPromise(() => request(info, "shutdown", timing.requestTimeout))
+  if (!shutdown.ok) return yield* Effect.fail(new Error(shutdown.message))
+  // Waiting for the process to exit is observation only. A service that does not honor its own
+  // authenticated shutdown request is left running with a clear error, never killed by PID.
+  const done = yield* stopped(info.pid).pipe(Effect.retry(poll(timing)), Effect.option)
+  if (Option.isNone(done))
+    return yield* Effect.fail(
+      new Error(`Server process ${info.pid} did not stop after an authenticated shutdown request`),
+    )
+  yield* Effect.tryPromise(() => removeOwned(options.file ?? fallback(), info)).pipe(Effect.ignore)
 })
 
 /** Effect-based local service lifecycle operations. */
-export const Service = { discover, incumbent, ensure, stop, headers, Info }
+export const Service = { discover, incumbent, ensure, stop, verified, headers, removeOwned, Info }

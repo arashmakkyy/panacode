@@ -13,7 +13,7 @@ describe("debug config command", () => {
     expect(debug.stdout).toContain("config")
     expect(debug.stdout).toContain("List configuration sources")
     expect(config.exitCode).toBe(0)
-    expect(config.stdout).toContain("opencode debug config [flags]")
+    expect(config.stdout).toContain("panacode debug config [flags]")
     expect(config.stdout).toContain("List configuration sources")
     expect(config.stdout).not.toContain("--reveal-secrets")
   })
@@ -22,6 +22,7 @@ describe("debug config command", () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-debug-config-"))
     const project = path.join(import.meta.dir, "..")
     const registration = path.join(root, "state", "panacode", "service-local.json")
+    const instance = "debug-config-instance"
     const entries = [
       {
         type: "document",
@@ -53,7 +54,9 @@ describe("debug config command", () => {
           healthProbes += 1
           return Response.json({
             version: OPENCODE_VERSION,
+            instance,
             pid: process.pid,
+            product: "panacode",
             urls: [],
             paths: { tmp: "/tmp/panacode" },
           })
@@ -68,7 +71,14 @@ describe("debug config command", () => {
       await fs.mkdir(path.dirname(registration), { recursive: true })
       await fs.writeFile(
         registration,
-        JSON.stringify({ version: OPENCODE_VERSION, url: server.url.toString(), pid: process.pid, password: "secret" }),
+        JSON.stringify({
+          id: instance,
+          product: "panacode",
+          version: OPENCODE_VERSION,
+          url: server.url.toString(),
+          pid: process.pid,
+          password: "secret",
+        }),
       )
       const result = await cli(["debug", "config"], project, { XDG_STATE_HOME: path.join(root, "state") })
 
