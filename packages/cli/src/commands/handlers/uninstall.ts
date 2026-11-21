@@ -8,6 +8,14 @@ import { Runtime } from "../../framework/runtime"
 import { ServerConnection } from "../../services/server-connection"
 import { RetainedImage } from "../../services/retained-image"
 import { Updater } from "../../services/updater"
+import {
+  cleanShellConfig,
+  cleanShellFile,
+  isFishConfig,
+  shellConfigCandidates,
+  shellPathCommands,
+  shellPathShared,
+} from "../../services/shell-config"
 import { handlePromptErrors, prompt, requireInteractive } from "../../ui/prompt"
 import { errorMessage } from "../../util/error"
 
@@ -26,7 +34,8 @@ export default Runtime.handler(
     const services = (yield* fs.exists(global.state))
       ? (yield* fs.readDirectory(global.state)).filter((name) => /^service(?:-.*)?\.json$/.test(name))
       : []
-    const shell = method === "curl" ? yield* shellConfigs(global.home) : []
+    const bin = path.dirname(process.execPath)
+    const shell = method === "curl" ? yield* shellConfigs(global.home, bin) : []
 
     log.info(`Installation method: ${method ?? "unknown"}`)
     log.message("The following global files will be removed (shared by Panacode versions and channels):")
@@ -90,8 +99,7 @@ export default Runtime.handler(
       ),
     )
     yield* Effect.forEach(shell, (file) =>
-      fs.readFileString(file).pipe(
-        Effect.flatMap((content) => fs.writeFileString(file, cleanShellConfig(content))),
+      cleanShellFile(file, shellPathCommands({ bin, fish: isFishConfig(file) })).pipe(
         Effect.catch((error) => Effect.sync(() => errors.push(`Shell config ${file}: ${errorMessage(error)}`))),
       ),
     )
@@ -117,53 +125,18 @@ export default Runtime.handler(
   }, handlePromptErrors),
 )
 
-const shellConfigs = Effect.fnUntraced(function* (home: string) {
+const shellConfigs = Effect.fnUntraced(function* (home: string, bin: string) {
   const fs = yield* FileSystem.FileSystem
-  const bin = path.dirname(process.execPath)
-  // V1 and V2 curl installs share a PATH entry; retain it while another binary uses it.
-  if ((yield* fs.readDirectory(bin)).some((name) => name !== path.basename(process.execPath))) return []
-  const xdg = process.env.XDG_CONFIG_HOME || path.join(home, ".config")
-  const zsh = process.env.ZDOTDIR || home
-  const candidates: Record<string, string[]> = {
-    fish: [path.join(home, ".config/fish/config.fish"), path.join(xdg, "fish/config.fish")],
-    zsh: [
-      path.join(zsh, ".zshrc"),
-      path.join(zsh, ".zshenv"),
-      path.join(xdg, "zsh/.zshrc"),
-      path.join(xdg, "zsh/.zshenv"),
-    ],
-    bash: [
-      path.join(home, ".bashrc"),
-      path.join(home, ".bash_profile"),
-      path.join(home, ".profile"),
-      path.join(xdg, "bash/.bashrc"),
-      path.join(xdg, "bash/.bash_profile"),
-    ],
-    ash: [path.join(home, ".ashrc"), path.join(home, ".profile")],
-    sh: [path.join(home, ".ashrc"), path.join(home, ".profile")],
-  }
-  const files = [...new Set(candidates[path.basename(process.env.SHELL || "bash")] ?? candidates.bash)]
+  // V1, V2, and OpenCode installs can share the same bin directory. Retain its PATH entry while
+  // any other binary still lives there; removing it would break the remaining product.
+  if (yield* shellPathShared(bin, path.basename(process.execPath))) return []
+  const files = shellConfigCandidates({ home, shell: process.env.SHELL || "bash", env: process.env })
   return yield* Effect.filter(files, (file) =>
     fs.readFileString(file).pipe(
-      Effect.map((content) => cleanShellConfig(content) !== content),
+      Effect.map(
+        (content) => cleanShellConfig(content, shellPathCommands({ bin, fish: isFishConfig(file) })) !== content,
+      ),
       Effect.orElseSucceed(() => false),
     ),
   )
 })
-
-function cleanShellConfig(content: string) {
-  const lines = content.split("\n")
-  const entry = (line: string) =>
-    /^(?:export PATH=|fish_add_path\s)/.test(line.trim()) &&
-    (line.includes(".panacode/bin") || line.includes(".opencode/bin"))
-  return lines
-    .filter(
-      (line, index) =>
-        !entry(line) &&
-        !(
-          (line.trim() === "# panacode" || line.trim() === "# panacode") &&
-          entry(lines[index + 1] ?? "")
-        ),
-    )
-    .join("\n")
-}

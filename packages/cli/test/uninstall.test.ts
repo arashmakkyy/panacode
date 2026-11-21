@@ -11,6 +11,9 @@ test("uninstall --dry-run reports a service and cache without stopping or deleti
   await fs.mkdir(state, { recursive: true })
   await fs.mkdir(cache, { recursive: true })
   await fs.writeFile(path.join(cache, "marker"), "cache")
+  const shell = path.join(root, ".bashrc")
+  const shellBefore = `# user\n\n# panacode\nexport PATH=${path.join(root, ".panacode", "bin")}:$PATH\n`
+  await fs.writeFile(shell, shellBefore)
   const witness = Bun.spawn([process.execPath, path.join(import.meta.dir, "fixture/witness.ts"), heartbeat], {
     stdio: ["ignore", "ignore", "ignore"],
   })
@@ -29,6 +32,7 @@ test("uninstall --dry-run reports a service and cache without stopping or deleti
     expect(result.stdout).toContain(`Cache: ${cache}`)
     expect(await fs.readFile(registration, "utf8")).toBe(before)
     expect(await fs.readFile(path.join(cache, "marker"), "utf8")).toBe("cache")
+    expect(await fs.readFile(shell, "utf8")).toBe(shellBefore)
     expect(() => process.kill(witness.pid, 0)).not.toThrow()
   } finally {
     witness.kill()
@@ -69,9 +73,30 @@ test("uninstall refuses to stop a legacy record and leaves the cache and process
   }
 })
 
+test("uninstall without confirmation leaves the shell config untouched", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "panacode-uninstall-cancel-"))
+  const shell = path.join(root, ".bashrc")
+  const before = `# user\n\n# panacode\nexport PATH=${path.join(root, ".panacode", "bin")}:$PATH\n`
+  await fs.writeFile(shell, before)
+  try {
+    const result = await cli(["uninstall"], root)
+
+    expect(result.exitCode).not.toBe(0)
+    expect(result.stdout + result.stderr).toContain("Use --force")
+    expect(await fs.readFile(shell, "utf8")).toBe(before)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
 async function waitForHeartbeat(file: string) {
   for (let attempt = 0; attempt < 300; attempt++) {
-    if ((await Bun.file(file).text().catch(() => "")) !== "") return
+    if (
+      (await Bun.file(file)
+        .text()
+        .catch(() => "")) !== ""
+    )
+      return
     await Bun.sleep(10)
   }
   throw new Error("witness did not start")
@@ -93,6 +118,7 @@ async function cli(args: string[], root: string) {
     },
     stdout: "pipe",
     stderr: "pipe",
+    stdin: "ignore",
   })
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(child.stdout).text(),
