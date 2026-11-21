@@ -59,6 +59,10 @@ const getBase = (appId: string): Configuration => {
 
   return {
     artifactName: "panacode-desktop-${os}-${arch}.${ext}",
+    // No update feed. An explicit null stops electron-builder from inferring a GitHub publisher from
+    // GH_TOKEN in CI; without repository metadata that inference resolves to null and crashes while
+    // it reads the update channel.
+    publish: null,
     directories: {
       output: "dist",
       buildResources: "resources",

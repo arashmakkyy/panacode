@@ -50,8 +50,9 @@ function trimFilter(dir: string, config: Configuration) {
 test.each(channels)("channel identity for $channel", ({ channel, appId }) => {
   const config = load(channel)
   expect(config.appId).toBe(appId)
-  // Panacode has no update feed yet; never point packaged builds at the upstream one.
-  expect(config.publish).toBeUndefined()
+  // Panacode has no update feed yet; never point packaged builds at the upstream one. Keep this null
+  // rather than undefined so electron-builder cannot infer a provider from GH_TOKEN in CI.
+  expect(config.publish).toBeNull()
   expect(config.extraMetadata?.desktopName).toBe(`${appId}.desktop`)
   // The executable must never end in `.desktop`: libappimage resolves the
   // AppImage's desktop entry by globbing `*.desktop`, and an ELF matching
