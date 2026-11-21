@@ -257,7 +257,8 @@ export async function writeInstallManifest(input: {
 
   const entries = await Promise.all(
     files.map(async (file) => {
-      const name = relative(input.appDir, file)
+      // NSIS consumes Windows relative paths, so normalize separators when the build host is POSIX.
+      const name = relative(input.appDir, file).replaceAll("/", "\\")
 
       if (name === INSTALL_MANIFEST) return undefined
 
