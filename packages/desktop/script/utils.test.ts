@@ -367,6 +367,45 @@ test("the Windows install manifest records only owned files with exact sizes", a
   }
 })
 
+test("the install manifest writer runs in electron-builder's Node runtime", async () => {
+  const root = await tempDir()
+  const app = path.join(root, "app")
+
+  try {
+    await mkdir(app, { recursive: true })
+    await writeFile(path.join(app, "Panacode.exe"), "exe")
+
+    const input = JSON.stringify({
+      appDir: app,
+      appId: "ai.panacode.desktop",
+      version: "2.3.0",
+      executable: "Panacode.exe",
+    })
+    const script = [
+      'const path = require("node:path")',
+      'const { createRequire } = require("node:module")',
+      'const root = process.cwd()',
+      'const requireFromDesktop = createRequire(path.join(root, "packages/desktop/package.json"))',
+      'const electronBuilder = requireFromDesktop.resolve("electron-builder/package.json")',
+      'const appBuilder = require.resolve("app-builder-lib/package.json", { paths: [path.dirname(electronBuilder)] })',
+      'const jiti = require.resolve("jiti", { paths: [path.dirname(appBuilder)] })',
+      'const runner = require(jiti).createJiti(path.join(root, "packages/desktop/electron-builder.config.ts"))',
+      `runner.import(path.join(root, "packages/desktop/script/utils.ts")).then((utils) => utils.writeInstallManifest(${input})).catch((error) => { console.error(error); process.exit(1) })`,
+    ].join("\n")
+
+    const result = Bun.spawnSync(["node", "-e", script], {
+      cwd: path.resolve(import.meta.dir, "../../.."),
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    if (result.exitCode !== 0) throw new Error(result.stderr.toString())
+
+    expect(await readFile(path.join(app, INSTALL_MANIFEST), "utf8")).toContain("3\nPanacode.exe")
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
 test("a path the installer cannot read as ANSI fails the manifest instead of being omitted", async () => {
   const root = await tempDir()
 

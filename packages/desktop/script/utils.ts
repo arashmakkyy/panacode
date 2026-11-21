@@ -1,4 +1,4 @@
-import { chmod, copyFile, mkdir, readFile, readdir, stat } from "node:fs/promises"
+import { chmod, copyFile, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises"
 import { createHash } from "node:crypto"
 import { basename, dirname, join, relative } from "node:path"
 import { Option, Schema } from "effect"
@@ -279,7 +279,7 @@ export async function writeInstallManifest(input: {
       .map((entry) => `${entry.size}\n${entry.name}`),
   ].join("\n")
 
-  await Bun.write(join(input.appDir, INSTALL_MANIFEST), `${manifest}\n`)
+  await writeFile(join(input.appDir, INSTALL_MANIFEST), `${manifest}\n`)
 }
 
 export const INSTALL_MANIFEST = ".panacode-install"
