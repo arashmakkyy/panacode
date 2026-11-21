@@ -336,11 +336,14 @@ type ObservedProcess = {
 
 async function processes(needle: string): Promise<ObservedProcess[]> {
   if (process.platform === "win32") return windowsProcesses(needle)
-  const output = await Bun.$`pgrep -f ${needle}`.nothrow().quiet().text()
-  return output
-    .split("\n")
-    .filter(Boolean)
-    .map((pid) => ({ pid: Number(pid), created: "", commandLine: needle }))
+  // `pgrep` reports only PIDs, but this fixture also needs the command line to tell server
+  // processes apart from CLI commands that share the entry path. `ps` reports both in one pass.
+  const output = await Bun.$`ps -Awwo pid=,command=`.nothrow().quiet().text()
+  return output.split("\n").flatMap((line) => {
+    const match = /^\s*(\d+)\s+(.*)$/.exec(line)
+    if (!match || !match[2].includes(needle)) return []
+    return [{ pid: Number(match[1]), created: "", commandLine: match[2] }]
+  })
 }
 
 // `Get-CimInstance` is the Windows API for reading another process's command line. The fixture
