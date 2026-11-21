@@ -1,15 +1,19 @@
 # Panacode isolation review brief
 
-**وضعیت:** آمادهٔ ریویو — **آمادهٔ انتشار نیست**.
-**شاخهٔ محلی:** `isolation-fixes`  
-**شاخهٔ remote:** `origin/isolation-fixes`  
-**Base:** `panacode-isolation` @ `9618e4d5ac3ae5b5997807d8385fd63a9e468621`  
-**Code/test HEAD:** `3640c234e71aa49cc9721b3ba0a29d7145d59f64`  
-**این گزارش:** یک commit مستندات روی همان HEAD است؛ کد و تست‌ها را تغییر نمی‌دهد.
+| مورد | مقدار |
+|---|---|
+| **وضعیت** | آمادهٔ ریویو — **آمادهٔ انتشار نیست** |
+| **شاخهٔ محلی** | `isolation-fixes` |
+| **شاخهٔ remote** | `origin/isolation-fixes` |
+| **Base** | `panacode-isolation` @ `9618e4d5ac3ae5b5997807d8385fd63a9e468621` |
+| **Code/test HEAD** | `eccc31771ee873a26919483b0bd90d4f030dafd0` |
+| **CI** | run [`44936316557`](https://github.com/arashmakkyy/panacode/actions/runs/44936316557) — هر ۶ job سبز |
+| **این گزارش** | commit مستندات روی همان HEAD است؛ کد و تست‌ها را تغییر نمی‌دهد. |
 
 - Branch: https://github.com/arashmakkyy/panacode/tree/isolation-fixes
 - Compare against base: https://github.com/arashmakkyy/panacode/compare/panacode-isolation...isolation-fixes
 - Actions: https://github.com/arashmakkyy/panacode/actions
+- Green run: https://github.com/arashmakkyy/panacode/actions/runs/44936316557
 
 > **قاعدهٔ مهم برای ریویوور:** پذیرش واقعی ویندوز A–G اجرا نشده و همهٔ گام‌های آن **BLOCKED** هستند. build موفق، unit test یا کامپایل NSIS جای نصب و اجرای EXE را نمی‌گیرد. هیچ‌جا ادعای PASS برای A–G نکنید.
 
@@ -17,13 +21,14 @@
 
 ## ۱. خلاصهٔ اجرایی
 
-این شاخه ۱۳ یافتهٔ بازبینی جداسازی Panacode از OpenCode را با ۱۴ commit کد/تست و ۱ commit مستندات رفع می‌کند. هدف، حذف مسیرهایی است که می‌توانستند به داده، process، registration، باینری، shell config یا لاگ محصول دیگر برسند.
+این شاخه ۱۳ یافتهٔ بازبینی جداسازی Panacode از OpenCode را با ۲۷ commit تا code/test HEAD `eccc31771e` (۲ commit فقط مستندات) و یک commit مستندات روی آن (همین گزارش) رفع می‌کند. هدف، حذف مسیرهایی است که می‌توانستند به داده، process، registration، باینری، shell config یا لاگ محصول دیگر برسند.
 
-- Diff: ۱۲۳ فایل، حدود `+10,989 / -1,480` نسبت به `9618e4d5ac`.
+- Diff کد/CI: ۱۱۹ فایل، حدود `+11,053 / -1,472` نسبت به `9618e4d5ac`؛ با مستندات: ۱۲۴ فایل، `+11,393 / -1,485`.
 - تست‌ها و typecheckها با **Bun 1.4.4** اجرا شده‌اند.
+- remote CI روی `eccc31771e` در run `44936316557` هر شش job را پاس کرد: guards، root quality، Linux client، Linux CLI، Windows acceptance و Linux core/desktop/gui.
 - هیچ PR، merge، tag یا release انجام نشده است.
 - شاخه روی `origin/isolation-fixes` push شده و base آن `panacode-isolation` است.
-- installer کاندید ساخته شده اما **امضا نشده** و **نصب/اجرا نشده** است.
+- installer کاندید ساخته شده اما **امضا نشده**، **از `90c282c11b`** (بدون رفع‌های بعدی) و **نصب/اجرا نشده** است.
 
 ---
 
@@ -44,7 +49,7 @@
 | 10 | provenance و handoff باینری PTY | PASS محلی؛ Node SEA BLOCKED |
 | 11 | لاگ محلی و ZIP پشتیبانی بدون دادهٔ خصوصی | PASS محلی؛ export بسته‌بندی‌شده BLOCKED |
 | 12 | جداسازی config/auth/session/Desktop identity | PASS محلی؛ dual-install BLOCKED |
-| 13 | CI واقعی Linux/Windows و contract تست | PASS محلی؛ remote run در حال اجراست |
+| 13 | CI واقعی Linux/Windows و contract تست | PASS؛ remote CI سبز (run 44936316557) |
 | 14 | پذیرش EXE نصب‌شده A–G | **BLOCKED** |
 | 15 | تصمیم‌ها، PRD، status و release notes | PASS |
 
@@ -71,6 +76,8 @@
 - فایل‌ها: `packages/client/src/service*.ts`، `packages/cli/src/services/service-control.ts`، `service-registration.ts`، `packages/cli/src/services/server-connection.ts`.
 - قرارداد: قبل از هر stop/restart/uninstall/PTY command، registration باید product/instance/pid/endpoint معتبر داشته باشد و control ping تأیید شود. هیچ SIGTERM/SIGKILL بر اساس PID سرویس کشف‌شده مجاز نیست. ثبت کهنه با quarantine حذف می‌شود و finalizer قدیمی نمی‌تواند registration جدیدتر را پاک کند.
 - commitهای مرتبط: `f4638c3d57`، `bd52230bdb`.
+- سوکت کنترل: `close()` سوکت را unlink و پوشهٔ مشترک `control/` را در صورت خالی بودن rmdir می‌کند؛ `start()` اگر instance دیگر پوشه را بین mkdir و listen حذف کرده باشد یک‌بار دوباره می‌سازد و endpointهای `.sock` را که مالکشان دیگر connection را نمی‌پذیرد جارو می‌کند (`4e2bc7ea81`، `9b01dca9e7`).
+- رقابت contender: endpointی که PID آن متعلق به contender اسپاون‌شده توسط همان `ensure()` است موقت تلقی می‌شود و polling ادامه می‌یابد؛ adopt هنوز فقط با registration منطبق انجام می‌شود (`5021af9b48`).
 - نقاط ریویو: آیا مسیر error/timeout می‌تواند قبل از `Service.verified` دستور lifecycle بفرستد؟ آیا دو process هم‌زمان می‌توانند registration را replace کنند؟ آیا endpoint مشابه ولی unowned می‌تواند adopt شود؟
 
 ### ۳.۲ ریشهٔ state و discovery
@@ -100,6 +107,7 @@
 - قرارداد: `.panacode-install` شامل header/appId/version/exe و `size` + مسیر نسبی هر فایل است. uninstall فقط فایل‌های منطبق با manifest را حذف می‌کند، پوشه‌های خالی را prune می‌کند، reparse point را دنبال نمی‌کند و هرگز درخت مشترک را بازگشتی پاک نمی‌کند. نصب pre-manifest فقط از registry همین app و `Panacode.exe` برای تصمیم مکان شناسایی می‌شود؛ فایل/process آن حذف یا متوقف نمی‌شود. uninstaller قدیمی هرگز اجرا نمی‌شود.
 - commitها: `7f11a8d250`، `90c282c11b`.
 - نکتهٔ runtime: `afterPack` در process **Node** الکترون‌بیلدر اجرا می‌شود، بنابراین نویسندهٔ manifest باید فقط `node:fs` باشد. تست regression با spawn واقعی Node اجرا می‌شود.
+- harness: چون uninstaller از یک کپی موقت دوباره اجرا می‌شود، تست تا رسیدن به tree مورد انتظار و سپس ۲ ثانیه سکون صبر می‌کند؛ رفتار production تغییر نکرده است (`eccc31771e`).
 - نقاط ریویو: size-only collision، path traversal در مسیر نسبی، junction داخل مسیر نصب، ACL، upgrade و حذف `.old`/stage.
 
 ### ۳.۶ گارد مسیر SQLite
@@ -135,26 +143,30 @@
 - فایل‌ها: `.github/workflows/panacode-isolation.yml`، `script/panacode-test-contract.ts`، `script/panacode-isolation-check.ts`.
 - قرارداد: هر گروه از wrapper عبور می‌کند؛ missing path، صفر pass، skip بیش از حد، unhandled error، نبود summary، timeout و exit غیرصفر fail هستند. lifecycle ویندوز دیگر skip نمی‌شود و process را با WMI exact path/creation time می‌بیند. سه شکل بازگشت ممنوعهٔ `dev/install`، PATH برای `opencode-pty` و دانلود `@opencode/cli-*` توسط guard رد می‌شوند.
 - commit: `97858ae392`.
+- lifecycle discovery روی POSIX با `ps -Awwo pid=,command=` انجام می‌شود (نه `pgrep` که فقط PID می‌دهد) و fixture root در updater canonicalize می‌شود تا مسیرهای 8.3 ویندوز مثل `RUNNER~1` یکسان شوند (`5b57d27fe4`، `790860ba5b`).
+- فقط دو skip مربوط به Windows در گروه desktop لینوکس مجاز است؛ ویندوز `--max-skip 0` دارد (`f098a2d97d`، `7e5a45179c`).
 - نقاط ریویو: false-pass در parse خروجی Bun، skipهای پنهان، pathهای workflow، pinned Bun، رفتار Windows runner.
 
 ---
 
-## ۴. شواهد تست محلی
+## ۴. شواهد تست محلی و remote CI
 
 | گروه | نتیجه |
 |---|---|
-| client service/root/probe/witness | ۲۹۰ pass / ۲ skip |
+| client (Windows / Linux CI) | ۹۴ pass / ۲ skip / ۴۵۳ expect؛ Linux ۹۶ pass / ۰ skip |
 | desktop service | ۷۲ pass / ۱ skip |
 | CLI service | ۳۲ pass / ۳ skip |
 | util roots/env | ۳ pass و ۱۰ pass |
 | shell config + real install | ۲۹ حالت + fixture Git Bash |
 | uninstall/updater ownership | ۱۷ pass / ۱۵۴ expect |
-| WSL/SSH managed CLI | ۲۱ pass / ۱۳۴ assertion |
+| WSL/SSH managed CLI (final local) | ۹ pass / ۷۰ expect؛ پیش از رفع fixture: ۲۱ pass / ۱۳۴ assertion |
 | database path | ۱۹ pass / ۱ skip؛ کد قدیم ۱۰ failure |
 | PTY binary/daemon/session/handoff | ۴۲ pass / ۲ skip / ۱۷۴ expect |
 | support ZIP/deep link | ۱۸ pass / ۲۱۲ expect |
 | config/auth/session/Desktop identity | ۶۲/۱، CLI ۲۰/۱، util ۱۰/۰، desktop ۳۰/۰ |
-| Windows CI groups | lifecycle ۷/۰، database ۱۹/۱، witness ۲/۰، uninstall ۵/۰، shell ۳۷/۱، cli-service ۶۷/۳، support ۱۸/۰، PTY ۴۲/۲، electron-builder ۱۰/۰، staging ۱۲/۰، desktop ۸۰/۰، client ۹۲/۲، GUI ۵۹/۰، NSIS ۸/۰ |
+| Windows CI (run 44936316557) | lifecycle ۷/۰، database ۱۹/۱، witness ۲/۰، shell profile ۵/۰، shell installer ۳۷/۱، service/updater ۶۷/۳، support ۱۸/۰، PTY ۴۲/۲، electron-builder ۱۰/۰، staging ۱۳/۰، desktop ۸۰/۰، client ۹۴/۲، GUI ۵۹/۰، NSIS ۸/۰ |
+| Linux CI (run 44936316557) | client ۹۶/۰؛ CLI ownership ۵۸/۰، database ۱۸/۲، lifecycle ۷/۰، service/debug/upgrade ۵۷/۰؛ core config ۶۳/۰، PTY ۴۵/۰، desktop ۷۸/۲، GUI ۵۹/۰ |
+| local final (Windows) | lifecycle ۷ pass / ۳۰ expect / ۱۰۹s؛ NSIS ۸ pass / ۱۶۶ expect / ۳۶.۵s |
 | installer writer under Node | ۱۱ pass / ۵۴ expect؛ proof قرمز `ReferenceError: Bun is not defined` |
 | isolation guard | exit 0؛ red probe سه violation را گرفت |
 
@@ -173,13 +185,15 @@
 | CLI version | `0.0.0-prod-202611211535` |
 | provenance | `verify-cli-provenance.ts` → EXIT=0؛ hash منبع و unpacked یکسان |
 
+> این artifact از working tree معادل `90c282c11b` ساخته شده و رفع‌های بعدی (`2f0897afc1` تا `eccc31771e`) را ندارد. برای A–G ابتدا از code/test HEAD `eccc31771e` دوباره بسازید. hashهای بالا فقط همان کاندید قدیمی را شناسایی می‌کنند.
+
 ---
 
 ## ۶. محدودیت‌ها و ریسک‌های شناخته‌شده
 
 1. **A–G اجرا نشده** — بزرگ‌ترین شکاف و مانع اصلی انتشار.
 2. installer **امضا نشده** است.
-3. اجرای remote CI تا زمان نوشتن این گزارش مشاهده/تأیید نشده بود؛ run مربوط به push در GitHub Actions شروع شده است.
+3. **CI سبز است، اما فقط روی runnerهای GitHub**: run `44936316557` روی `eccc31771e` هر شش job را پاس کرد؛ این جای A–G روی EXE نصب‌شده و dual-install واقعی را نمی‌گیرد.
 4. **Node SEA prelude** فقط typecheck/review شده و اجرا نشده است.
 5. **WSL واقعی** به‌دلیل نبود `ext4.vhdx` و **SSH server واقعی** اجرا نشدند.
 6. **Export Logs** در Electron بسته‌بندی‌شده اجرا نشده است.
@@ -233,8 +247,8 @@ cd ../desktop; bunx bun@1.4.4 test src/main/native/support-archive.test.ts
 **آمادهٔ انتشار نیست.** شرایط حداقلی:
 
 1. اجرای کامل A–G روی VM دورریختنی ویندوز x64 و ثبت PASS/FAIL و شواهد.
-2. اجرای واقعی CI و سبز شدن jobهای Linux/Windows.
-3. تصمیم امضا/توزیع installer.
+2. ~~اجرای واقعی CI و سبز شدن jobهای Linux/Windows.~~ انجام شد: run `44936316557` روی `eccc31771e`، هر شش job سبز.
+3. تصمیم امضا/توزیع installer، و ساخت دوبارهٔ artifact از `eccc31771e` (کاندید فعلی از `90c282c11b` است).
 4. اجرای Node SEA PTY prelude و smokeهای compiled service/catalog با fixture و پورت ایزوله.
 5. اجرای Export Logs در Electron بسته‌بندی‌شده.
 6. سپس PR، merge، tag و release — هر کدام با مجوز جداگانه.
