@@ -47,6 +47,8 @@ jobs:
         run: bun script/panacode-test-contract.ts --cwd packages/ai --min-pass 50 -- ./test/provider/panaai-chat.test.ts ./test/provider-error.test.ts
       - name: Full session runner, model history and path validation
         run: bun script/panacode-test-contract.ts --cwd packages/core --min-pass 290 --test-timeout 45000 -- ./test/session-runner.test.ts ./test/session-runner-message.test.ts ./test/session-system-prompt.test.ts ./test/plugin/tool-input-repair-integration.test.ts
+      - name: Run file validation and native PowerShell through the tool registry
+        run: bun script/panacode-test-contract.ts --cwd packages/core --min-pass 176 --test-timeout 45000 --require-pass "recovers from a Bash heredoc in PowerShell without overwriting the actual page" -- ./test/tool-registry.test.ts ./test/tool-schema.test.ts ./test/tool-shell.test.ts
       - name: Shell argument and syntax contracts
         run: bun script/panacode-test-contract.ts --cwd packages/core --min-pass 343 --require-pass "provides a direct PowerShell command after a structural rejection" -- ./test/shell-parse.test.ts ./test/shell-scan/powershell-syntax.test.ts ./test/shell-scan/powershell-safety.test.ts
       - name: Activity and tool status
@@ -62,7 +64,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: tool-turn-browser-failure
-          path: packages/app/test-results/
+          path: packages/app/e2e/test-results/
           if-no-files-found: ignore
           retention-days: 3
 
