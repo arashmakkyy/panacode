@@ -1,12 +1,13 @@
-import { migrateOwnedRegistration, registrationBytes } from "@opencode/client/service"
+import { migrateOwnedRegistration, privateFileBytes, registrationBytes, renameServiceFile, withRegistrationLock } from "@opencode/client/service"
 import { Global } from "@opencode/util/global"
 import { ProductIdentity } from "@opencode/util/product-identity"
+import { physicalPath } from "@opencode/util/product-path"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../version"
 import { Hash } from "@opencode/util/hash"
 import { Service } from "@opencode/client/effect/service"
-import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
+import { Effect, FileSystem, Option, Schema } from "effect"
 import { randomBytes, randomUUID } from "node:crypto"
-import { link, rm, writeFile } from "node:fs/promises"
+import { rename, rm, writeFile } from "node:fs/promises"
 import path from "path"
 import { selfCommand } from "../util/process"
 import { RemoteTunnel } from "./remote-tunnel"
@@ -115,32 +116,90 @@ export const migrateRegistration = Effect.fnUntraced(function* (
   yield* Effect.tryPromise(() => migrateOwnedRegistration(legacy, file, info, text)).pipe(Effect.ignore)
 })
 
-export const migrateConfig = Effect.fnUntraced(function* (legacy: string, file: string) {
+// Configuration and service registration have independent locks. Even when their XDG
+// bases coincide, publishing a service can still call its configuration preparation.
+function withConfigLock<T>(file: string, run: () => Promise<T>) {
+  return withRegistrationLock(file + ".config", run)
+}
+
+// The old filename can hold either kind of record when the two XDG bases are the
+// same physical directory. Decode only positive, unambiguous settings as configuration.
+function sharedRecordKind(source: Buffer): "registration" | "config" | "ambiguous" {
+  let data: unknown
+  try {
+    data = JSON.parse(source.toString("utf8"))
+  } catch {
+    return "ambiguous"
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data)) return "ambiguous"
+  const names = Object.keys(data)
+  if (names.every((key) => Object.hasOwn(Info.fields, key))) {
+    const text = source.toString("utf8")
+    return Option.isSome(Schema.decodeUnknownOption(Info)(data)) || Option.isSome(decodeLegacy(text)) ? "config" : "ambiguous"
+  }
+  if (
+    "url" in data && typeof data.url === "string" && URL.canParse(data.url) &&
+    "pid" in data && typeof data.pid === "number" && Number.isSafeInteger(data.pid) && data.pid > 0 &&
+    names.every((key) => key === "password" || !Object.hasOwn(Info.fields, key))
+  ) return "registration"
+  return "ambiguous"
+}
+
+// All configuration writers hold withConfigLock. A crash leaves either the old complete
+// settings or the new complete settings at the public name, never a partial or linked file.
+async function publishConfig(file: string, source: string | Buffer, onlyMissing: boolean) {
+  const current = await privateFileBytes(file)
+  if (onlyMissing && current !== undefined) return
+  const temporary = file + "." + randomUUID() + ".tmp"
+  await writeFile(temporary, source, { flag: "wx", mode: 0o600 })
+  try {
+    await renameServiceFile(temporary, file)
+  } finally {
+    await rm(temporary, { force: true })
+  }
+}
+
+async function separateSharedConfig(oldPath: string, file: string) {
+  const seen = await privateFileBytes(oldPath)
+  if (!seen) return
+  const kind = sharedRecordKind(seen)
+  if (kind === "registration") return
+  if (kind === "ambiguous")
+    throw new Error("The shared XDG state and configuration directory contains an ambiguous service record. Its files were preserved. Select separate XDG_STATE_HOME and XDG_CONFIG_HOME directories.")
+  await withRegistrationLock(oldPath, async () => {
+    const current = await privateFileBytes(oldPath)
+    if (!current?.equals(seen)) return
+    await withConfigLock(file, async () => {
+      // Keep newer settings and archive the complete legacy bytes before freeing the
+      // registration name. Never import a password from a service registration.
+      await publishConfig(file, current, true)
+      await rename(oldPath, oldPath + "." + randomUUID() + ".legacy-config")
+    })
+  })
+}
+
+export const migrateConfig = Effect.fnUntraced(function* (legacy: string, file: string, shared = false) {
   const fs = yield* FileSystem.FileSystem
   if (yield* fs.exists(file)) return
-  const text = yield* legacyText(legacy)
-  if (!text || Option.isNone(yield* decodeInfo(text).pipe(Effect.option))) return
-  yield* Effect.tryPromise(async () => {
-    const temporary = file + "." + randomUUID() + ".tmp"
-    await writeFile(temporary, text, { flag: "wx", mode: 0o600 })
-    try {
-      // Publish a complete snapshot only if the target is still missing. Readers and
-      // simultaneous startups cannot observe a partial JSON file or overwrite a newer one.
-      await link(temporary, file).catch((error: NodeJS.ErrnoException) => {
-        if (error.code !== "EEXIST") throw error
-      })
-    } finally {
-      await rm(temporary, { force: true })
-    }
-  })
+  const source = yield* Effect.tryPromise(() => privateFileBytes(legacy)).pipe(Effect.orElseSucceed(() => undefined))
+  if (!source || (shared && sharedRecordKind(source) !== "config")) return
+  const text = source.toString("utf8")
+  if (Option.isNone(yield* decodeInfo(text).pipe(Effect.option)) && Option.isNone(decodeLegacy(text))) return
+  yield* Effect.tryPromise(() => withConfigLock(file, () => publishConfig(file, source, true)))
 })
 
-export const migrateChannelConfig = Effect.fnUntraced(function* (directory: string, channel = OPENCODE_CHANNEL) {
-  const target = path.join(directory, filename(channel))
+export const migrateChannelConfig = Effect.fnUntraced(function* (
+  directory: string,
+  channel = OPENCODE_CHANNEL,
+  target = path.join(directory, filename(channel)),
+) {
+  const oldPath = path.join(directory, filename(channel))
+  const shared = target !== oldPath
+  if (shared) yield* Effect.tryPromise({ try: () => separateSharedConfig(oldPath, target), catch: (cause) => cause instanceof Error ? cause : new Error(String(cause)) })
   const hashed = legacyFilename(channel)
   // The packaged r10 CLI used its named prod configuration in preference to the earlier hash.
-  if (channel === "prod") yield* migrateConfig(path.join(directory, "service-prod.json"), target)
-  if (hashed) yield* migrateConfig(path.join(directory, hashed), target)
+  if (channel === "prod") yield* migrateConfig(path.join(directory, "service-prod.json"), target, shared)
+  if (hashed) yield* migrateConfig(path.join(directory, hashed), target, shared)
 })
 
 function configKey(key: string): Key {
@@ -163,6 +222,7 @@ const paths = Effect.gen(function* () {
   const name = filename()
   const legacy = legacyFilename()
   const file = path.join(global.state, name)
+  const shared = path.relative(physicalPath(global.config), physicalPath(global.state)) === ""
   return {
     fs,
     file,
@@ -173,7 +233,7 @@ const paths = Effect.gen(function* () {
       ...(OPENCODE_CHANNEL === "prod" ? [path.join(global.state, "service-prod.json")] : []),
       ...(name !== "service.json" && OPENCODE_CHANNEL !== "local" ? [path.join(global.state, "service.json")] : []),
     ],
-    configFile: path.join(global.config, name),
+    configFile: path.join(global.config, shared ? "settings." + name : name),
   }
 })
 
@@ -211,13 +271,14 @@ export const options = Effect.fnUntraced(function* (input: { readonly checkVersi
 })
 
 export const read = Effect.fn("cli.service-config.read")(function* () {
-  const { fs, configFile, configDir } = yield* paths
-  yield* migrateChannelConfig(configDir)
-  const text = yield* fs.readFileString(configFile).pipe(Effect.option)
-  if (Option.isNone(text)) return {} as Info
-  const info = yield* decodeInfo(text.value).pipe(Effect.option)
+  const { configFile, configDir } = yield* paths
+  yield* migrateChannelConfig(configDir, OPENCODE_CHANNEL, configFile)
+  const bytes = yield* Effect.tryPromise(() => privateFileBytes(configFile))
+  if (!bytes) return {} as Info
+  const text = bytes.toString("utf8")
+  const info = yield* decodeInfo(text).pipe(Effect.option)
   if (Option.isSome(info)) return info.value
-  const legacy = decodeLegacy(text.value)
+  const legacy = decodeLegacy(text)
   if (Option.isNone(legacy)) return {} as Info
   // Repair the file in place so every reader sees the same route.
   const { remote: enabled, ...rest } = legacy.value
@@ -233,10 +294,10 @@ function route() {
 
 const write = Effect.fn("cli.service-config.write")(function* (value: Info) {
   const { fs, configFile } = yield* paths
-  const temp = configFile + "." + process.pid + ".tmp"
   yield* fs.makeDirectory(path.dirname(configFile), { recursive: true })
-  yield* fs.writeFileString(temp, JSON.stringify(value, null, 2) + "\n", { mode: 0o600 })
-  yield* fs.rename(temp, configFile).pipe(Effect.retry({ times: 20, schedule: Schedule.spaced("10 millis") }))
+  yield* Effect.tryPromise(() =>
+    withConfigLock(configFile, () => publishConfig(configFile, JSON.stringify(value, null, 2) + "\n", false)),
+  )
 })
 
 export const password = Effect.fn("cli.service-config.password")(function* (value?: string) {

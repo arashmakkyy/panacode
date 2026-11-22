@@ -371,6 +371,64 @@ test("r10 production config migrates once ahead of stale hashed settings, withou
   }
 })
 
+test("collocated state and config separate unambiguous settings without treating a registration as config", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "panacode-shared-xdg-"))
+  const state = path.join(root, "shared")
+  const config = path.join(root, "alias")
+  const name = ServiceConfig.filename()
+  const file = path.join(state, name)
+  const separated = path.join(state, "settings." + name)
+  const layer = Global.layerWith({ config, state })
+  const read = () => Effect.runPromise(ServiceConfig.read().pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer)))
+  try {
+    await fs.mkdir(state)
+    await fs.symlink(state, config, process.platform === "win32" ? "junction" : "dir")
+    const oldConfig = '{"port":4321,"password":"original-settings","remoteAccepted":true}'
+    await fs.writeFile(file, oldConfig)
+    expect(await Promise.all([read(), read()])).toEqual([JSON.parse(oldConfig), JSON.parse(oldConfig)])
+    const archive = (await fs.readdir(state)).find((entry) => entry.endsWith(".legacy-config"))
+    expect(await fs.readFile(path.join(state, archive!), "utf8")).toBe(oldConfig)
+    expect(await Bun.file(file).exists()).toBe(false)
+    const registered = JSON.stringify({ id: "running", product: "panacode", version: "2", pid: process.pid, url: "http://127.0.0.1:28844", password: "service-only" })
+    await fs.writeFile(file, registered)
+    expect(await read()).toEqual(JSON.parse(oldConfig))
+    await fs.rm(separated)
+    expect(await read()).toEqual({})
+    expect(await fs.readFile(file, "utf8")).toBe(registered)
+    const mixed = '{"pid":123,"port":5555,"password":"ambiguous"}'
+    await fs.writeFile(file, mixed)
+    await expect(read()).rejects.toThrow("ambiguous service record")
+    expect(await fs.readFile(file, "utf8")).toBe(mixed)
+    expect(await Bun.file(separated).exists()).toBe(false)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+test("service settings refuse linked credentials and leave the external file untouched", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "panacode-linked-settings-"))
+  const directory = path.join(root, "config")
+  const layer = Global.layerWith({ config: directory, state: path.join(root, "state") })
+  const read = () => Effect.runPromise(ServiceConfig.read().pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer)))
+  try {
+    await fs.mkdir(directory)
+    const foreign = path.join(root, "external.json")
+    const file = path.join(directory, ServiceConfig.filename())
+    const secret = '{"password":"foreign"}'
+    await fs.writeFile(foreign, secret)
+    await fs.link(foreign, file)
+    await expect(read()).rejects.toThrow()
+    await fs.unlink(file)
+    if (process.platform !== "win32") {
+      await fs.symlink(foreign, file)
+      await expect(read()).rejects.toThrow()
+    }
+    expect(await fs.readFile(foreign, "utf8")).toBe(secret)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
 test("registration migration requires Panacode ownership and never moves stable discovery", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-migration-"))
   const legacy = path.join(root, "service.json")

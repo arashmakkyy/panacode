@@ -21,7 +21,13 @@ function Assert-LocalPath([string]$Path) {
 
 # Read link count on the open file handle. Checking only its name would allow access grants on a
 # staged hard link to apply to another file. GetFileInformationByHandle is available on Win x64/ARM64.
-Add-Type -TypeDefinition @'
+try {
+    # A directly invoked verifier must also be independent of caller-supplied working directories.
+    # Windows PowerShell 5.1's C# compiler loads its classic framework references from here.
+    $framework = [Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()
+    [Environment]::CurrentDirectory = $framework
+    Set-Location -LiteralPath $framework
+    Add-Type -TypeDefinition @'
 using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
@@ -42,6 +48,10 @@ public static class PanacodeFileInfo {
     }
 }
 '@
+} catch {
+    [Console]::Error.WriteLine('Panacode file verification: runtime initialization failed')
+    exit 25
+}
 
 function Get-Digest([string]$Path) {
     $stream = [IO.File]::OpenRead($Path)
@@ -161,8 +171,12 @@ try {
         'Unexpected desktop profile', 'Installed image changed', 'Changed staged file',
         'Incomplete staged payload', 'Linked file'
     )
-    $message = $known -eq $_.Exception.GetBaseException().Message
-    if (!$message) { $message = $_.Exception.GetBaseException().GetType().Name }
-    [Console]::Error.WriteLine("Panacode file verification: $message")
-    exit 1
+    $cause = $_.Exception.GetBaseException()
+    $category = [Array]::IndexOf($known, $cause.Message)
+    if ($category -ge 0) {
+        [Console]::Error.WriteLine("Panacode file verification: $($known[$category])")
+        exit (10 + $category)
+    }
+    [Console]::Error.WriteLine("Panacode file verification: $($cause.GetType().Name)")
+    exit 24
 }

@@ -4,6 +4,7 @@ import { copyFile, cp, mkdir, mkdtemp, readFile, readdir, rm, symlink } from "no
 import os from "node:os"
 import path from "node:path"
 import { INSTALL_MANIFEST, writeInstallManifest } from "./utils"
+import { verifyWindowsPayload } from "./verify-windows-payload"
 
 const windows = test.skipIf(process.platform !== "win32")
 
@@ -143,7 +144,7 @@ ${options.footer ?? ""}
       PANACODE_TEST_RESULT: resultFile,
     })
 
-    if (process.code === 73 && target && buildPins.has(exe)) {
+    if (process.code >= 100 && process.code <= 132 && target && buildPins.has(exe)) {
       const parent = path.dirname(target)
       for (const entry of await readdir(parent, { withFileTypes: true })) {
         if (!entry.isDirectory() || !/\.staging-\d+$/.test(entry.name)) continue
@@ -315,8 +316,18 @@ test(
   () =>
     withHarness(async (h) => {
       const build = await h.build("compile", standard)
-      expect(Bun.file(build.exe).size).toBeGreaterThan(0)
-      expect(build.pin).toMatch(/^[0-9a-f]{64}$/)
+      const input = {
+        installer: build.exe,
+        buildPin: build.pin,
+        appId,
+        executable,
+        version,
+        helper: path.resolve(import.meta.dir, "../resources/windows/install-files.ps1"),
+      }
+      await verifyWindowsPayload(input)
+      await expect(verifyWindowsPayload({ ...input, buildPin: "0".repeat(64) })).rejects.toThrow(
+        "Archived manifest differs",
+      )
     }),
   180_000,
 )

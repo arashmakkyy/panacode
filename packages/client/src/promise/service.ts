@@ -10,7 +10,7 @@ import { decide, fallback, headers, occupied, parseRegistration, probeResult, sa
 
 export * from "../service.js"
 export { fallback, headers }
-export { publishRegistration, migrateOwnedRegistration, registrationSnapshot, registrationBytes, currentOwner } from "../service-file.js"
+export { publishRegistration, migrateOwnedRegistration, registrationSnapshot, registrationBytes, privateFileBytes, currentOwner, renameServiceFile, withRegistrationLock } from "../service-file.js"
 export { answerControl, request as requestControl, type TerminalAction } from "../service-control.js"
 
 // Find, start, and stop the local opencode background service.

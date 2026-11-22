@@ -30,7 +30,7 @@ export async function withRegistrationLock<T>(file: string, operation: () => Pro
 
 /** A registration can contain credentials. Refuse non-ordinary, redirected or shared entries
  * before reading them, including an entry replaced between lstat and open. */
-export async function registrationBytes(file: string, attempts = 3): Promise<Buffer | undefined> {
+export async function privateFileBytes(file: string, maxBytes = Infinity, attempts = 3): Promise<Buffer | undefined> {
   const entry = await lstat(file).catch((error: NodeJS.ErrnoException) => {
     if (error.code !== "ENOENT") throw error
   })
@@ -39,7 +39,7 @@ export async function registrationBytes(file: string, attempts = 3): Promise<Buf
     info.isFile() &&
     info.nlink === 1 &&
     (process.platform === "win32" || (info.uid === process.getuid?.() && (info.mode & 0o022) === 0)) &&
-    info.size <= 64 * 1024
+    info.size <= maxBytes
   if (!ordinary(entry)) throw new Error("Unsafe local service registration file")
   const handle = await open(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0)).catch(
     (error: NodeJS.ErrnoException) => {
@@ -50,7 +50,7 @@ export async function registrationBytes(file: string, attempts = 3): Promise<Buf
   try {
     const opened = await handle.stat()
     if (opened.ino !== entry.ino || opened.dev !== entry.dev || opened.nlink === 0) {
-      if (attempts > 1) return registrationBytes(file, attempts - 1)
+      if (attempts > 1) return privateFileBytes(file, maxBytes, attempts - 1)
       throw new Error("Local service registration changed while opening")
     }
     if (!ordinary(opened)) throw new Error("Unsafe local service registration file")
@@ -58,6 +58,10 @@ export async function registrationBytes(file: string, attempts = 3): Promise<Buf
   } finally {
     await handle.close()
   }
+}
+
+export function registrationBytes(file: string) {
+  return privateFileBytes(file, 64 * 1024)
 }
 
 const fingerprint = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex")
@@ -138,6 +142,25 @@ async function checkPrevious(bytes: Buffer, expected: string | undefined, next: 
   if (oldOrigin.origin !== new URL(newUrl).origin && (await listening(oldOrigin))) throw refusal()
 }
 
+export async function renameServiceFile(temporary: string, file: string) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await rename(temporary, file)
+      return
+    } catch (error) {
+      if (
+        process.platform !== "win32" ||
+        attempt >= 20 ||
+        !(error instanceof Error) ||
+        !("code" in error) ||
+        (error.code !== "EPERM" && error.code !== "EACCES")
+      )
+        throw error
+      await delay(10)
+    }
+  }
+}
+
 export async function publishRegistration(
   file: string,
   encoded: string,
@@ -159,22 +182,7 @@ export async function publishRegistration(
         // private for recovery. No timestamp or file chosen by the previous writer is trusted.
         await writeFile(file + "." + crypto.randomUUID() + ".stale", previous, { flag: "wx", mode: 0o600 })
       }
-      for (let attempt = 0; ; attempt++) {
-        try {
-          await rename(temporary, file)
-          return
-        } catch (error) {
-          if (
-            process.platform !== "win32" ||
-            attempt >= 20 ||
-            !(error instanceof Error) ||
-            !("code" in error) ||
-            (error.code !== "EPERM" && error.code !== "EACCES")
-          )
-            throw error
-          await delay(10)
-        }
-      }
+      await renameServiceFile(temporary, file)
     })
   } finally {
     await rm(temporary, { force: true })

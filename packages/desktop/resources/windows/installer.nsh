@@ -12,6 +12,7 @@
 
 Var panacodePath
 Var panacodeExpanded
+Var panacodeSavedOut
 Var panacodePin
 Var panacodeOldPin
 Var panacodeUninstallerPin
@@ -107,10 +108,26 @@ Var panacodeSharedImageOwned
 !macro panacodeFiles ACTION DIR PIN RESULT
   StrCpy $panacodePath "${DIR}"
   StrCpy $panacodePin "${PIN}"
+  StrCpy $panacodeSavedOut $OUTDIR
   InitPluginsDir
+  ClearErrors
   File "/oname=$PLUGINSDIR\panacode-files.ps1" "${BUILD_RESOURCES_DIR}\windows\install-files.ps1"
-  nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\panacode-files.ps1" -Action "${ACTION}" -Root "$panacodePath" -Pin "$panacodePin" -AppId "${APP_ID}" -Executable "${APP_EXECUTABLE_FILENAME}"'
-  Pop ${RESULT}
+  ${If} ${Errors}
+  ${OrIfNot} ${FileExists} "$PLUGINSDIR\panacode-files.ps1"
+    StrCpy ${RESULT} 30
+  ${ElseIfNot} ${FileExists} "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe"
+    StrCpy ${RESULT} 31
+  ${Else}
+    ; $PLUGINSDIR contains NSIS' native System.dll. Windows PowerShell's compiler resolves
+    ; framework assemblies relative to its working directory. It must never start there.
+    SetOutPath "$SYSDIR\WindowsPowerShell\v1.0"
+    ClearErrors
+    ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "$PLUGINSDIR\panacode-files.ps1" -Action "${ACTION}" -Root "$panacodePath" -Pin "$panacodePin" -AppId "${APP_ID}" -Executable "${APP_EXECUTABLE_FILENAME}"' ${RESULT}
+    ${If} ${Errors}
+      StrCpy ${RESULT} 32
+    ${EndIf}
+    SetOutPath "$panacodeSavedOut"
+  ${EndIf}
 !macroend
 
 !macro panacodeMatches DIR PIN RESULT
@@ -516,7 +533,9 @@ Var panacodeSharedImageOwned
     SetOutPath $PLUGINSDIR
     !insertmacro panacodeFiles Stage "$panacodeStage" "${PANACODE_BUILD_SHA256}" $R4
     ${If} $R4 != 0
-      !insertmacro panacodeFail 73 "The extracted Panacode build is incomplete or changed. The previous installation is intact."
+      ; Preserve the failing phase in silent mode (100 + helper result).
+      IntOp $R4 $R4 + 100
+      !insertmacro panacodeFail $R4 "The extracted Panacode build is incomplete or changed. The previous installation is intact."
     ${EndIf}
     !if "${PUBLISH}" == "publish"
       StrCpy $R6 "${STAGED_PACKAGE_HASH}" 16
