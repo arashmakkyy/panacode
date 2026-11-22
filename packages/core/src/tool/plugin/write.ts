@@ -6,6 +6,7 @@
  */
 export * as WriteTool from "./write.js"
 
+import { filePathInput } from "../file-path-input.js"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
@@ -13,13 +14,12 @@ import { FileWrite } from "../../file-write.js"
 
 export const name = "write"
 
-// TODO: Revisit whether model-facing mutation schemas should prefer absolute `filePath` naming for trained-in compatibility after evaluating model behavior.
-export const Input = Schema.Struct({
+export const Input = filePathInput(Schema.Struct({
   path: Schema.String.annotate({
     description: "Path to the file to write to",
   }),
   content: Schema.String.annotate({ description: "Content to write to the file" }),
-})
+}))
 
 export const Output = Schema.String
 export type Output = typeof Output.Type
@@ -40,7 +40,7 @@ export const Plugin = {
           name,
           options: { codemode: false, permission: "edit" },
           description:
-            "Writes a file to the local filesystem, overwriting if one exists.\n\nMissing parent directories are created automatically.\n\nUse this tool to create new files or overwrite existing files. For partial changes, use the edit tool instead.",
+            "Writes a file to the local filesystem, overwriting if one exists.\n\nMissing parent directories are created automatically.\n\nUse this tool to create new files or overwrite existing files. Supply the path before the content. For large files, write a small complete first version, then use edit to add one section at a time. Another write replaces the whole file.",
           input: Input,
           output: Output,
           execute: (input, context) =>

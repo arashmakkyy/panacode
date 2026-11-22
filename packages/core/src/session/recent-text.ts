@@ -4,6 +4,35 @@ import type { SessionMessage } from "./message.js"
 import type { SessionStored } from "./stored.js"
 
 const TOOL_OUTPUT_MAX_CHARS = 1_250
+// Includes the producer's 2048-character parse excerpt and the recovery instructions around it.
+const REJECTED_FEEDBACK_MAX_CHARS = 4096
+
+// Rejected calls stay intact on disk. Only the history sent back to the model is shortened,
+// including the old validation format that embedded the entire file in its error message.
+export function rejectedCall(
+  tool: Pick<SessionMessage.AssistantTool, "name" | "executed">,
+  state: Pick<SessionMessage.ToolStateError, "input" | "error">,
+) {
+  const original = state.error.message
+  const legacy = state.error.type === "tool.execution" &&
+    original.startsWith(`Invalid arguments for tool "${tool.name}":\n`) &&
+    original.includes("\n\nArguments provided:\n") &&
+    original.endsWith("\n\nUpdate the arguments and call the tool again.")
+  const legacyShell = tool.name === "shell" && state.error.type === "unknown" &&
+    original === "Portable shell scanner cannot analyze command: invalid-structure"
+  if (tool.executed || !(legacy || legacyShell || state.error.type.startsWith("tool.input"))) return state
+  const input = state.input
+  const oversized = JSON.stringify(input).length > 2048
+  // Keep only explicitly supplied short file destinations when the argument echo itself is too large.
+  const retained = oversized ? Object.fromEntries(
+    Object.entries(input).filter(([key, value]) =>
+      ["path", "filePath", "file_path"].includes(key) && typeof value === "string" && value.length <= 512),
+  ) : input
+  const brief = legacy ? original.slice(0, original.indexOf("\n\nArguments provided:\n")) : original
+  if (!oversized && brief === original && brief.length <= REJECTED_FEEDBACK_MAX_CHARS) return state
+  const message = brief.length > REJECTED_FEEDBACK_MAX_CHARS ? brief.slice(0, REJECTED_FEEDBACK_MAX_CHARS) + "…" : brief
+  return { input: retained, error: { ...state.error, message } }
+}
 
 /**
  * The text of the messages a summary compaction kept verbatim. History rebuilds it from `metadata.keepID`;
@@ -44,12 +73,14 @@ export const messageToText = (message: SessionMessage.Info | SessionStored.User)
           // extract the model's thinking.
           if (part.type === "reasoning") return []
 
-          const input = typeof part.state.input === "string" ? part.state.input : JSON.stringify(part.state.input)
+          const failure = part.state.status === "error" ? rejectedCall(part, part.state) : undefined
+          const args = failure?.input ?? part.state.input
+          const input = typeof args === "string" ? args : JSON.stringify(args)
           const call = `[Assistant tool call]: ${part.name}(${input})`
           if (part.state.status === "completed") {
             return [call, `[Tool result]: ${truncateToolOutput(serializeToolContent(part.state.content))}`]
           }
-          if (part.state.status === "error") return [call, `[Tool error]: ${part.state.error.message}`]
+          if (failure) return [call, `[Tool error]: ${failure.error.message}`]
           return [call]
         })
         .join("\n")

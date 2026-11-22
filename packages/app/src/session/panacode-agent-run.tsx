@@ -7,10 +7,13 @@ import {
   patchToLines,
   runChecks,
   runSteps,
+  runReply,
+  settledRun,
   runToolKind,
   type RunContentLike,
   type RunStepCopy,
 } from "@panacode/ui/adapters/agent-run"
+import { fileToolPath, shortToolPath, toolKind } from "@panacode/ui/adapters/tool-call"
 import { BrandMark } from "@panacode/ui/brand"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
@@ -23,17 +26,12 @@ import type { SessionRequestModel } from "./requests/model"
 const [notes, setNotes] = createSignal<Record<string, string>>({})
 const [dismissed, setDismissed] = createSignal<ReadonlySet<string>>(new Set())
 
-const interrupted = (error: { type: string } | undefined) => {
-  const type = error?.type.toLowerCase()
-  return !!type && (type.includes("abort") || type.includes("interrupt"))
-}
-
 /** The patch a pending edit or write would apply, from the tool input (nothing is written yet). */
 function pendingChange(tool: SessionMessageAssistantTool, root: string): ProposedChange | undefined {
   const input = (tool.state.input && typeof tool.state.input === "object" ? tool.state.input : {}) as Record<string, unknown>
-  const path = (input.filePath ?? input.path) as string | undefined
+  const path = fileToolPath(input)
   if (!path) return undefined
-  const rel = path.startsWith(root.replace(/\/+$/, "") + "/") ? path.slice(root.replace(/\/+$/, "").length + 1) : path
+  const rel = shortToolPath(path, root)
   const patch =
     typeof input.oldString === "string" && typeof input.newString === "string"
       ? createTwoFilesPatch(rel, rel, input.oldString, input.newString)
@@ -72,13 +70,15 @@ export function PanacodeAgentRun(props: {
     if (start < 0) return undefined
     const user = messages[start]
     if (user?.type !== "user") return undefined
-    const assistants = messages.slice(start + 1).filter((message): message is SessionMessageAssistant => message.type === "assistant")
-    return { user, assistants, content: assistants.flatMap((message) => message.content) as RunContentLike[] }
+    const events = messages.slice(start + 1)
+    const assistants = events.filter((message): message is SessionMessageAssistant => message.type === "assistant")
+    return { user, assistants, settled: settledRun(events), content: assistants.flatMap((message) => message.content) as RunContentLike[] }
   })
 
   const copy = (): RunStepCopy => {
     const pair = (key: string): [string, string] => [t(`panacode.run.verb.${key}`), t(`panacode.run.verb.${key}.done`)]
     return {
+      toolName: (name) => t(`panacode.tool.${toolKind(name)}.name`, { name }),
       verbs: {
         think: pair("think"),
         read: pair("read"),
@@ -112,8 +112,7 @@ export function PanacodeAgentRun(props: {
     for (const tool of tools()) {
       if (runToolKind(tool.name).mark !== "edit") continue
       for (const change of toolFileChanges(tool as SessionMessageAssistantTool)) {
-        const root = props.directory.replace(/\/+$/, "")
-        const path = change.file.startsWith(root + "/") ? change.file.slice(root.length + 1) : change.file
+        const path = shortToolPath(change.file, props.directory)
         diffs[path] = [...(diffs[path] ?? []), ...patchToLines(change.patch)]
       }
     }
@@ -134,26 +133,20 @@ export function PanacodeAgentRun(props: {
       const change = pendingChange(waitingTool, props.directory)
       return change ? { ...step, change } : step
     })
-    const last = current.assistants.at(-1)
-    const stopped = !props.working && current.assistants.some((message) => interrupted(message.error))
     const status: AgentRunState["status"] = props.working
-      ? pending()
-        ? "waiting"
-        : "working"
-      : stopped
-        ? "stopped"
-        : "done"
-    const reply = [...current.content].reverse().find((item) => item.type === "text" && item.text.trim())
-    const summary = reply && reply.type === "text" ? reply.text.trim().replace(/```[\s\S]*?```/g, " ").replace(/[`*_#>]/g, "").replace(/\s+/g, " ") : ""
+      ? (pending() ? "waiting" : "working")
+      : current.settled?.status ?? "stopped"
+    const summary = status === "done" ? runReply(current.content).replace(/```[\s\S]*?```/g, " ").replace(/[`*_#>]/g, "").replace(/\s+/g, " ") : ""
     const files = Object.entries(changes()).map(([path, lines]) => changedFile(path, lines))
     return {
       status,
+      error: status === "failed" ? current.settled?.error : undefined,
       startedAt: current.user.time.created,
-      endedAt: props.working ? undefined : (last?.time.completed ?? last?.time.created ?? current.user.time.created),
+      endedAt: props.working ? undefined : current.settled?.endedAt,
       steps,
       files,
       result:
-        status === "done"
+        status === "done" || status === "failed"
           ? {
               summary: summary.length > 320 ? `${summary.slice(0, 319)}…` : summary,
               files,
@@ -220,6 +213,7 @@ export function PanacodeAgentRun(props: {
           <PanacodeOrchestrator
             user={current().user}
             assistants={current().assistants}
+            settled={current().settled}
             working={props.working}
             directory={props.directory}
             model={props.model}

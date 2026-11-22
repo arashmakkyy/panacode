@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { fromOpenCodeTool } from "./tool-call"
+import { fileToolPath, fromOpenCodeTool, shortToolPath } from "./tool-call"
 
 const mark = () => () => null as never
 
@@ -45,5 +45,27 @@ describe("fromOpenCodeTool", () => {
     )
     expect(call.status).toBe("denied")
     expect(call.output).toBeUndefined()
+  })
+
+  test("a rejected tool input never claims a file was created", () => {
+    const tool = { id: "write", name: "write", time: { created: 1, completed: 2 } }
+    const input = { path: "landing-page/index.html" }
+    const failed = fromOpenCodeTool({
+      ...tool, state: { status: "error", input, error: { type: "tool.input", message: "Malformed JSON" } },
+    }, { mark })
+    expect(failed.status).toBe("error")
+    expect(failed.title).toBe("Write landing-page/index.html")
+    expect(failed.message).toBe("Malformed JSON")
+    const written = fromOpenCodeTool({ ...tool, state: { status: "completed", input } }, { mark })
+    expect(written.title).toBe("Created landing-page/index.html")
+  })
+  test("file tool rows use a single explicit target across aliases and Windows path spellings", () => {
+    const path = "C:\\Work\\Landing\\index.html"
+    expect(fileToolPath({ file_path: path })).toBe(path)
+    expect(fileToolPath({ path, file: path })).toBe(path)
+    expect(shortToolPath(path, "c:/work/")).toBe("Landing\\index.html")
+    expect(shortToolPath(path, "c:/workshop/")).toBe(path)
+    expect(fileToolPath({ path: 1, filePath: path })).toBeUndefined()
+    expect(fileToolPath({ path: "x", file_path: "y" })).toBeUndefined()
   })
 })

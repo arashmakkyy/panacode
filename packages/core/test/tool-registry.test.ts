@@ -1085,7 +1085,7 @@ describe("Tool", () => {
       ).toMatchObject({
         status: "error",
         error: {
-          type: "tool.execution",
+          type: "tool.input-schema",
           message:
             'Invalid arguments for tool "transformed":\n- value: Expected boolean\n\nArguments provided:\n{\n  "value": "yes"\n}\n\nUpdate the arguments and call the tool again.',
         },

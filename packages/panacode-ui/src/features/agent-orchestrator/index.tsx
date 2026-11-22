@@ -109,12 +109,14 @@ const glyph = {
 }
 
 function StatusGlyph(props: { status: LaneStatus | "lead-live" | "lead-done" | "lead-stopped" }) {
-  const s = props.status
-  if (s === "starting" || s === "running" || s === "lead-live") return <Icon d={glyph.loader} size={13} spin />
-  if (s === "returned" || s === "lead-done") return <Icon d={glyph.check} size={13} />
-  if (s === "gaveup") return <Icon d={glyph.alert} size={13} />
-  if (s === "stopped" || s === "lead-stopped") return <Icon d={glyph.stop} size={13} />
-  return <Icon d={glyph.clock} size={13} />
+  return <>{() => {
+    const status = props.status
+    if (status === "starting" || status === "running" || status === "lead-live") return <Icon d={glyph.loader} size={13} spin />
+    if (status === "returned" || status === "lead-done") return <Icon d={glyph.check} size={13} />
+    if (status === "gaveup") return <Icon d={glyph.alert} size={13} />
+    if (status === "stopped" || status === "lead-stopped") return <Icon d={glyph.stop} size={13} />
+    return <Icon d={glyph.clock} size={13} />
+  }}</>
 }
 
 function Elapsed(props: { start?: number; end?: number; now: number }) {
@@ -397,11 +399,12 @@ export function AgentOrchestrator(props: AgentOrchestratorProps) {
     if (phase === "summarizing") return labels().summarizing
     if (phase === "done") return labels().done
     if (phase === "stopped") return labels().stopped
+    if (phase === "failed") return labels().failed
     if (props.view.lanes.every((lane) => lane.status === "planned" || lane.status === "starting")) return labels().dispatching
     return labels().returned(returnedCount(), count())
   }
   const leadGlyph = () =>
-    props.view.phase === "done" ? "lead-done" : props.view.phase === "stopped" ? "lead-stopped" : "lead-live"
+    props.view.phase === "failed" ? "gaveup" : props.view.phase === "done" ? "lead-done" : props.view.phase === "stopped" ? "lead-stopped" : "lead-live"
 
   const totals = createMemo(() => {
     const lanes = props.view.lanes
@@ -469,7 +472,7 @@ export function AgentOrchestrator(props: AgentOrchestratorProps) {
               <span>{props.view.lead.name}</span>
               <span class="pc-ao-muted">{labels().lead}</span>
             </span>
-            <span class="pc-ao-leadStatus" classList={{ "is-live": live(), "is-done": props.view.phase === "done" }}>
+            <span class="pc-ao-leadStatus" classList={{ "is-live": live(), "is-done": props.view.phase === "done", "pc-ao-tone-gaveup": props.view.phase === "failed" }}>
               <StatusGlyph status={leadGlyph()} />
               <span classList={{ "pc-ao-shimmer": live() }}>{leadWord()}</span>
             </span>
@@ -547,7 +550,7 @@ export function AgentOrchestrator(props: AgentOrchestratorProps) {
           <div class="pc-ao-summaryBody">
             <Show
               when={props.view.summary}
-              fallback={<p class="pc-ao-muted">{props.view.phase === "stopped" ? labels().summaryStopped : labels().summaryWaiting}</p>}
+              fallback={<p class="pc-ao-muted">{props.view.phase === "failed" ? labels().failed : props.view.phase === "stopped" ? labels().summaryStopped : labels().summaryWaiting}</p>}
             >
               <p>{props.view.summary}</p>
             </Show>

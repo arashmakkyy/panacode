@@ -2024,6 +2024,9 @@ function scanPowerShellList(
       index += 2
       continue
     }
+    // PowerShell reserves input redirection. A Bash heredoc here is a parse error, and its body is not a command list.
+    // A quoted or escaped delimiter, or one embedded in an ordinary argument, remains literal text.
+    if (!started && char === "<" && input[index + 1] === "<") return { kind: "opaque", reason: "heredoc" }
     if (char === "<" && input[index + 1] === "#" && (atBoundary || inExpression || indexable === "member")) {
       const memberOperator = afterMemberOperator()
       if (started) finishWord(index)

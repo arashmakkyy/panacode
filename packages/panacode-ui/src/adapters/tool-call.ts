@@ -62,7 +62,7 @@ const renamed: Record<string, ToolKind> = {
 }
 
 export function toolKind(name: string): ToolKind {
-  return renamed[name] ?? "tool"
+  return renamed[name.toLowerCase()] ?? "tool"
 }
 
 export const toolKindMark: Record<ToolKind, ToolMarkName> = {
@@ -168,14 +168,29 @@ function parseInput(state: OpenCodeToolLike["state"]): Record<string, unknown> {
 
 const str = (value: unknown) => (typeof value === "string" ? value : undefined)
 
-function shortPath(path: string, root?: string) {
-  if (root && path.startsWith(root + "/")) return path.slice(root.length + 1)
-  return path
+/** Events retain the model's original argument names, including legacy file-tool spellings. */
+export function fileToolPath(input: Readonly<Record<string, unknown>>): string | undefined {
+  let target: string | undefined
+  for (const key of ["path", "filePath", "file_path", "file"]) {
+    if (!Object.hasOwn(input, key)) continue
+    const value = input[key]
+    if (typeof value !== "string" || !value.trim() || (target !== undefined && target !== value)) return
+    target = value
+  }
+  return target
+}
+
+export function shortToolPath(path: string, root?: string) {
+  if (!root) return path
+  const windows = /^[A-Za-z]:[\\/]|^\\\\/.test(root)
+  const normalize = (value: string) => windows ? value.replaceAll("\\", "/").toLowerCase() : value
+  const prefix = normalize(root).replace(/\/+$/, "") + "/"
+  return normalize(path).startsWith(prefix) ? path.slice(prefix.length) : path
 }
 
 /** What the call is about, for the title: the file, command, pattern, URL or agent description. */
 export function toolSubject(kind: ToolKind, input: Record<string, unknown>, root?: string): string {
-  const path = str(input.filePath) ?? str(input.file_path) ?? str(input.path)
+  const path = fileToolPath(input)
   switch (kind) {
     case "shell":
       return str(input.command) ?? ""
@@ -183,10 +198,10 @@ export function toolSubject(kind: ToolKind, input: Record<string, unknown>, root
     case "edit":
     case "write":
     case "list":
-      return path ? shortPath(path, root) : ""
+      return path ? shortToolPath(path, root) : ""
     case "patch": {
       const files = Array.isArray(input.files) ? input.files.length : 0
-      return path ? shortPath(path, root) : files ? `${files} files` : ""
+      return path ? shortToolPath(path, root) : files ? `${files} files` : ""
     }
     case "grep":
     case "glob":
@@ -252,14 +267,21 @@ function isDenied(state: OpenCodeToolLike["state"]) {
   return /permission|rejected|denied/i.test(`${state.error.type ?? ""} ${state.error.message}`) && /reject|denied/i.test(state.error.message)
 }
 
+/** A completed tool invocation can still report failure from the shell process. */
+export function shellFailure(name: string, metadata?: Record<string, unknown>) {
+  if (toolKind(name) !== "shell" || !metadata) return
+  if (metadata.timeout === true || metadata.status === "timeout") return "timeout"
+  if (metadata.interrupted === true || metadata.killed === true || metadata.status === "killed") return "stopped"
+  if (typeof metadata.exit === "number" && metadata.exit !== 0) return "exit"
+  if (typeof metadata.signal === "string" && metadata.signal) return "signal"
+}
+
 export function toToolCallStatus(tool: OpenCodeToolLike, approval = false): ToolCallStatus {
   if (approval) return "approval"
   const state = tool.state
   if (state.status === "streaming" || state.status === "running") return "running"
   if (state.status === "error") return isDenied(state) ? "denied" : "error"
-  const meta = state.metadata ?? {}
-  if (toolKind(tool.name) === "shell" && (meta.timeout === true || (typeof meta.exit === "number" && meta.exit !== 0)))
-    return "error"
+  if (shellFailure(tool.name, state.metadata)) return "error"
   return "success"
 }
 
@@ -275,16 +297,14 @@ export function fromOpenCodeTool(
   const status = toToolCallStatus(tool, options.approval)
   const state = tool.state
   const meta = ("metadata" in state ? state.metadata : undefined) ?? {}
-  const message =
-    state.status === "error"
-      ? isStopped(state)
-        ? copy.stopped
-        : state.error.message
-      : status === "error" && meta.timeout === true
-        ? copy.timedOut
-        : status === "error" && typeof meta.exit === "number"
-          ? copy.exitCode(meta.exit)
-          : undefined
+  const failure = state.status === "completed" ? shellFailure(tool.name, meta) : undefined
+  const message = state.status === "error"
+    ? isStopped(state) ? copy.stopped : state.error.message
+    : failure === "timeout" ? copy.timedOut
+    : failure === "stopped" ? copy.stopped
+    : failure === "exit" && typeof meta.exit === "number" ? copy.exitCode(meta.exit)
+    : failure === "signal" ? str(meta.signal)
+    : undefined
   const start = tool.time.ran ?? tool.time.created
   const durationMs = tool.time.completed && start ? Math.max(0, tool.time.completed - start) : undefined
   const entries = Object.entries(input)
@@ -292,7 +312,9 @@ export function fromOpenCodeTool(
     id: tool.id,
     kind,
     tool: { key: kind === "tool" ? `tool:${tool.name}` : kind, name: copy.name(kind, tool.name), mark: options.mark(toolKindMark[kind]) },
-    title: copy.title(kind, "done", subject, tool.name),
+    title: state.status === "error"
+      ? [copy.name(kind, tool.name), subject].filter(Boolean).join(" ")
+      : copy.title(kind, "done", subject, tool.name),
     titles: {
       running: copy.title(kind, "running", subject, tool.name),
       approval: copy.title(kind, "approval", subject, tool.name),

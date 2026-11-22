@@ -50,10 +50,11 @@ export interface AgentStep {
 }
 
 export interface AgentRunState {
-  status: "working" | "waiting" | "done" | "stopped"
+  status: "working" | "waiting" | "done" | "stopped" | "failed"
   startedAt: number
   endedAt?: number
   steps: AgentStep[]
+  error?: string
   result?: RunResult
   /** Files this run changed, for the folded result (also when stopped). */
   files?: ChangedFile[]

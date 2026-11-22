@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Message, Media } from "@opencode/ai/effect"
 import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
+import { SessionRecentText } from "@opencode/core/session/recent-text"
 import { SessionMessage } from "@opencode/core/session/message"
 import { AgentAttachment, Base64, FileAttachment, SkillAttachment } from "@opencode/schema/prompt"
 import { Skill } from "@opencode/schema/skill"
@@ -50,6 +51,32 @@ describe("toLLMMessages", () => {
     expect(toLLMMessages([completed, notification], model)).toEqual([
       Message.make({ id: notification.id, role: "user", content: notification.text }),
     ])
+  })
+
+  test("replays bounded rejected writes while retaining the original record and genuine execution failures", () => {
+    const content = "خط".repeat(12_000)
+    const input = { filePath: "index.html", content }
+    const old = `Invalid arguments for tool "write":\n- path: Missing key\n\nArguments provided:\n${JSON.stringify(input)}\n\nUpdate the arguments and call the tool again.`
+    const turn = (type: string, message: string) => SessionMessage.Assistant.make({
+      type: "assistant", id: id("rejected-write"), agent: build, model,
+      finish: "tool-calls", time: { created },
+      content: [{
+        type: "tool", id: "call-original", name: "write", time: { created },
+        state: { status: "error", input, error: { type, message } },
+      }],
+    })
+    for (const failed of [turn("tool.input-schema", "Use path"), turn("tool.execution", old)]) {
+      const replay = JSON.stringify(toLLMMessages([failed], model))
+      const recent = SessionRecentText.messageToText(failed)
+      for (const encoded of [replay, recent]) {
+        expect(encoded).toContain("index.html")
+        expect(encoded).not.toContain(content)
+        expect(encoded.length).toBeLessThan(2048)
+      }
+      expect(JSON.stringify(failed)).toContain(content)
+    }
+    const ran = turn("tool.execution", "File permission denied")
+    expect(JSON.stringify(toLLMMessages([ran], model))).toContain(content)
   })
 
   test("omits empty assistant turns", () => {

@@ -59,8 +59,7 @@ async function run(input: RunCommandInput, signal: AbortSignal) {
   if (input.fork && !input.continue && !input.session) fail("--fork requires --continue or --session")
   if (input.worktree !== undefined && (input.continue || input.session))
     fail("--worktree starts a new session and cannot be combined with --continue or --session")
-  const root = process.env.PWD ?? process.cwd()
-  const directory = localDirectory(root)
+  const directory = process.cwd()
   const argument = input.message.join(" ") || undefined
   // With a message argument, stdin is extra context: a shell pipe is read in full, but the open, silent
   // stdin that spawn's default stdio gives a child must not hold the run.
@@ -71,7 +70,7 @@ async function run(input: RunCommandInput, signal: AbortSignal) {
       : await readStdin()
   const message = mergeInput(argument, piped)
   if (!message?.trim()) fail("You must provide a message")
-  const files = await Promise.all(input.file.map((file) => prepareFile(file, root)))
+  const files = await Promise.all(input.file.map((file) => prepareFile(file, directory)))
   return execute(input, { directory, message, files }, input.server.endpoint, signal)
 }
 
@@ -147,15 +146,6 @@ export function mergeInput(message: string | undefined, piped: string | undefine
   if (!message) return piped || undefined
   if (!piped) return message
   return message + "\n" + piped
-}
-
-function localDirectory(root: string) {
-  try {
-    process.chdir(root)
-    return process.cwd()
-  } catch {
-    fail(`Failed to change directory to ${root}`)
-  }
 }
 
 export function parseRunModel(value?: string) {

@@ -3826,6 +3826,37 @@ describe("SessionRunnerLLM", () => {
     expect(yield* s.context).toMatchObject([{ type: "compaction" }, { type: "assistant", finish: "stop" }])
   })
 
+  scenario("recovers one history-sized payload rejection before executing any new tools", function* (s) {
+    yield* setupOverflowRecovery(s)
+    yield* s.llm.push(
+      TestLLM.failAfter(payloadTooLarge()),
+      TestLLM.text("## Objective\n- Complete the landing page", "summary"),
+      TestLLM.text("Recovered", "final"),
+    )
+    yield* s.runPrompt("Continue")
+    expect(s.requests).toHaveLength(3)
+    expect(userTexts(s.requests[2])[0]).toContain("Complete the landing page")
+    expect(yield* s.context).toMatchObject([{ type: "compaction" }, { type: "assistant", finish: "stop" }])
+  })
+
+  scenario("surfaces a payload rejection without rewriting the only user input", function* (s) {
+    yield* s.llm.push(TestLLM.failAfter(payloadTooLarge()))
+    expect((yield* s.runPrompt("Single request").pipe(Effect.flip)).message).toBe("Too large")
+    expect(s.requests).toHaveLength(1)
+  })
+
+  scenario("does not repeatedly compact a persistently oversized request", function* (s) {
+    yield* setupOverflowRecovery(s)
+    yield* s.llm.push(
+      TestLLM.failAfter(payloadTooLarge()),
+      TestLLM.text("## Objective\n- Complete work", "summary"),
+      TestLLM.failAfter(payloadTooLarge()),
+    )
+    expect((yield* s.runPrompt("Continue").pipe(Effect.flip)).message).toBe("Too large")
+    expect(s.requests).toHaveLength(3)
+    expect((yield* s.context).at(-1)).toMatchObject({ type: "assistant", finish: "error" })
+  })
+
   scenario("refreshes preparation after overflow compaction without promoting new input", function* (s) {
     yield* setupOverflowRecovery(s)
 
@@ -5375,7 +5406,7 @@ describe("SessionRunnerLLM", () => {
       "User-Agent": App.useragent(App.make()),
       "x-opencode-project": Project.ID.global,
       "x-opencode-session": sessionID,
-      "x-opencode-client": "opencode",
+      "x-opencode-client": "panacode",
     })
   })
 
@@ -7034,6 +7065,23 @@ describe("SessionRunnerLLM", () => {
         },
       },
     ])
+  })
+
+  scenario("recovers an oversized malformed write without echoing its file body or executing it", function* (s) {
+    const raw = '{"content":"PRIVATE_FILE_MARKER' + "صفحه".repeat(6000)
+    yield* s.llm.push(
+      TestLLM.complete({ reason: { normalized: "tool-calls" } },
+        LLMEvent.toolInputError({ id: "bad-html", name: "write", raw }),
+      ),
+      TestLLM.stop(),
+    )
+    yield* s.runPrompt("یک صفحه فارسی بساز")
+    expect(s.requests).toHaveLength(2)
+    expect(s.executions).toEqual([])
+    const next = JSON.stringify(s.requests[1]?.messages)
+    expect(next).toContain("No file was written by this call")
+    expect(next).toContain("one section at a time with edit")
+    expect(next).not.toContain("PRIVATE_FILE_MARKER")
   })
 
   for (const finish of ["tool-calls", "length"] as const) {

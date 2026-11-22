@@ -81,6 +81,9 @@ export class Error extends Schema.TaggedError<Error>()("Tool.Error", {
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
+/** Invalid arguments rejected before the requested operation ran. */
+export class InputError extends Error {}
+
 export interface TextContent extends Schema.Schema.Type<typeof TextContent> {}
 export const TextContent = Schema.Struct({
   type: Schema.Literal("text"),

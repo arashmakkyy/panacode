@@ -195,11 +195,15 @@ export const make = Effect.gen(function* () {
         )
           return yield* Effect.interrupt
 
-        if (
-          !publisher.record().outputStarted &&
-          isContextOverflowFailure(streamFailure) &&
-          (yield* restore(input.recoverOverflow))
-        ) {
+        // Byte limits can be reached below a model's token limit. Only compact a payload rejection
+        // when there is earlier assistant work to shorten. A lone attachment or prompt must stay intact.
+        const oversizedHistory =
+          streamFailure instanceof AIError &&
+          streamFailure.reason._tag === "InvalidRequest" &&
+          streamFailure.reason.classification === "payload-too-large" &&
+          input.prepared.request.messages.some((message) => message.role === "assistant")
+        const sizeRejection = isContextOverflowFailure(streamFailure) || oversizedHistory
+        if (!publisher.record().outputStarted && sizeRejection && (yield* restore(input.recoverOverflow))) {
           yield* Effect.logWarning("provider rejected the request as too long; compacting", {
             sessionID: input.sessionID,
             model: input.model.ref,
@@ -242,7 +246,7 @@ export const make = Effect.gen(function* () {
         )
           return Outcome.RecoverFull()
         const retry =
-          llmFailure && llmError && !isContextOverflowFailure(llmFailure)
+          llmFailure && llmError && !sizeRejection
             ? yield* restore(
                 input.retry(
                   llmFailure,

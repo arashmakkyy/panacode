@@ -441,6 +441,7 @@ export function AgentRun(props: AgentRunProps) {
   const [showSteps, setShowSteps] = createSignal(false)
   const done = () => props.run.status === "done"
   const stopped = () => props.run.status === "stopped"
+  const failed = () => props.run.status === "failed"
   const live = () => props.run.status === "working" || props.run.status === "waiting"
 
   createEffect(() => {
@@ -454,25 +455,16 @@ export function AgentRun(props: AgentRunProps) {
   createEffect(on(done, (value) => value && setShowSteps(false)))
 
   const elapsed = () => (props.run.endedAt ?? now()) - props.run.startedAt
-  const statusText = () =>
-    stopped()
-      ? labels().stopped
-      : done()
-        ? labels().done
-        : props.run.status === "waiting"
-          ? labels().waiting
-          : labels().working
+  const statusText = () => labels()[props.run.status]
   const last = () => props.run.steps[props.run.steps.length - 1]
-  const announcement = () =>
-    stopped()
-      ? labels().stoppedTitle
-      : done()
-        ? `${labels().done}. ${labels().stepsFolded(props.run.steps.length, Math.round(elapsed() / 1000))}`
-        : props.run.status === "waiting"
-          ? labels().waiting
-          : last()
-            ? `${last()!.verb}${last()!.target ? ` ${last()!.target}` : ""}`
-            : ""
+  const announcement = () => {
+    if (failed()) return labels().failed
+    if (stopped()) return labels().stoppedTitle
+    if (done()) return `${labels().done}. ${labels().stepsFolded(props.run.steps.length, Math.round(elapsed() / 1000))}`
+    if (props.run.status === "waiting") return labels().waiting
+    const step = last()
+    return step ? [step.verb, step.target].filter(Boolean).join(" ") : ""
+  }
 
   return (
     <section
@@ -517,7 +509,7 @@ export function AgentRun(props: AgentRunProps) {
           </Show>
           <span class={`pc-ar-status pc-ar-status-${props.run.status}`}>
             <Show
-              when={stopped()}
+              when={stopped() || failed()}
               fallback={
                 <Show
                   when={done()}
@@ -534,7 +526,7 @@ export function AgentRun(props: AgentRunProps) {
                 </Show>
               }
             >
-              <RunIcon name="circleStop" size={14} />
+              <RunIcon name={failed() ? "x" : "circleStop"} size={14} />
             </Show>
             <Show when={statusText()} keyed>
               {(text) => <span class="pc-ar-statusText" classList={{ "pc-ar-shimmer": props.run.status === "working" }}>{text}</span>}
@@ -546,7 +538,7 @@ export function AgentRun(props: AgentRunProps) {
         </div>
       </header>
       <div class="pc-ar-stepsArea">
-        <Show when={(done() || stopped()) && props.run.steps.length > 0}>
+        <Show when={!live() && props.run.steps.length > 0}>
           <button
             type="button"
             class="pc-ar-foldedSteps"
@@ -582,16 +574,16 @@ export function AgentRun(props: AgentRunProps) {
           <p class="pc-ar-pendingEvent">{labels().waitingFirst}</p>
         </Show>
       </div>
-      <Show when={stopped()}>
+      <Show when={stopped() || (failed() && props.run.error)}>
         <div class="pc-ar-stopped">
-          <RunIcon name="circleStop" size={18} />
+          <RunIcon name={failed() ? "x" : "circleStop"} size={18} />
           <div>
-            <h3>{labels().stoppedTitle}</h3>
-            <p>{labels().stoppedBody}</p>
+            <h3>{failed() ? labels().failed : labels().stoppedTitle}</h3>
+            <p>{failed() ? props.run.error : labels().stoppedBody}</p>
           </div>
         </div>
       </Show>
-      <Show when={done() && props.run.result}>
+      <Show when={(done() || failed()) && props.run.result}>
         {(result) => <RunResultView result={result()} diffs={props.diffs} labels={labels()} />}
       </Show>
       <p class="sr-only" aria-live="polite" aria-atomic="true">

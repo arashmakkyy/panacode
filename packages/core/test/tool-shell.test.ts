@@ -1229,6 +1229,51 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
+  const pwsh = process.env.SHELL_SCAN_PWSH ?? Bun.which("pwsh") ?? Bun.which("powershell")
+  const powerShellTest = pwsh ? it.live : it.live.skip
+  powerShellTest(
+    "recovers from a Bash heredoc in PowerShell without overwriting the actual page",
+    () =>
+      withTempDir((tmp) =>
+        withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            reset()
+            const selection = yield* ShellSelect.Service
+            yield* selection.transform((editor) => editor.configure(pwsh!))
+            const page = "landing page.html"
+            const file = path.join(tmp.path, page)
+            const original = "<html lang='fa' dir='rtl'>سلام</html>"
+            yield* Effect.promise(() => fs.writeFile(file, original))
+            const blocked = yield* executeTool(
+              registry,
+              call({
+                command: `cat > "${page}" << 'ENDOFFILE'\n${"secret test content".repeat(1200)}\nENDOFFILE`,
+              }),
+            )
+            expect(blocked.status).toBe("error")
+            expect(blocked.error?.type).toBe("tool.input-schema")
+            expect(blocked.error?.message).toContain("PowerShell does not support Bash <<EOF")
+            expect(blocked.error?.message).not.toContain("secret test content")
+            expect(assertions).toHaveLength(0)
+            expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe(original)
+            const direct = yield* executeTool(
+              registry,
+              call(
+                {
+                  command: `Get-Content -LiteralPath '${page}' -Encoding UTF8 -TotalCount 1`,
+                },
+                "read-page",
+              ),
+            )
+            expect(direct).toMatchObject({ status: "completed", metadata: { exit: 0 } })
+            expect(direct.content?.[0]).toMatchObject({ type: "text", text: expect.stringContaining(original) })
+            expect(assertions.map((item) => item.action)).toContain("shell")
+          }),
+        ),
+      ),
+    { timeout: 15_000 },
+  )
+
   it.live("rejects malformed syntax across channels without partial execution", () =>
     Effect.gen(function* () {
       if (isWindows) return

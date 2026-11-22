@@ -38,7 +38,9 @@ const layer = Layer.effect(
                   "<env>",
                   `  Working directory: ${location.directory}`,
                   `  Workspace root folder: ${location.project.directory}`,
-                  `  Is directory a git repo: ${location.vcs?.type === "git" ? "yes" : "no"}`,
+                  location.vcs?.type === "git"
+                    ? "  Is directory a git repo: yes"
+                    : "  Is directory a git repo: no. Work directly with files here. Commands such as git status require a Git worktree.",
                   `  Platform: ${process.platform}`,
                   `  Prefer ${global.tmp} over generic system temporary directories such as /tmp; it is pre-created and approved for external access.`,
                   "</env>",

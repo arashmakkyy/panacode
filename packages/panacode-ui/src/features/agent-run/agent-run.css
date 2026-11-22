@@ -120,7 +120,9 @@
 .pc-ar-status-working > svg {
   color: var(--text-muted);
 }
-.pc-ar-status-stopped > svg {
+.pc-ar-status-stopped > svg,
+.pc-ar-status-failed > svg,
+.pc-ar[data-status="failed"] .pc-ar-stopped > svg {
   color: var(--pc-ar-red);
 }
 .pc-ar-statusText {

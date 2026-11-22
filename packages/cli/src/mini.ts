@@ -37,7 +37,7 @@ export async function runMini(input: MiniCommandInput) {
     await usingInteractiveStdin(async (terminal) => {
       const initialInput = mergeInput(process.stdin.isTTY ? undefined : await readStdin(), input.prompt)
       const frontendTask = import("@opencode/tui/mini")
-      const directory = localDirectory()
+      const directory = process.cwd()
       const connection = createMiniConnection(input.server)
       const sdk = connection.sdk
       const environment = input.server.reconnect ? Env.session() : undefined
@@ -199,16 +199,6 @@ function validate(input: MiniCommandInput) {
     fail("--replay-limit must be a positive integer")
   }
   if (input.fork && !input.continue && !input.session) fail("--fork requires --continue or --session")
-}
-
-function localDirectory(): string {
-  const root = process.env.PWD ?? process.cwd()
-  try {
-    process.chdir(root)
-    return process.cwd()
-  } catch {
-    throw new MiniInputError(`Failed to change directory to ${root}`)
-  }
 }
 
 function parseModel(value?: string) {

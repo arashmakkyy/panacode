@@ -353,7 +353,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   })
 
   const failToolInput = (id: string, tool: ToolState, reason: Exclude<InputFailureReason, "length">) =>
-    failTool(id, inputFailure(tool.input, stepSettlement?.finish === "length" ? "length" : reason))
+    failTool(id, inputFailure(tool.name, tool.input, stepSettlement?.finish === "length" ? "length" : reason))
 
   const flush = Effect.fn("SessionRunner.flush")(function* () {
     yield* flushFragments()
@@ -626,8 +626,14 @@ function inputExcerpt(value: string): InputExcerpt {
   return { text: value.slice(0, INPUT_EXCERPT_LIMIT), length: value.length }
 }
 
-function inputFailure(input: InputExcerpt | undefined, reason: InputFailureReason) {
+function inputFailure(name: string, input: InputExcerpt | undefined, reason: InputFailureReason) {
   const failure = INPUT_FAILURES[reason]
+  if (name === "write" && (reason === "length" || (input?.length ?? 0) > INPUT_EXCERPT_LIMIT)) {
+    return {
+      ...failure,
+      message: `${failure.message} No file was written by this call. Include the required path first. Write a small complete file, then add one section at a time with edit. If the file already exists, read it before editing. Another write replaces the whole file.`,
+    }
+  }
   if (!input?.length) return failure
   const truncated = input.length > input.text.length ? "\n[truncated]" : ""
   return {

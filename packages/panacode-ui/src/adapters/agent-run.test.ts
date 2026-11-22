@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { changedFile, patchToLines, runChecks, runSteps, type RunContentLike } from "./agent-run"
+import { changedFile, patchToLines, runChecks, runReply, runSteps, settledRun, type RunContentLike } from "./agent-run"
 
 const patch = `Index: a.ts
 ===================================================================
@@ -39,11 +39,52 @@ describe("agent run adapter", () => {
       ["read", "done", "src/a.ts"],
       ["edit", "waiting", "src/a.ts"],
       ["edit", "rejected", "b.ts"],
-      ["terminal", "done", "bun test"],
+      ["terminal", "failed", "bun test"],
     ])
     expect(steps[0]?.durationMs).toBe(1200)
     expect(steps[3]?.reason).toBe("keep it")
+    expect(steps[3]?.doneVerb).toBe("Write")
     expect(steps[4]?.io).toEqual({ input: "$ bun test", output: "ok" })
     expect(runChecks(content)).toEqual([{ label: "bun test", passed: false }])
+  })
+
+  test("a timeout cannot turn green even if the shell returned zero", () => {
+    const content: RunContentLike[] = [{
+      type: "tool", name: "shell", id: "t", time: { created: 1, completed: 2 },
+      state: { status: "completed", input: { command: "command" }, metadata: { timeout: true, exit: 0 } },
+    }]
+    expect(runSteps(content)[0]?.status).toBe("failed")
+    expect(runChecks(content)[0]?.passed).toBe(false)
+    const shell = content[0]!
+    if (shell.type !== "tool") throw new Error("expected a shell call")
+    expect(runChecks([{ ...shell, state: { ...shell.state, metadata: {} } }])).toEqual([])
+    expect(runSteps([{ ...shell, state: { ...shell.state, metadata: { signal: "SIGTERM" } } }])[0]?.status).toBe("failed")
+  })
+
+  test("the terminal event determines the outcome even if an earlier tool or assistant recovered", () => {
+    const assistant = { type: "assistant", time: { created: 1, completed: 2 } }
+    const failed = { ...assistant, error: { type: "api_error", message: "Request too large" } }
+    const idle = { type: "idle", time: { created: 4 } }
+    expect(settledRun([assistant, { ...idle, outcome: "failed", error: failed.error }])).toMatchObject({
+      status: "failed", endedAt: 4, error: "Request too large",
+    })
+    expect(settledRun([failed, { ...idle, outcome: "succeeded" }])?.status).toBe("done")
+    expect(settledRun([assistant, { ...idle, outcome: "interrupted" }])?.status).toBe("stopped")
+    expect(settledRun([failed])?.status).toBe("failed")
+    expect(settledRun([{ ...assistant, error: { type: "aborted" } }, assistant])?.status).toBe("done")
+    expect(settledRun([{ ...assistant, finish: "length" }])?.status).toBe("failed")
+    expect(settledRun([assistant, { type: "compaction", status: "failed", error: failed.error }])?.status).toBe("failed")
+    expect(settledRun([{ type: "assistant", time: { created: 1 } }])).toBeUndefined()
+  })
+
+  test("an announced write followed by a tool call is not the final answer", () => {
+    const promise: RunContentLike = { type: "text", text: "Let me rewrite the file." }
+    const write: RunContentLike = {
+      type: "tool", id: "w", name: "write", time: { created: 1 },
+      state: { status: "error", input: {}, error: { message: "Missing path" } },
+    }
+    expect(runReply([promise, write])).toBe("")
+    expect(runReply([promise, write, { type: "text", text: "Working", native: { phase: "commentary" } }])).toBe("")
+    expect(runReply([promise, write, { type: "text", text: "Recovered" }])).toBe("Recovered")
   })
 })

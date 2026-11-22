@@ -1,3 +1,4 @@
+import { defaultToolCallCopy, fileToolPath, shellFailure, shortToolPath, toolKind } from "./tool-call"
 import type { AgentStep, ChangedFile, DiffLine, RunCheck, StepMark } from "../features/agent-run/types"
 
 /** The OpenCode assistant content the run reads (structural, no client import). */
@@ -15,10 +16,11 @@ export type RunToolLike = {
   time: { created: number; ran?: number; completed?: number }
 }
 export type RunReasoningLike = { type: "reasoning"; text: string; time?: { created: number; completed?: number } }
-export type RunTextLike = { type: "text"; text: string }
+export type RunTextLike = { type: "text"; text: string; native?: Readonly<Record<string, unknown>> }
 export type RunContentLike = RunToolLike | RunReasoningLike | RunTextLike
 
 export type RunStepCopy = {
+  toolName?: (name: string) => string
   /** [running, done] verbs per mark. */
   verbs: Record<StepMark | "write" | "plan", [string, string]>
 }
@@ -63,7 +65,7 @@ export function runToolKind(name: string): { mark: StepMark; verb: keyof RunStep
 /** A short subject for the step row: a file name, a pattern, a command or a host. */
 export function runToolTarget(tool: RunToolLike, root?: string): string | undefined {
   const input = record(tool.state.input)
-  const path = text(input.filePath) ?? text(input.path) ?? text(input.file)
+  const path = fileToolPath(input)
   const { mark } = runToolKind(tool.name)
   if (mark === "read" || mark === "edit") return path ? relative(path, root) : undefined
   if (mark === "search") return text(input.pattern) ?? text(input.query) ?? (path ? relative(path, root) : undefined)
@@ -88,9 +90,8 @@ export function runToolTarget(tool: RunToolLike, root?: string): string | undefi
 }
 
 function relative(path: string, root?: string) {
-  const clean = root?.replace(/[\\/]+$/, "")
-  if (clean && path.startsWith(clean + "/")) return path.slice(clean.length + 1)
-  return base(path)
+  const short = shortToolPath(path, root)
+  return short !== path || !/^(?:[A-Za-z]:)?[\\/]/.test(path) ? short : base(path)
 }
 
 const outputText = (tool: RunToolLike) =>
@@ -134,12 +135,12 @@ export function runSteps(
     const verbs = copy.verbs[kind.verb]
     const state = item.state
     const started = item.time.ran ?? item.time.created
-    const waiting = options.waiting?.(item.id) ?? false
+    const waiting = (state.status === "running" || state.status === "streaming") && options.waiting?.(item.id)
     const note = options.notes?.[item.id]
     const status: AgentStep["status"] = waiting
       ? "waiting"
       : state.status === "completed"
-        ? "done"
+        ? (shellFailure(item.name, state.metadata) ? "failed" : "done")
         : state.status === "error"
           ? note || /reject|denied|declin/i.test(state.error?.message ?? "")
             ? "rejected"
@@ -155,7 +156,9 @@ export function runSteps(
         id: item.id,
         mark: kind.mark,
         verb: verbs[0],
-        doneVerb: verbs[1],
+        doneVerb: state.status === "error"
+          ? copy.toolName?.(item.name) ?? defaultToolCallCopy.name(toolKind(item.name), item.name)
+          : verbs[1],
         target: runToolTarget(item, options.root),
         status,
         startedAt: started,
@@ -175,10 +178,52 @@ export function runChecks(content: readonly RunContentLike[]): RunCheck[] {
     if (item.state.status !== "completed" && item.state.status !== "error") return []
     const command = text(record(item.state.input).command)
     if (!command) return []
-    const exit = record(item.state.metadata).exit
-    const passed = item.state.status === "completed" && (typeof exit !== "number" || exit === 0)
+    const failed = item.state.status === "error" || !!shellFailure(item.name, item.state.metadata)
+    if (!failed && item.state.metadata?.exit !== 0) return []
+    const passed = !failed
     return [{ label: clip(firstLine(command), 48), passed }]
   })
+}
+
+type RunMessageLike = {
+  readonly type: string
+  readonly time?: { readonly created: number; readonly completed?: number }
+  readonly outcome?: "succeeded" | "failed" | "interrupted"
+  readonly status?: string
+  readonly finish?: string
+  readonly error?: { readonly type: string; readonly message?: string }
+}
+
+/** Read only this turn, newest first. An idle marker can carry the only record of a failed request. */
+export function settledRun(messages: readonly RunMessageLike[]): { status: "done" | "failed" | "stopped"; endedAt?: number; error?: string } | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]!
+    if (message.type === "idle" && message.outcome) {
+      const status = message.outcome === "succeeded" ? "done" : message.outcome === "interrupted" ? "stopped" : "failed"
+      return { status, endedAt: message.time?.created, error: status === "failed" ? message.error?.message : undefined }
+    }
+    if (message.type !== "assistant" && !(message.type === "compaction" && message.status === "failed")) continue
+    const endedAt = message.time?.completed ?? message.time?.created
+    if (message.error) {
+      return /abort|interrupt/i.test(message.error.type)
+        ? { status: "stopped", endedAt }
+        : { status: "failed", endedAt, error: message.error.message }
+    }
+    if (message.finish === "error" || message.finish === "content-filter" || message.finish === "length")
+      return { status: "failed", endedAt }
+    // Older histories may have a completed assistant message without an idle marker.
+    if (message.time?.completed !== undefined || message.finish === "stop") return { status: "done", endedAt }
+    return undefined
+  }
+  return undefined
+}
+
+/** Text preceding the last tool call describes intended work. It cannot be the final answer. */
+export function runReply(content: readonly RunContentLike[]): string {
+  const lastTool = content.findLastIndex((item) => item.type === "tool")
+  const reply = content.findLast((item, index) => item.type === "text" && !!item.text.trim() &&
+    item.native?.phase !== "commentary" && (item.native?.phase === "final_answer" || index > lastTool))
+  return reply?.type === "text" ? reply.text.trim() : ""
 }
 
 /** Parses a unified diff into Arc diff lines with old and new line numbers. */

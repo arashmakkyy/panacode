@@ -1,3 +1,4 @@
+import { fileToolPath } from "@panacode/ui/adapters/tool-call"
 import { createMemo, createSignal, For, onMount, Show } from "solid-js"
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
 import { createTwoFilesPatch } from "diff"
@@ -26,7 +27,7 @@ export function toolFileChanges(tool: SessionMessageAssistantTool): FileChange[]
         : [],
     )
   const input = state.input as Record<string, unknown>
-  const path = (input.filePath ?? input.path) as string | undefined
+  const path = fileToolPath(input)
   if (!path) return []
   if (typeof input.oldString === "string" && typeof input.newString === "string")
     return [{ file: path, patch: createTwoFilesPatch(path, path, input.oldString, input.newString), status: "modified" }]

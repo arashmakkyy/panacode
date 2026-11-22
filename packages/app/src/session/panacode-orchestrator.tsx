@@ -6,14 +6,13 @@ import {
   type OrchestratorView,
 } from "@panacode/ui/features/agent-orchestrator"
 import { orchestratorLane, subagentSessionID, type ChildLike } from "@panacode/ui/adapters/agent-orchestrator"
-import { runToolKind, type RunContentLike, type RunToolLike } from "@panacode/ui/adapters/agent-run"
+import { runToolKind, type settledRun, type RunContentLike, type RunToolLike } from "@panacode/ui/adapters/agent-run"
 import { BrandMark } from "@panacode/ui/brand"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useData } from "@/runtime/server/current"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useServerSDK } from "@/runtime/server/client"
 
-const interrupted = (error: { type: string } | undefined) => !!error && /abort|interrupt/i.test(error.type)
 const plain = (text: string) =>
   text
     .replace(/```[\s\S]*?```/g, " ")
@@ -29,6 +28,7 @@ export function PanacodeOrchestrator(props: {
   user: Extract<SessionMessageInfo, { type: "user" }>
   assistants: readonly Extract<SessionMessageInfo, { type: "assistant" }>[]
   working: boolean
+  settled: ReturnType<typeof settledRun>
   directory: string
   model?: string
   onStop?: () => void
@@ -79,11 +79,11 @@ export function PanacodeOrchestrator(props: {
     const reply = [...after].reverse().find((item) => item.type === "text" && item.text.trim())
     const summary = reply && reply.type === "text" ? plain(reply.text) : ""
     const live = lanes.some((lane) => lane.status === "starting" || lane.status === "running")
-    const stopped = !props.working && props.assistants.some((message) => interrupted(message.error))
+    const terminal = !props.working ? props.settled?.status : undefined
     // Subagents can run in the background after the lead's message ends, so live lanes keep the run going.
     const working = props.working || live
-    const phase: OrchestratorView["phase"] = stopped
-      ? "stopped"
+    const phase: OrchestratorView["phase"] = terminal === "stopped" || terminal === "failed"
+      ? terminal
       : !working
         ? "done"
         : lanes.length === 0 || lanes.every((lane) => lane.status === "planned")
@@ -91,16 +91,15 @@ export function PanacodeOrchestrator(props: {
           : live || lanes.some((lane) => lane.status === "planned") || !props.working
             ? "running"
             : "summarizing"
-    const last = props.assistants.at(-1)
     const goal = props.user.text.trim().split("\n")[0] ?? ""
     return {
       goal: goal.length > 120 ? `${goal.slice(0, 119)}…` : goal,
       lead: { name: props.model ?? t("panacode.orch.lead"), mark: () => <BrandMark size={14} /> },
       phase,
       startedAt: props.user.time.created,
-      endedAt: working ? undefined : (last?.time.completed ?? last?.time.created ?? props.user.time.created),
+      endedAt: phase === "done" || phase === "stopped" || phase === "failed" ? props.settled?.endedAt : undefined,
       lanes,
-      summary,
+      summary: phase === "failed" ? props.settled?.error ?? "" : summary,
     }
   })
 
@@ -114,6 +113,7 @@ export function PanacodeOrchestrator(props: {
     summarizing: t("panacode.orch.summarizing"),
     done: t("panacode.orch.done"),
     stopped: t("panacode.orch.stopped"),
+    failed: t("panacode.run.failed"),
     stop: t("panacode.run.stop"),
     dismiss: t("panacode.run.dismiss"),
     summary: t("panacode.orch.summary"),

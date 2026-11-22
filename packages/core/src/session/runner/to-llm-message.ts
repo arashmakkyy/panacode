@@ -97,10 +97,11 @@ const providerMetadata = (
   state: Record<string, unknown> | undefined,
 ): ProviderMetadata | undefined => (state === undefined ? undefined : { [provider]: state })
 
-const toolInput = (tool: SessionMessage.AssistantTool) =>
-  tool.state.status === "streaming"
-    ? Option.getOrElse(decodeToolInput(tool.state.input), () => tool.state.input)
-    : tool.state.input
+const toolInput = (tool: SessionMessage.AssistantTool) => {
+  if (tool.state.status === "streaming") return Option.getOrElse(decodeToolInput(tool.state.input), () => tool.state.input)
+  if (tool.state.status === "error") return SessionRecentText.rejectedCall(tool, tool.state).input
+  return tool.state.input
+}
 
 const toolCall = (tool: SessionMessage.AssistantTool, providerMetadata: ProviderMetadata | undefined): ToolCallPart =>
   ToolCallPart.make({
@@ -131,7 +132,7 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
     return ToolResultPart.make({
       id: tool.id,
       name: tool.name,
-      result: { error: tool.state.error, content: tool.state.content ?? [] },
+      result: { error: SessionRecentText.rejectedCall(tool, tool.state).error, content: tool.state.content ?? [] },
       resultType: "error",
       providerExecuted: tool.executed,
       providerMetadata,

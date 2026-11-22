@@ -5,7 +5,7 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
 import type { Shell as ShellSchema } from "@opencode/schema/shell"
-import type { Tool } from "@opencode/schema/tool"
+import { Tool } from "@opencode/schema/tool"
 import { Clock, Deferred, Effect, Fiber, Option, Schema, Struct } from "effect"
 import { Environment } from "../../environment/index.js"
 import { Job } from "../../job.js"
@@ -40,6 +40,12 @@ const description = (shell?: string) =>
   [
     "Execute a shell command and return its output.",
     ...(shell ? [`Commands run on ${OS} using ${shell}.`] : []),
+    ...(shell && ShellSelect.ps(shell)
+      ? [
+          "Send PowerShell commands directly without a powershell -Command wrapper. For example, Get-ChildItem -Force lists the current directory.",
+          "Use the available read, write, or edit tool with its path field to work with files. Bash heredocs (<<EOF) are invalid in PowerShell.",
+        ]
+      : []),
     "Quote file paths containing spaces or special characters.",
     "Prefer dedicated tools over shell commands when possible.",
     "When output is large, the full result is saved to a file and a truncated preview is returned.",
@@ -285,7 +291,9 @@ export const Plugin = {
       const target = yield* access.resolve({ path: invocation.cwd, kind: "directory" })
       invocation.cwd = target.absolute
       const timeout = invocation.timeout
-      const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute)
+      const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute).pipe(
+        Effect.mapError((error) => new Tool.InputError({ message: error.message })),
+      )
       const directories = yield* Effect.forEach(parsed.directories, (directory) =>
         access.resolve({
           path: FileAccess.resolvePath(target.absolute, directory),

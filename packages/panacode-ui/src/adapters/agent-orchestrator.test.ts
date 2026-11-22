@@ -50,4 +50,22 @@ describe("orchestrator lane", () => {
   test("a call still being written is planned", () => {
     expect(orchestratorLane(call("streaming"), undefined, opts).status).toBe("planned")
   })
+
+  test("a worker exposes the idle failure and clears it after a later successful attempt", () => {
+    const failure = { type: "api_error", message: "Request too large" }
+    const child: ChildLike = {
+      running: false,
+      messages: [{ type: "idle", time: { created: 2 }, outcome: "failed", error: failure }],
+    }
+    expect(orchestratorLane(call("completed"), child, opts)).toMatchObject({ status: "gaveup", error: failure.message })
+    const recovered: ChildLike = {
+      running: false,
+      messages: [
+        ...child.messages,
+        { type: "assistant", time: { created: 3, completed: 4 }, content: [{ type: "text", text: "Saved" }] },
+        { type: "idle", time: { created: 5 }, outcome: "succeeded" },
+      ],
+    }
+    expect(orchestratorLane(call("completed"), recovered, opts)).toMatchObject({ status: "returned", result: "Saved" })
+  })
 })

@@ -35,7 +35,7 @@ export interface OrchestratorLaneView {
   progress: number
 }
 
-export type OrchestratorPhase = "planning" | "running" | "summarizing" | "done" | "stopped"
+export type OrchestratorPhase = "planning" | "running" | "summarizing" | "done" | "stopped" | "failed"
 
 export interface OrchestratorView {
   goal: string
@@ -58,6 +58,7 @@ export interface OrchestratorLabels {
   summarizing: string
   done: string
   stopped: string
+  failed: string
   stop: string
   dismiss: string
   summary: string
@@ -94,6 +95,7 @@ export const defaultOrchestratorLabels: OrchestratorLabels = {
   summarizing: "Writing the summary",
   done: "Done",
   stopped: "Stopped",
+  failed: "Failed",
   stop: "Stop",
   dismiss: "Close",
   summary: "Summary",

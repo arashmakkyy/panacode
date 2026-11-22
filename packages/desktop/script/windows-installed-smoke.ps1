@@ -163,6 +163,8 @@ if (![IO.Path]::IsPathFullyQualified($downloads) -or !(Test-Path -LiteralPath $d
 }
 & node "$PSScriptRoot/windows-installed-export.mjs" $app $downloads
 if ($LASTEXITCODE -ne 0) { throw 'Installed port conflict or Export Logs check failed.' }
+& node "$PSScriptRoot/installed-tool-calls.mjs" $cli
+if ($LASTEXITCODE -ne 0) { throw 'Installed PanaAI tool-call recovery check failed.' }
 if ($CheckPeer) { & $CheckPeer }
 
 # Reinstall with an existing profile. It must survive both this replacement and default uninstall.

@@ -166,8 +166,20 @@ export function scan(command: string, shell: string, cwd: string): Effect.Effect
     const scanned = powershell
       ? ShellScan.scanPowerShell(command)
       : ShellScan.scan(command, shellName === "bash" || shellName === "zsh" ? shellName : "posix")
-    if (scanned.kind === "opaque")
-      return Effect.fail(new Error(`Portable shell scanner cannot analyze command: ${scanned.reason}`))
+    if (scanned.kind === "opaque") {
+      const reason = `Portable shell scanner cannot analyze command: ${scanned.reason}`
+      if (powershell && scanned.reason === "heredoc")
+        return Effect.fail(
+          new Error(`${reason}. PowerShell does not support Bash <<EOF input. Use a file tool for file contents.`),
+        )
+      if (powershell && scanned.reason === "invalid-structure")
+        return Effect.fail(
+          new Error(
+            `${reason}. Send a simple PowerShell command directly. For file operations use the available file tools.`,
+          ),
+        )
+      return Effect.fail(new Error(reason))
+    }
 
     const output: Result = { commands: [], directories: [] }
     for (const item of scanned.commands) {

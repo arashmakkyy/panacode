@@ -238,7 +238,11 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
       (input.status !== 429 && !codes.includes("throttlingexception") && isContextOverflow(text)))
   )
     return new InvalidRequestError({ ...details, classification: "context-overflow" })
-  if (input.status === 413 || isPayloadTooLarge(text))
+  // PanaAI gateways can return the same profile-facing Persian size message with HTTP 400.
+  const localizedSizeLimit =
+    (input.status === undefined || input.status === 400 || input.status === 422) &&
+    /حجم درخواست بیش از حد مجاز است/.test(text)
+  if (input.status === 413 || isPayloadTooLarge(text) || localizedSizeLimit)
     return new InvalidRequestError({ ...details, classification: "payload-too-large" })
   if (codes.some((code) => CONTENT_POLICY_CODES.has(code)) || (clientScoped && CONTENT_POLICY_TEXT.test(input.message)))
     return new ContentPolicyError(details)

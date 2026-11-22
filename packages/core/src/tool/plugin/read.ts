@@ -1,5 +1,6 @@
 export * as ReadTool from "./read.js"
 
+import { filePathInput } from "../file-path-input.js"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { basename, dirname, extname, isAbsolute, join, relative } from "path"
 import { ToolFailure } from "@opencode/ai/effect"
@@ -26,7 +27,7 @@ const LocationInput = Schema.Struct({
     description: "The maximum number of lines or directory entries to read (defaults to and capped at 2000)",
   }),
 })
-export const Input = LocationInput
+export const Input = filePathInput(LocationInput)
 type Missing = { input: string; requested: FileAccess.Target; context: FileAccess.Invocation }
 const Output = Schema.Union([ReadToolFileSystem.FileContent, ReadToolFileSystem.TextPage, ReadToolFileSystem.ListPage])
 

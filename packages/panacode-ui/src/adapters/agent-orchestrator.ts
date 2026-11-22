@@ -1,9 +1,10 @@
 import type { LaneLogEntry, LaneStatus, OrchestratorLaneView } from "../features/agent-orchestrator/types"
-import { runToolTarget, type RunContentLike, type RunToolLike } from "./agent-run"
+import { settledRun, runToolTarget, type RunContentLike, type RunToolLike } from "./agent-run"
 
 /** A child session's message as the lane reads it (structural, no client import). */
 export type ChildMessageLike =
   | { type: "user"; time: { created: number } }
+  | { type: "idle"; time: { created: number }; outcome: "succeeded" | "failed" | "interrupted"; error?: { type: string; message: string } }
   | {
       type: "assistant"
       content: readonly RunContentLike[]
@@ -59,23 +60,23 @@ export function orchestratorLane(
   const last = assistants.at(-1)
   const model = last?.model?.id
   const started = tool.time.ran ?? tool.time.created
-  const lastError = [...assistants].reverse().find((message) => message.error)?.error
+  const outcome = child && settledRun(child.messages)
 
   let status: LaneStatus
   if (tool.state.status === "streaming") status = "planned"
   else if (tool.state.status === "error" && !child?.messages.length)
     status = interrupted(tool.state.error?.type) ? "stopped" : "gaveup"
   else if (child?.running) status = assistants.length ? "running" : "starting"
+  else if (outcome?.status === "stopped") status = "stopped"
+  else if (outcome?.status === "failed") status = "gaveup"
   else if (!child || !assistants.length) status = tool.state.status === "running" ? "starting" : "planned"
-  else if (lastError && interrupted(lastError.type)) status = "stopped"
-  else if (lastError) status = "gaveup"
-  else if (last?.time.completed !== undefined) status = "returned"
+  else if (outcome?.status === "done") status = "returned"
   else status = "running"
 
   const current = status === "running" ? [...tools].reverse().find((item) => item.state.status === "running") : undefined
   const ended =
     status === "returned" || status === "gaveup" || status === "stopped"
-      ? (last?.time.completed ?? last?.time.created)
+      ? (outcome?.endedAt ?? tool.time.completed)
       : undefined
 
   const log: LaneLogEntry[] = [{ at: 0, kind: "dispatch", text: clip(oneLine(prompt ?? title), 140) }]
@@ -114,7 +115,7 @@ export function orchestratorLane(
     tool: current ? { name: current.name, label: options.toolLabel(current.name), target: runToolTarget(current, options.root) } : undefined,
     line: lastLine,
     result: status === "returned" && finalText ? oneLine(finalText) : undefined,
-    error: status === "gaveup" ? (lastError?.message ?? (tool.state.status === "error" ? tool.state.error?.message : undefined)) : undefined,
+    error: status === "gaveup" ? (outcome?.error ?? (tool.state.status === "error" ? tool.state.error?.message : undefined)) : undefined,
     toolCount: tools.length,
     tokens: assistants.reduce((sum, message) => sum + (message.tokens ? message.tokens.input + message.tokens.output + (message.tokens.reasoning ?? 0) : 0), 0),
     cost: assistants.reduce((sum, message) => sum + (message.cost ?? 0), 0),

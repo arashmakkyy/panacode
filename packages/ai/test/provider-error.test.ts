@@ -4,6 +4,13 @@ import { AIError, HttpContext, RateLimitError, TransportError } from "../src/sch
 import { classifyProviderFailure, providerErrorMessage } from "../src/provider-error.js"
 
 describe("provider error classification", () => {
+  test("recognizes a Persian request-size rejection without treating authentication or throttling as size errors", () => {
+    const message = "حجم درخواست بیش از حد مجاز است."
+    expect(classifyProviderFailure({ status: 400, message })).toMatchObject({ classification: "payload-too-large" })
+    expect(classifyProviderFailure({ status: 429, message })._tag).toBe("RateLimit")
+    expect(classifyProviderFailure({ status: 401, message })._tag).toBe("Authentication")
+  })
+
   test("classifies provider token limit messages as context overflow", () => {
     const messages = [
       "tokens in request more than max tokens allowed",

@@ -415,6 +415,25 @@ test("input error prompts limit normalized issues", async () => {
   )
 })
 
+test("bounds all validation diagnostics when a provider-supplied value is echoed by a validator", async () => {
+  const big = "X".repeat(25_000) + "DO_NOT_REPLAY"
+  const input = {
+    "~standard": {
+      version: 1, vendor: "test",
+      validate: () => ({ issues: Array.from({ length: 12 }, () => ({ path: [big], message: "Invalid: " + big })) }),
+      jsonSchema: { input: () => ({}), output: () => ({}) },
+    },
+  }
+  const failure = await Effect.runPromise(Effect.flip(execute({
+    name: big, description: "bounded", input, execute: () => Effect.die("should not execute"),
+  }, { file: big }, context)))
+  expect(failure).toBeInstanceOf(Tool.InputError)
+  expect(failure.message.length).toBeLessThan(4096)
+  expect(failure.message).not.toContain("DO_NOT_REPLAY")
+  expect(failure.message).toContain("7 more issues")
+  expect(failure.message).toContain("Update the arguments")
+})
+
 test("canonical results carry metadata with typed output", async () => {
   const input = Schema.Struct({ value: Schema.String })
   const output = Schema.Struct({ value: Schema.String, internal: Schema.Boolean })

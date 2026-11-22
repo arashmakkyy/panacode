@@ -1,9 +1,10 @@
 export * as ToolInputRepairPlugin from "./tool-input-repair.js"
 
+import { Tool } from "@opencode/schema/tool"
 import { ToolFailure } from "@opencode/ai/effect"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Effect, JsonSchema, Option, Predicate, Schema } from "effect"
-import { definition, normalizeContent } from "../tool/runtime.js"
+import { definition, normalizeContent, toolLookupForHook } from "../tool/runtime.js"
 
 // Repairs apply only when the input schema unambiguously supports them:
 // - Stringified root or nested object: '{"limit":"20"}' -> { limit: 20 }
@@ -33,15 +34,17 @@ export const Plugin = define({
           // The outer Code Mode tool is built per snapshot rather than registered, so it cannot be
           // looked up here. Its `{ code }` input is trivial; the tools it calls are repaired normally.
           if (event.tool === "execute") return
-          const tools = yield* ctx.tool.list()
+          const captured = toolLookupForHook.get(event)
+          // Standalone plugin hosts can supply hooks directly, without the core registry.
+          const tools = captured ? [] : yield* ctx.tool.list()
+          const lookup = captured ?? ((name: string) => tools.find((item) => item.id === name))
+          const direct = lookup(event.tool)
           const alias = aliases.get(event.tool)
-          const tool =
-            tools.find((tool) => tool.id === event.tool) ??
-            (alias === undefined ? undefined : tools.find((tool) => tool.id === alias))
+          const tool = direct ?? (alias === undefined ? undefined : lookup(alias))
           if (!tool) return
-          if (tool.id !== event.tool) {
+          if (!direct && alias !== undefined) {
             aliased.set(event.id, event.tool)
-            event.tool = tool.id
+            event.tool = alias
           }
           const schema = definition(tool).inputSchema
           if (schema.type !== "object") return
@@ -55,7 +58,8 @@ export const Plugin = define({
           aliased.delete(event.id)
           const note = `There is no "${called}" tool, so this ran as "${event.tool}". Call "${event.tool}" directly.`
           if (event.status === "error") {
-            event.error = new ToolFailure({
+            const Failure = event.error instanceof Tool.InputError ? Tool.InputError : ToolFailure
+            event.error = new Failure({
               message: `${event.error.message}\n\n${note}`,
               error: event.error.error,
               metadata: event.error.metadata,

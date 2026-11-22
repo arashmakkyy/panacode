@@ -6,6 +6,7 @@
  */
 export * as EditTool from "./edit.js"
 
+import { filePathInput } from "../file-path-input.js"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
@@ -20,7 +21,7 @@ import { fileDiff } from "./file-diff.js"
 
 export const name = "edit"
 
-export const Input = Schema.Struct({
+export const Input = filePathInput(Schema.Struct({
   path: Schema.String.annotate({
     description: "File to edit",
   }),
@@ -30,7 +31,7 @@ export const Input = Schema.Struct({
     description:
       "Whether to replace every occurrence of oldString. When false, oldString must match exactly once. Defaults to false.",
   }),
-})
+}))
 
 export const Output = Schema.String
 export type Output = typeof Output.Type

@@ -1,7 +1,8 @@
 export * as Tool from "./tool.js"
-export { CallID, Content, Error, FileContent, TextContent } from "@opencode/schema/tool"
+export { CallID, Content, Error, InputError, FileContent, TextContent } from "@opencode/schema/tool"
 export type { Context, Metadata, Namespace, Options, Result } from "@opencode/schema/tool"
 
+import { normalizeFilePath } from "./tool/file-path-input.js"
 import { ToolDefinition, type ToolCall } from "@opencode/ai/effect"
 import type { CodeMode } from "@opencode/codemode"
 import { Tool } from "@opencode/schema/tool"
@@ -16,7 +17,7 @@ import { PluginHooks } from "./plugin/hooks.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
 import { State } from "./state.js"
-import { definition, effectiveName, execute, normalizedName, normalizeContent } from "./tool/runtime.js"
+import { definition, effectiveName, execute, normalizedName, normalizeContent, toolLookupForHook } from "./tool/runtime.js"
 import { Wildcard } from "./util/wildcard.js"
 
 export class RegistrationError extends Schema.TaggedError<RegistrationError>()("Tool.RegistrationError", {
@@ -120,15 +121,21 @@ const layer = Layer.effect(
       ]
     })
 
-    const beforeExecute = (name: string, input: unknown, context: Tool.Context) =>
-      hooks.trigger("tool", "execute.before", {
+    const beforeExecute = (name: string, input: unknown, context: Tool.Context, lookup: (name: string) => Tool.Info | undefined) => {
+      // Normalize an explicitly supplied path against the captured tool before hooks strip extra keys.
+      const value = normalizeFilePath(lookup(name)?.input, input)
+      if (value instanceof Tool.InputError) return Effect.fail(value)
+      const event = {
         tool: name,
         sessionID: context.sessionID,
         agent: context.agent,
         messageID: context.messageID,
         id: context.id,
-        input,
-      })
+        input: value,
+      }
+      toolLookupForHook.set(event, lookup)
+      return hooks.trigger("tool", "execute.before", event)
+    }
 
     const executeTool = Effect.fn("Tool.execute")(function* (
       tool: Tool.Info,
@@ -182,7 +189,9 @@ const layer = Layer.effect(
     })
 
     const run = (tool: Tool.Info, name: string, input: unknown, context: Tool.Context) =>
-      beforeExecute(name, input, context).pipe(Effect.flatMap((event) => executeTool(tool, name, event.input, context)))
+      beforeExecute(name, input, context, (id) => id === name ? tool : undefined).pipe(
+        Effect.flatMap((event) => executeTool(tool, name, event.input, context)),
+      )
 
     let catalog:
       | {
@@ -308,7 +317,9 @@ const layer = Layer.effect(
                 progress: input.progress ?? (() => Effect.void),
                 cancel: input.cancel,
               }
-              const event = yield* beforeExecute(input.call.name, input.call.input, context)
+              const event = yield* beforeExecute(input.call.name, input.call.input, context, (id) =>
+                direct.get(input.definitions?.get(id)?.name ?? id),
+              )
               const requested = input.definitions?.get(event.tool)
               // Preserve session context removal and alias resolution, now after the repair hook.
               if (!requested && input.definitions && (direct.has(event.tool) || codeModeTool?.name === event.tool))

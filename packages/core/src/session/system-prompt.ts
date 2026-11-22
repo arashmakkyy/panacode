@@ -16,7 +16,8 @@ export function render(prompt: string, tools: string[]) {
   }
   if (tools.includes("write")) {
     instructions.push(
-      "- Use the write tool to create files or completely replace their content. Prefer using the edit tool for targeted changes.",
+      "- Give each file tool its own path. Use write to create a file or completely replace its content. For a large deliverable, build a small working version first and split independent pieces into files.",
+      "- A tool call rejected before execution did not change the file. Correct the arguments using the error feedback. Before reporting runnable work as finished, check the resulting files and exercise the requested behavior with the available tools.",
     )
   }
   if (tools.includes("edit")) {

@@ -33,6 +33,30 @@ defaults:
     shell: bash
 
 jobs:
+  tool-turn:
+    name: Tool calls, session recovery and rendered outcome
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-bun
+      - name: PanaAI completion and rejection contracts
+        run: bun script/panacode-test-contract.ts --cwd packages/ai --min-pass 50 -- ./test/provider/panaai-chat.test.ts ./test/provider-error.test.ts
+      - name: Full session runner, model history and path validation
+        run: bun script/panacode-test-contract.ts --cwd packages/core --min-pass 290 --test-timeout 45000 -- ./test/session-runner.test.ts ./test/session-runner-message.test.ts ./test/session-system-prompt.test.ts ./test/plugin/tool-input-repair-integration.test.ts
+      - name: Shell argument and syntax contracts
+        run: bun script/panacode-test-contract.ts --cwd packages/core --min-pass 343 --require-pass "provides a direct PowerShell command after a structural rejection" -- ./test/shell-parse.test.ts ./test/shell-scan/powershell-syntax.test.ts ./test/shell-scan/powershell-safety.test.ts
+      - name: Activity and tool status
+        run: bun script/panacode-test-contract.ts --cwd packages/panacode-ui --min-pass 14 --require-pass "the terminal event determines the outcome even if an earlier tool or assistant recovered" -- ./src/adapters/agent-run.test.ts ./src/adapters/tool-call.test.ts ./src/adapters/agent-orchestrator.test.ts
+      - name: Install test browser
+        working-directory: packages/app
+        run: bun x playwright install --with-deps chromium
+      - name: Render failed and recovered sessions
+        working-directory: packages/app
+        run: bun run test:e2e --project chromium --workers 1 --retries 0 --grep "Panacode run card reports" e2e/regression/session-timeline-reducer-projection.spec.ts
+
   guards:
     name: guards (ubuntu-latest)
     runs-on: ubuntu-latest

@@ -74,6 +74,7 @@ export function toSessionError(cause: unknown): SessionError.Error {
   }
   if (cause instanceof Permission.BlockedError) return { type: "permission.rejected", message: cause.message }
   if (cause instanceof Permission.CorrectedError) return { type: "permission.rejected", message: cause.feedback }
+  if (cause instanceof Tool.InputError) return { type: "tool.input-schema", message: cause.message }
   if (cause instanceof ToolFailure || cause instanceof Tool.Error) {
     if (cause.error === undefined) return { type: "tool.execution", message: cause.message }
     // The canonical error is the sole model-visible representation, so a cause

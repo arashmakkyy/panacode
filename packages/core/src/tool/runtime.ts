@@ -5,6 +5,10 @@ import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/sp
 import { Effect, JsonPointer, JsonSchema, Result, Schema, SchemaIssue, SchemaRepresentation } from "effect"
 import { $ZodType, toJSONSchema } from "zod/v4/core"
 
+// The built-in repair hook must validate against the tools captured with this request even after a plugin reload.
+// Key by the invocation object: provider call IDs can repeat in parallel sessions.
+export const toolLookupForHook = new WeakMap<object, (name: string) => Tool.Info | undefined>()
+
 const formatEffectIssues = SchemaIssue.makeFormatterStandardSchemaV1()
 
 // Codecs for raw JSON Schema inputs (mostly MCP tools), built once per schema object; schemas are not edited after
@@ -66,7 +70,7 @@ const decodeInput = (tool: Tool.Info<any, any>, value: unknown) =>
   Effect.gen(function* () {
     const result = yield* validateInput(tool.input, value)
     if (result.issues)
-      return yield* new Tool.Error({ message: formatInputIssues(effectiveName(tool), result.issues, value) })
+      return yield* new Tool.InputError({ message: formatInputIssues(effectiveName(tool), result.issues, value) })
     return result.value
   })
 
@@ -95,11 +99,16 @@ const formatInputIssues = (tool: string, issues: ReadonlyArray<StandardSchemaV1.
         if (typeof key === "number") return `${path}[${key}]`
         return path === "" ? String(key) : `${path}.${String(key)}`
       }, "") || "root"
-    return `- ${path}: ${issue.message}`
+    return `- ${limitIssue(path, 120)}: ${limitIssue(issue.message, 240)}`
   })
   if (issues.length > 5) details.push(`- ...and ${issues.length - 5} more ${issues.length === 6 ? "issue" : "issues"}`)
-  return `Invalid arguments for tool "${tool}":\n${details.join("\n")}\n\nArguments provided:\n${JSON.stringify(value, null, 2)}\n\nUpdate the arguments and call the tool again.`
+  const json = JSON.stringify(value, null, 2)
+  const preview = json && json.length > 2048 ? `[Argument values omitted: ${json.length} characters]` : json
+  return `Invalid arguments for tool "${limitIssue(tool, 100)}":\n${details.join("\n")}\n\nArguments provided:\n${preview}\n\nUpdate the arguments and call the tool again.`
 }
+
+// Validators can include the entire offending value in a message or use user input as a key.
+const limitIssue = (value: string, limit: number) => value.length <= limit ? value : value.slice(0, limit - 1) + "…"
 
 const jsonSchema = (schema: JsonSchema.JsonSchema) => {
   const draft =

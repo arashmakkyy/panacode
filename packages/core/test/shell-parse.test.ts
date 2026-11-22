@@ -52,6 +52,39 @@ describe("ShellParse", () => {
     }
   })
 
+  test.each([
+    "cat > landing-page/index.html << 'ENDOFFILE'\n<html>سلام</html>\nENDOFFILE",
+    "python3 <<'PYEOF'\nprint('hello')\nPYEOF",
+  ])("explains a Bash heredoc sent to PowerShell before execution: %s", async (command) => {
+    for (const shell of ["powershell", "pwsh"]) {
+      const result = await Effect.runPromise(Effect.result(ShellParse.scan(command, shell, "/workspace")))
+      expect(result).toMatchObject({
+        _tag: "Failure",
+        failure: { message: expect.stringContaining("PowerShell does not support Bash <<EOF") },
+      })
+    }
+  })
+
+  test.each([
+    'Write-Output "<<EOF"',
+    "Write-Output `<`<EOF",
+    "Write-Output word<<EOF",
+    "Write-Output @'\n<<EOF\n'@",
+    "Write-Output ok <# <<EOF #>",
+    "cmd.exe --% <<EOF",
+  ])("keeps literal PowerShell arguments containing a heredoc marker: %s", async (command) => {
+    const result = await Effect.runPromise(ShellParse.scan(command, "pwsh", "/workspace"))
+    expect(result.commands).toHaveLength(1)
+  })
+
+  test("provides a direct PowerShell command after a structural rejection", async () => {
+    const result = await Effect.runPromise(Effect.result(ShellParse.scan("Get-Content file)", "pwsh", "/workspace")))
+    expect(result).toMatchObject({
+      _tag: "Failure",
+      failure: { message: expect.stringContaining("Send a simple PowerShell command directly") },
+    })
+  })
+
   test("handles heredocs with the command permission resource", async () => {
     const command = "cat <<'EOF'\nstatic body\nEOF"
     const scanned = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace"))
