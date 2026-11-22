@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { createHash } from "node:crypto"
-import { copyFile, cp, mkdir, mkdtemp, readFile, readdir, rm, symlink } from "node:fs/promises"
+import { copyFile, cp, link, mkdir, mkdtemp, readFile, readdir, rm, symlink } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { INSTALL_MANIFEST, writeInstallManifest } from "./utils"
@@ -200,6 +200,7 @@ ${options.footer ?? ""}
       payloadHash,
       footer: `Section "Uninstall"
   !insertmacro customRemoveFiles
+  DeleteRegKey HKCU "${registryKey}"
 SectionEnd
 Function .onInit
   !insertmacro preInit
@@ -505,6 +506,45 @@ windows(
       // _?= runs the uninstall section synchronously instead of returning from a launcher copy.
       expect((await h.run([path.join(root, uninstaller), "/S", "_?=" + root])).code).toBe(59)
       expect(await digest(root)).toBe(before)
+    }),
+  180_000,
+)
+
+windows(
+  "uninstall preserves the receipt after a hard-linked manifest or a file-sharing failure and can retry",
+  () =>
+    withHarness(async (h) => {
+      const build = await h.build("new", standard)
+      const root = path.join(h.dir, "app")
+      expect((await h.install(build.exe, "install", root)).code).toBe(0)
+      const manifest = path.join(root, INSTALL_MANIFEST)
+      const alias = path.join(h.dir, "linked-manifest")
+      const remove = path.join(root, uninstaller)
+      await link(manifest, alias)
+      expect((await h.run([remove, "/S", "_?=" + root])).code).toBe(83)
+      expect((await h.registry.get("PanacodeInstallReceipt")).stdout).toContain(build.pin)
+      expect(await names(root)).toContain("resources/app.asar")
+      await rm(alias)
+
+      const hold = `
+        $ErrorActionPreference = 'Stop'
+        $handle = [IO.File]::Open($env:PANACODE_TEST_HELD, 'Open', 'Read', 'Read')
+        try {
+          $p = Start-Process -PassThru -Wait -FilePath $env:PANACODE_TEST_REMOVE -ArgumentList ('/S _?=' + $env:PANACODE_TEST_ROOT)
+          exit $p.ExitCode
+        } finally { $handle.Dispose() }
+      `
+      const locked = await h.run(["powershell.exe", "-NoProfile", "-Command", hold], {
+        PANACODE_TEST_HELD: path.join(root, "resources/app.asar"),
+        PANACODE_TEST_REMOVE: remove,
+        PANACODE_TEST_ROOT: root,
+      })
+      expect(locked.code, locked.stderr).toBe(83)
+      expect(await Bun.file(manifest).exists()).toBe(true)
+      expect((await h.registry.get("PanacodeInstallReceipt")).stdout).toContain(build.pin)
+      expect((await h.run([remove, "/S"])).code).toBe(0)
+      expect(await settle(() => names(root), [])).toEqual([])
+      expect((await h.registry.get("PanacodeInstallReceipt")).code).not.toBe(0)
     }),
   180_000,
 )

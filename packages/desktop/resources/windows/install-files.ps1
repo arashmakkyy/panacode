@@ -145,21 +145,29 @@ try {
     } else {
         foreach ($name in $files.Keys) {
             $path = [IO.Path]::Combine($Root, $name)
-            # A substituted directory, link or inaccessible file stays exactly where it is.
+            # Changed or linked entries belong to someone else. A sharing violation or an
+            # inaccessible entry is inconclusive: keep the receipt for a later uninstall.
             try {
                 Assert-LocalPath $path
-                if (![IO.File]::Exists($path) -or (Get-Digest $path) -ne $files[$name]) { continue }
-                [IO.File]::Delete($path)
-                for ($p = [IO.Path]::GetDirectoryName($path); $p -ne $Root; $p = [IO.Path]::GetDirectoryName($p)) {
-                    Assert-LocalPath $p
-                    [IO.Directory]::Delete($p, $false)
-                }
-            } catch [IO.IOException] { continue }
-              catch [UnauthorizedAccessException] { continue }
-              catch { continue }
+                $item = [IO.File]::GetAttributes($path)
+                if ($item -band [IO.FileAttributes]::Directory) { continue }
+                if ((Get-Digest $path) -ne $files[$name]) { continue }
+            } catch {
+                $reason = $_.Exception.GetBaseException()
+                if ($reason -is [IO.FileNotFoundException] -or $reason -is [IO.DirectoryNotFoundException] -or
+                    $reason.Message -in 'Linked file','Linked or reparse-point path') { continue }
+                throw
+            }
+            [IO.File]::Delete($path)
+            for ($p = [IO.Path]::GetDirectoryName($path); $p -ne $Root; $p = [IO.Path]::GetDirectoryName($p)) {
+                Assert-LocalPath $p
+                try { [IO.Directory]::Delete($p, $false) }
+                catch [IO.IOException] { break } # A nonempty directory is intentionally retained.
+            }
         }
         Assert-LocalPath $manifest
-        if ((Get-Digest $manifest) -eq $Pin) { [IO.File]::Delete($manifest) }
+        if ((Get-Digest $manifest) -ne $Pin) { throw 'Ownership receipt mismatch' }
+        [IO.File]::Delete($manifest)
     }
     exit 0
 } catch {

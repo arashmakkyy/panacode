@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { Effect, Redacted } from "effect"
+import path from "node:path"
 import { Env } from "../src/env"
 
 test("session environment keeps Panacode values and omits server credentials", () => {
@@ -38,15 +38,27 @@ function restore(previous: Record<string, string | undefined>) {
     else process.env[name] = value
   }
 }
+
 test("the running server retains its credential without passing launch secrets to native children", async () => {
-  const names = ["PANACODE_PASSWORD", "PANACODE_SERVER_PASSWORD", "PANACODE_PTY_HANDOFF", "PANACODE_SERVICE_PROOF_KEY"]
-  const previous = Object.fromEntries(names.map((key) => [key, process.env[key]]))
-  try {
-    for (const name of names) process.env[name] = "private-value"
-    const captured = await Effect.runPromise(Env.consumeServerPassword)
-    expect(captured && Redacted.value(captured)).toBe("private-value")
-    for (const name of names) expect(process.env[name]).toBeUndefined()
-  } finally {
-    restore(previous)
-  }
+  // The real CLI's Effect config provider snapshots the environment when the runtime starts.
+  const script = `
+    import { Effect, Redacted } from "effect"
+    import { Env } from "./src/env.ts"
+    import { spawnSync } from "node:child_process"
+    const value = await Effect.runPromise(Env.consumeServerPassword)
+    if (!value || Redacted.value(value) !== "private-value") process.exit(1)
+    const check = 'process.exit(["PANACODE_PASSWORD", "PANACODE_SERVER_PASSWORD", "PANACODE_PTY_HANDOFF", "PANACODE_SERVICE_PROOF_KEY"].some(name => process.env[name] !== undefined) ? 2 : 0)'
+    process.exit(spawnSync(process.execPath, ["-e", check], { env: process.env }).status ?? 3)
+  `
+  const child = Bun.spawn([process.execPath, "-e", script], {
+    cwd: path.join(import.meta.dir, ".."),
+    env: {
+      ...process.env,
+      PANACODE_PASSWORD: "private-value",
+      PANACODE_SERVER_PASSWORD: "previous-value",
+      PANACODE_PTY_HANDOFF: "one-use-ticket",
+      PANACODE_SERVICE_PROOF_KEY: "per-launch-key",
+    },
+  })
+  expect(await child.exited).toBe(0)
 })

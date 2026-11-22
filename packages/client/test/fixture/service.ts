@@ -215,6 +215,13 @@ await writeFile(
 await rename(registration + ".tmp", registration)
 
 async function shutdown(source: string = "CONTROL") {
+  if (mode === "draining") {
+    control.close()
+    await writeFile(registration + ".draining", "")
+    await Bun.sleep(700)
+    server.stop(true)
+    process.exit(0)
+  }
   await writeFile(registration + ".signal", source)
   // A lingering server unregisters on shutdown but keeps running, and holds its port, until killed.
   if (mode === "lingering") {

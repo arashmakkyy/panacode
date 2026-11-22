@@ -105,7 +105,22 @@ function Invoke-OwnedCli($Product, [string[]]$Command) {
     } finally { $proc.Dispose() }
 }
 
-function Read-Health($Product) {
+function Invoke-LocalRequest($Record, [string]$Route, [int]$Expected = 200, [string]$Body) {
+    $method = if ($Body) { [Net.Http.HttpMethod]::Post } else { [Net.Http.HttpMethod]::Get }
+    $request = [Net.Http.HttpRequestMessage]::new($method, ($Record.url.TrimEnd('/') + $Route))
+    $auth = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('opencode:' + $Record.password))
+    $request.Headers.Authorization = [Net.Http.Headers.AuthenticationHeaderValue]::new('Basic', $auth)
+    if ($Body) { $request.Content = [Net.Http.StringContent]::new($Body, [Text.Encoding]::UTF8, 'application/json') }
+    try {
+        $reply = $http.SendAsync($request).GetAwaiter().GetResult()
+        try {
+            if ([int]$reply.StatusCode -ne $Expected) { throw "Expected HTTP $Expected, got $([int]$reply.StatusCode)." }
+            return ($reply.Content.ReadAsStringAsync().GetAwaiter().GetResult() | ConvertFrom-Json)
+        } finally { $reply.Dispose() }
+    } finally { $request.Dispose() }
+}
+
+function Read-Health($Product, [switch]$Connection) {
     $name = $Product.Name.ToLowerInvariant()
     $port = if ($name -eq 'opencode') { 28894 } else { 28844 }
     $record = Get-Content -Raw -LiteralPath (Join-Path $stateBase "$name/service.json") | ConvertFrom-Json
@@ -118,9 +133,11 @@ function Read-Health($Product) {
         if (!$private) { throw 'The installed Panacode CLI could not prove its service.' }
         $identity = $private | ConvertFrom-Json
         if ($identity.product -ne $name -or !$identity.proofKey -or $identity.id -cne $record.id -or
-            $identity.pid -ne $record.pid -or $identity.version -ne $Product.CliVersion -or $identity.url -cne $record.url) {
+            $identity.pid -ne $record.pid -or $identity.version -ne $Product.CliVersion -or
+            $identity.url -cne $record.url -or $identity.password -cne $record.password) {
             throw 'The installed Panacode CLI returned another service.'
         }
+        if ($Connection) { return $identity }
         return "$($record.id)/$($record.pid)"
     }
     $image = (Get-Process -Id $record.pid).Path
@@ -128,18 +145,33 @@ function Read-Health($Product) {
     if ((Split-Path -Leaf $image) -ne 'opencode-cli.exe' -or
         ($image -ne $Product.Cli -and !$image.StartsWith($stage + '\', [StringComparison]::OrdinalIgnoreCase)) -or
         (Get-FileHash -LiteralPath $image).Hash -ne $Product.CliDigest) { throw 'The upstream listener does not run the bundled CLI.' }
-    $request = [Net.Http.HttpRequestMessage]::new([Net.Http.HttpMethod]::Get, "http://127.0.0.1:$port/api/info")
-    $credential = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('opencode:' + $record.password))
-    $request.Headers.Authorization = [Net.Http.Headers.AuthenticationHeaderValue]::new('Basic', $credential)
-    try {
-        $reply = $http.SendAsync($request).GetAwaiter().GetResult()
-        try {
-            if ([int]$reply.StatusCode -ne 200) { throw "$name service is not ready." }
-            $info = $reply.Content.ReadAsStringAsync().GetAwaiter().GetResult() | ConvertFrom-Json
-            if ($info.pid -ne $record.pid -or $info.version -ne $record.version) { throw "$name HTTP identity mismatch." }
-        } finally { $reply.Dispose() }
-    } finally { $request.Dispose() }
+    $info = Invoke-LocalRequest $record '/api/info'
+    if ($info.pid -ne $record.pid -or $info.version -ne $record.version) { throw "$name HTTP identity mismatch." }
+    if ($Connection) { return $record }
     return "$($record.id)/$($record.pid)"
+}
+
+function New-SessionWitness([string]$Name) {
+    $connection = Read-Health $records[$Name].Product -Connection
+    $title = $Name + '-offline-' + [Guid]::NewGuid().ToString('N')
+    $body = @{ title=$title; location=@{ directory=(Join-Path $root 'shared-project') } } | ConvertTo-Json -Compress
+    $session = (Invoke-LocalRequest $connection '/api/session' 200 $body).data
+    if (!$session.id -or $session.title -cne $title) { throw "Failed to create the $Name offline session." }
+    return [pscustomobject]@{ ID=$session.id; Title=$title; Owner=$Name }
+}
+
+function Assert-SessionWitness([string]$Name, $Witness) {
+    $connection = Read-Health $records[$Name].Product -Connection
+    $route = '/api/session/' + [Uri]::EscapeDataString($Witness.ID)
+    if ($Name -eq $Witness.Owner) {
+        $session = (Invoke-LocalRequest $connection $route).data
+        if ($session.id -cne $Witness.ID -or $session.title -cne $Witness.Title) { throw "$Name lost its session." }
+    } else {
+        $missing = Invoke-LocalRequest $connection $route 404
+        if ($missing._tag -cne 'SessionNotFoundError' -or $missing.sessionID -cne $Witness.ID) {
+            throw "$Name returned an unexpected result for the other product's session."
+        }
+    }
 }
 
 function Start-Desktop($Product) {
@@ -225,6 +257,7 @@ function Install-Desktop([string]$Name) {
 try {
     foreach ($name in 'OpenCode','Panacode') { if (Get-UninstallRow $name) { throw 'Expected a fresh runner.' } }
     $null = New-Item -ItemType Directory -Path $root
+    $null = New-Item -ItemType Directory -Path (Join-Path $root 'shared-project')
     foreach ($kind in 'DATA','CONFIG','CACHE') { [Environment]::SetEnvironmentVariable("XDG_${kind}_HOME", (Join-Path $root $kind), 'Process') }
     $env:XDG_STATE_HOME = $stateBase
     Invoke-WebRequest -Uri "https://github.com/anomalyco/opencode/releases/download/v$upstreamVersion/opencode-desktop-win-x64.exe" `
@@ -232,7 +265,14 @@ try {
     if ((Get-FileHash -LiteralPath $builds.OpenCode).Hash -ne $upstreamDigest) { throw 'Upstream installer SHA-256 mismatch.' }
     $sequence = if ($Order -eq 'OpenCodeFirst') { 'OpenCode','Panacode' } else { 'Panacode','OpenCode' }
     Install-Desktop $sequence[0]
+    $sessions = @{}
+    $sessions[$sequence[0]] = New-SessionWitness $sequence[0]
     Install-Desktop $sequence[1]
+    $sessions[$sequence[1]] = New-SessionWitness $sequence[1]
+    if ($sessions.Panacode.ID -ceq $sessions.OpenCode.ID) { throw 'The session fixtures unexpectedly share an ID.' }
+    foreach ($name in $sequence) {
+        foreach ($session in $sessions.Values) { Assert-SessionWitness $name $session }
+    }
     Check-Desktop 'OpenCode'
     Check-Desktop 'Panacode'
     $ours = $records.Panacode.Product
@@ -248,7 +288,8 @@ try {
     while ((Test-Path -LiteralPath $ours.Exe) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 500 }
     if ((Test-Path -LiteralPath $ours.Exe) -or (Get-UninstallRow 'Panacode')) { throw 'Panacode uninstall did not finish.' }
     Check-Desktop 'OpenCode'
-    Write-Host "$Order passed with both genuine desktop windows, both healthy services and the original upstream installation intact."
+    Assert-SessionWitness 'OpenCode' $sessions.OpenCode
+    Write-Host "$Order passed with both desktop windows and isolated sessions; the original upstream GUI, session, registry, shortcuts and cache survived Panacode uninstall."
 } finally {
     foreach ($proc in $windows.Values) {
         if (!$proc.HasExited) { $null = $proc.CloseMainWindow(); if (!$proc.WaitForExit(5000)) { $proc.Kill() } }

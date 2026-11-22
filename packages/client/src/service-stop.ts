@@ -5,9 +5,14 @@ import { currentOwner, removeOwned, withRegistrationLock } from "./service-file.
 import type { EnsureTiming } from "./service-timing.js"
 import { setTimeout as delay } from "node:timers/promises"
 
-/** The caller's decision is for exactly this registration generation. Serialize terminal-sidecar
- * mutations with publication, but release the lock before waiting for the owner's finalizer. */
-export async function stopOwned(file: string, info: Info, pty: StopOptions["pty"], timing: EnsureTiming) {
+/** Hold the stop lock until the original generation has finished exiting. A concurrent restart
+ * then sees its pointer retired instead of pinging a closing pipe. The server's finalizer only
+ * needs the separate registration lock, which is released during the wait. */
+export function stopOwned(file: string, info: Info, pty: StopOptions["pty"], timing: EnsureTiming) {
+  return withRegistrationLock(file + ".stop", () => stopGeneration(file, info, pty, timing))
+}
+
+async function stopGeneration(file: string, info: Info, pty: StopOptions["pty"], timing: EnsureTiming) {
   const requested = await withRegistrationLock(file, async () => {
     if (!(await currentOwner(file, info))) return false
     const ping = await request(info, "ping", timing.requestTimeout)

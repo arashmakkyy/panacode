@@ -162,7 +162,8 @@ Var panacodeSharedImageOwned
 !macroend
 
 ; Only called for a registered installation or a directory moved by this installer.
-!macro panacodeRetire DIR
+!macro panacodeRetire DIR RESULT
+  StrCpy ${RESULT} 0
   !insertmacro panacodeMatches "${DIR}" "$panacodeOldPin" $R4
   ${If} $R4 == 1
     !insertmacro panacodeFiles Remove "${DIR}" "$panacodeOldPin" $R4
@@ -170,6 +171,7 @@ Var panacodeSharedImageOwned
       !insertmacro panacodeRemoveAux "${DIR}" "${UNINSTALL_FILENAME}" "$panacodeUninstallerPin"
       !insertmacro panacodeRemoveAux "${DIR}" "uninstallerIcon.ico" "$panacodeIconPin"
       RMDir "${DIR}"
+      StrCpy ${RESULT} 1
     ${EndIf}
   ${EndIf}
 !macroend
@@ -314,10 +316,10 @@ Var panacodeSharedImageOwned
     !insertmacro panacodeFail 70 "Windows could not finish registering Panacode. The previous files have been retained. Run the installer again after restoring registry access."
   ${EndIf}
   ${If} $panacodeBackup != ""
-    !insertmacro panacodeRetire "$panacodeBackup"
+    !insertmacro panacodeRetire "$panacodeBackup" $R6
   ${EndIf}
   ${If} $panacodeShared != ""
-    !insertmacro panacodeRetire "$panacodeShared"
+    !insertmacro panacodeRetire "$panacodeShared" $R6
     ${If} ${FileExists} "$QUICKLAUNCH\User Pinned\TaskBar\${SHORTCUT_NAME}.lnk"
       CreateShortCut "$QUICKLAUNCH\User Pinned\TaskBar\${SHORTCUT_NAME}.lnk" "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
       WinShell::SetLnkAUMI "$QUICKLAUNCH\User Pinned\TaskBar\${SHORTCUT_NAME}.lnk" "${APP_ID}"
@@ -344,7 +346,12 @@ Var panacodeSharedImageOwned
     !insertmacro panacodeFail 59 "Panacode could not verify the installed build."
   ${EndIf}
   SetOutPath $TEMP
-  !insertmacro panacodeRetire "$INSTDIR"
+  !insertmacro panacodeRetire "$INSTDIR" $R6
+  ${If} $R6 != 1
+    ; The stock uninstaller removes registrations after this macro returns. Keep the
+    ; receipt so an interrupted removal or temporarily locked file can be retried.
+    !insertmacro panacodeFail 83 "Windows could not finish verifying and removing Panacode. Its registration is intact. Close running files and retry."
+  ${EndIf}
   ; Old copies and cached stages are siblings, outside the registered install root. A later
   ; uninstaller has no receipt binding those locations to a move it actually performed.
 !macroend

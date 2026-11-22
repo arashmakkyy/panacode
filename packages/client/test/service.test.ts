@@ -237,6 +237,19 @@ test("shuts down an unresponsive registered service over the private control cha
   expect(await Bun.file(registration).exists()).toBe(false)
 })
 
+test("a second stop waits for an acknowledged owner whose private control pipe has already closed", async () => {
+  await using fixture = await serviceFixture()
+  const child = fixture.spawn("draining")
+  await fixture.waitForFile()
+  const file = fixture.registration
+  const first = run(Service.stop({ file }))
+  await fixture.waitForFile(file + ".draining")
+  expect(await Bun.file(file).exists()).toBe(true)
+  await Promise.all([first, run(Service.stop({ file }))])
+  expect(await child.exited).toBe(0)
+  expect(await Bun.file(file).exists()).toBe(false)
+}, 15_000)
+
 test("stop leaves a service that ignores authenticated shutdown running and reports it", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration

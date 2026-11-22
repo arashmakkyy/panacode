@@ -22,9 +22,17 @@ export async function verifyWindowsPayload(input: {
   if (!/^[a-f0-9]{64}$/.test(input.buildPin)) throw new Error("Invalid Windows build manifest pin")
   const dir = await mkdtemp(path.join(os.tmpdir(), "panacode-payload-check-"))
   try {
-    const archiver = await getPath7za()
+    // The bundled Windows 7za.exe supports .7z payloads but omits the NSIS reader.
+    // Use the full 7-Zip installation supplied by the Windows packaging runner.
+    const archiver =
+      process.platform === "win32"
+        ? path.join(process.env.ProgramW6432 ?? process.env.ProgramFiles!, "7-Zip", "7z.exe")
+        : await getPath7za()
+    const { stdout } = await run(archiver, ["i"])
+    if (!/^.*\bNsis\s+nsis\s/m.test(stdout)) throw new Error("Full 7-Zip with the NSIS handler is required")
     await run(archiver, [
       "e",
+      "-tNsis",
       "-y",
       "-r",
       "-bso0",
