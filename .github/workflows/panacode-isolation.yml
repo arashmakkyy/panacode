@@ -47,6 +47,8 @@ jobs:
         run: bun script/panacode-test-contract.ts --cwd packages/ai --min-pass 50 -- ./test/provider/panaai-chat.test.ts ./test/provider-error.test.ts
       - name: Full session runner, model history and path validation
         run: bun script/panacode-test-contract.ts --cwd packages/core --min-pass 290 --test-timeout 45000 -- ./test/session-runner.test.ts ./test/session-runner-message.test.ts ./test/session-system-prompt.test.ts ./test/plugin/tool-input-repair-integration.test.ts
+      - name: Install zsh for the shell registry cases
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends zsh
       - name: Run file validation and native PowerShell through the tool registry
         run: bun script/panacode-test-contract.ts --cwd packages/core --min-pass 176 --test-timeout 45000 --require-pass "recovers from a Bash heredoc in PowerShell without overwriting the actual page" -- ./test/tool-registry.test.ts ./test/tool-schema.test.ts ./test/tool-shell.test.ts
       - name: Shell argument and syntax contracts
