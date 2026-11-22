@@ -287,7 +287,7 @@ jobs:
       - name: Service, updater and environment contracts
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         timeout-minutes: 20
-        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 60 --max-skip 3 --test-timeout 30000 --timeout-ms 900000 -- ./test/service.test.ts ./test/server-connection.test.ts ./test/debug-config.test.ts ./test/debug-heap-dump.test.ts ./test/upgrade.test.ts ./test/updater-isolation.test.ts ./test/env.test.ts
+        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 60 --max-skip 3 --test-timeout 30000 --timeout-ms 900000 --require-pass "registers upgrade in root help" --require-pass "documents upgrade options in command help" -- ./test/service.test.ts ./test/server-connection.test.ts ./test/debug-config.test.ts ./test/debug-heap-dump.test.ts ./test/upgrade.test.ts ./test/updater-isolation.test.ts ./test/env.test.ts
 
       - name: Support ZIP private-data exclusion
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}

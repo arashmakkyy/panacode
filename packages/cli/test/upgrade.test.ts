@@ -4,11 +4,14 @@ import os from "node:os"
 import path from "node:path"
 
 describe("upgrade command", () => {
-  test("is registered in root help and documents its options", async () => {
+  test("registers upgrade in root help", async () => {
     const root = await cli(["--help"], {}, "../src/index.ts")
-    const help = await cli(["upgrade", "--help"], {}, "../src/index.ts")
     expect(root.exitCode).toBe(0)
     expect(root.stdout).toContain("upgrade")
+  }, 30_000)
+
+  test("documents upgrade options in command help", async () => {
+    const help = await cli(["upgrade", "--help"], {}, "../src/index.ts")
     expect(help.exitCode).toBe(0)
     expect(help.stdout).toContain("[<target>]")
     expect(help.stdout).toContain("--method")
