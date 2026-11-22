@@ -39,7 +39,7 @@ export const layer = Layer.effect(
         publish: (data) => {
           SidecarCredentials.set(data)
           // Every window moves its requests and event stream to the new origin, not only the one that reconnected.
-          const event = new SidecarChanged({ url: data.url })
+          const event = new SidecarChanged(SidecarCredentials.ready(data))
           getMainWindows().forEach((win) => emitIpcEvent(win.webContents, event))
         },
       }),
@@ -76,22 +76,19 @@ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: Background
     const options = {
       file: setup.file,
       version,
-      // The CLI owns port precedence: a saved `panacode service set port` wins over its channel
-      // default, and the managed service must never ask for port 0 or a random port. A fixed port
-      // also makes a second contender fail to bind and back off instead of booting a second writer
-      // against the same database.
+      // The CLI owns bind precedence and publishes the actual port before opening its database.
       command: [
         ...setup.cli.command,
         "serve",
         "--service",
         ...(setup.isolated || windowsPackaged ? ["--hostname", "127.0.0.1"] : []),
       ],
-      env: windowsPackaged
-        ? {
-            PANACODE_DISABLE_MODELS_FETCH: "1",
-            PANACODE_DISABLE_FILEWATCHER: "1",
-          }
-        : undefined,
+      env: {
+        ...setup.env,
+        ...(windowsPackaged
+          ? { PANACODE_DISABLE_MODELS_FETCH: "1", PANACODE_DISABLE_FILEWATCHER: "1" }
+          : {}),
+      },
       onStart: (reason: "missing" | "version-mismatch", previousVersion?: string) => {
         recordDiagnostic({ event: "service.start", version: previousVersion, status: "started", reason })
         runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion }))
@@ -168,7 +165,10 @@ const prepare = Effect.fn("BackgroundService.prepare")(function* (mode: Backgrou
 
   const client = yield* Effect.promise(() => import("@opencode/client/service"))
 
+  const target = yield* Effect.tryPromise(() => client.managedServiceTarget(registration.file))
+
   yield* Effect.logInfo("v2 CLI service registration", {
+    privateProfile: !!target.env,
     channel: CHANNEL,
     filename: path.basename(registration.file),
     stateRoot: path.basename(registration.stateRoot),
@@ -179,14 +179,15 @@ const prepare = Effect.fn("BackgroundService.prepare")(function* (mode: Backgrou
   return {
     cli,
     client,
-    file: registration.file,
+    file: target.file,
+    env: target.env,
     isolated,
     local,
     stateRoot: registration.stateRoot,
     version,
     key: {
       stateRoot: registration.stateRoot,
-      file: registration.file,
+      file: target.file,
       version,
       local,
     },
@@ -219,10 +220,10 @@ const adopt = Effect.fn("BackgroundService.adopt")(function* (
     probed,
     ...endpoint(url.origin),
   })
-  recordDiagnostic({ event: "service.ready", version: setup.version, status: "ready" })
+  recordDiagnostic({ event: "service.ready", version: setup.version, status: "ready", reason: setup.env ? "private-profile" : undefined })
 
   return {
-    credentials: { url: url.origin, password: service.auth.password } satisfies SidecarCredentials.Data,
+    credentials: { url: url.origin, password: service.auth.password, separateHistory: !!setup.env } satisfies SidecarCredentials.Data,
     runningVersion,
   }
 })

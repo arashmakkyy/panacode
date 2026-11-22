@@ -689,6 +689,43 @@ test("concurrent service processes elect one server", async () => {
   }
 }, 120_000)
 
+test("an occupied channel default still elects exactly one authenticated service", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "panacode-default-collision-"))
+  // Give this fixture its own channel so a developer's installed service is never a test target.
+  const channel = "collision-" + crypto.randomUUID().slice(0, 8)
+  const port = ServiceConfig.defaultPort(channel)
+  using listener = Bun.serve({ hostname: "127.0.0.1", port, fetch: () => new Response("witness") })
+  const file = path.join(root, "state", "panacode", ServiceConfig.filename(channel))
+  const command = [process.execPath, "--define", `OPENCODE_CHANNEL=${JSON.stringify(channel)}`, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"]
+  const contenders = [1, 2].map(() => Bun.spawn(command, { env: isolatedEnv(root), stdout: "ignore", stderr: "pipe" }))
+  try {
+    const info = await Promise.race([
+      waitForInfo(file),
+      Promise.all(contenders.map(async (child) => ({ code: await child.exited, error: await new Response(child.stderr).text() }))).then((results) => {
+        throw new Error("All contenders exited before publication: " + JSON.stringify(results))
+      }),
+    ])
+    const endpoint = await Effect.runPromise(Service.ensure({ file }).pipe(Effect.provide(NodeFileSystem.layer)))
+    expect(endpoint.auth?.password).toBe(info.password)
+    expect(new URL(endpoint.url).port).not.toBe(String(port))
+    const winner = contenders.find((child) => child.pid === info.pid)
+    const loser = contenders.find((child) => child !== winner)
+    expect(winner).toBeDefined()
+    expect(loser).toBeDefined()
+    if (!loser) throw new Error("No losing contender")
+    expect(await waitForExit(loser, 20_000)).toBe(true)
+    expect(loser.exitCode).toBe(0)
+    expect(await Bun.file(path.join(root, "panacode.db")).exists()).toBe(true)
+    expect(await fetch(listener.url).then((res) => res.text())).toBe("witness")
+    await Effect.runPromise(Service.stop({ file }).pipe(Effect.provide(NodeFileSystem.layer)))
+    expect(await fetch(listener.url).then((res) => res.text())).toBe("witness")
+  } finally {
+    for (const child of contenders) if (child.exitCode === null && child.signalCode === null) child.kill()
+    await Promise.all(contenders.map((child) => child.exited))
+    await fs.rm(root, { recursive: true, force: true })
+  }
+}, 60_000)
+
 test("configured managed service port overrides the channel default", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-port-"))
   const port = await availablePort()

@@ -42,7 +42,7 @@ test("a file that only sets a service still wins over one that never mentions it
 test("setup sessions run in the global configuration's directory, never an ancestor project's", () => {
   // In the server's order: global files and root, an ancestor's config outside the worktree, then the project's.
   const ancestor = "/work/panacode.json"
-  const projectRoot = { type: "directory" as const, path: "/work/acme/.opencode" }
+  const projectRoot = { type: "directory" as const, path: "/work/acme/.panacode" }
 
   const entries = [
     { type: "document" as const, path: global, info: {} },
@@ -60,4 +60,15 @@ test("setup sessions run in the global configuration's directory, never an ances
       "/work/acme",
     ),
   ).toBe("/work/acme")
+})
+
+test("recognizes a Panacode project directory from a Windows server", () => {
+  const root = String.raw`C:\work\acme`
+  expect(globalConfigDirectory([{ type: "directory", path: root + "\\.PANACODE\\" }], root)).toBe(root)
+})
+
+test("setup never offers a read-only imported config as the file to edit", () => {
+  const legacy = { type: "document" as const, path: "/work/acme/opencode.json", legacy: true, info: {} }
+  expect(serviceConfigFile([legacy], "skills")).toBeUndefined()
+  expect(serviceConfigFile([legacy, { type: "document", path: project, info: {} }], "skills")).toBe(project)
 })

@@ -157,7 +157,7 @@ jobs:
           1. Download \`panacode-desktop-win-x64.exe\`
           2. Run it (SmartScreen: More info → Run anyway; the installer is unsigned)
           3. Upgrade directly over an older Panacode. The installer detects and replaces a Panacode-owned older install and its registration; an OpenCode or shared install is left alone
-          4. If a previous Panacode service still holds the port, run \`panacode service status\` and \`panacode service restart\`; to choose another port, run \`panacode service set port <port>\`. Do not delete state files, stop another application's processes, or reboot
+          4. Check the active port with \`panacode service status\`. Panacode automatically selects another loopback port when its default is occupied. To pin a port, run \`panacode service set port <port>\`. Do not delete state files, stop another application's processes, or reboot
           5. Open Panacode → Sign in with PanaAI
 
           Ref: \`${REF}\`

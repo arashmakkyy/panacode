@@ -820,7 +820,7 @@ test("project extensions link Console MCPs and skills and offer sign-in as the s
       },
     ],
     skills: [
-      { id: "review", name: "Code review", path: "/home/test/.config/opencode/skills/review/SKILL.md", content: "x" },
+      { id: "review", name: "Code review", path: "/home/test/.config/panacode/skills/review/SKILL.md", content: "x" },
       { id: "funnel", name: "Funnel analytics", path: "skill://funnel/SKILL.md", content: "x" },
     ],
   })
@@ -1145,7 +1145,7 @@ test.describe("pages open before slow data", () => {
     const { settings } = await open(page, {
       mcp: [{ name: "demo-mcp", status: { status: "connected" } }],
       skills: [
-        { id: "opencode", name: "OpenCode", path: "skill://opencode/SKILL.md", content: "OpenCode help" },
+        { id: "panacode", name: "Panacode", path: "skill://panacode/SKILL.md", content: "Panacode help" },
         { id: "plugin-skill", name: "Plugin skill", path: "skill://plugin-skill/SKILL.md", content: "Plugin help" },
       ],
     })
@@ -1160,7 +1160,7 @@ test.describe("pages open before slow data", () => {
     await expect(settings.getByRole("switch", { name: "demo-mcp" })).toBeChecked()
     // Without a Console sign-in, a virtual skill is never linked to Console.
     await settings.getByRole("tab", { name: "Skills", exact: true }).click()
-    await expect(settings.getByText("OpenCode", { exact: true })).toBeVisible()
+    await expect(settings.getByText("Panacode", { exact: true })).toBeVisible()
     await expect(settings.getByText("Plugin skill", { exact: true })).toBeVisible()
     await expect(settings.getByRole("button", { name: /in Console$/ })).toHaveCount(0)
   })
@@ -1251,10 +1251,10 @@ test.describe("pages open before slow data", () => {
         {
           id: "review",
           name: "Code review",
-          path: "/home/test/.config/opencode/skills/review/SKILL.md",
+          path: "/home/test/.config/panacode/skills/review/SKILL.md",
           content: "Review code",
         },
-        { id: "opencode", name: "OpenCode", path: "skill://opencode/SKILL.md", content: "OpenCode help" },
+        { id: "panacode", name: "Panacode", path: "skill://panacode/SKILL.md", content: "Panacode help" },
         { id: "report", name: "Report", path: "skill://report/SKILL.md", content: "Report bugs" },
         { id: "browser", name: "Browser", path: "skill://browser/SKILL.md", content: "Browser help" },
         { id: "funnel", name: "Funnel analytics", path: "skill://funnel/SKILL.md", content: "Analyze the funnel" },

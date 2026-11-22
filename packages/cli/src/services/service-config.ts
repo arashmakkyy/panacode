@@ -1,4 +1,4 @@
-import { migrateOwnedRegistration, privateFileBytes, registrationBytes, renameServiceFile, withRegistrationLock } from "@opencode/client/service"
+import { managedServiceTarget, migrateOwnedRegistration, privateFileBytes, registrationBytes, renameServiceFile, withRegistrationLock } from "@opencode/client/service"
 import { Global } from "@opencode/util/global"
 import { ProductIdentity } from "@opencode/util/product-identity"
 import { physicalPath } from "@opencode/util/product-path"
@@ -240,7 +240,7 @@ const paths = Effect.gen(function* () {
 // Clients find the service at its registration under XDG_STATE_HOME. A saved value would move the
 // registration away from them, and children of the service (tool shells, a relaunched Desktop) would
 // look for it in the wrong place, so the service keeps the state directory it was launched with.
-export function processEnv(env: Info["env"]) {
+export function processEnv(env: Info["env"], privateProfile = process.env.PANACODE_SERVICE_COEXIST === "1") {
   if (env === undefined) return undefined
   // A saved service environment is Panacode's own. Drop upstream runtime overrides so a value
   // persisted by an older build cannot move the service back onto OpenCode's paths or credentials.
@@ -252,6 +252,8 @@ export function processEnv(env: Info["env"]) {
       return (
         name !== "XDG_STATE_HOME" &&
         name !== "PANACODE_SERVICE_PROOF_KEY" &&
+        name !== "PANACODE_SERVICE_COEXIST" &&
+        !(privateProfile && (name === "XDG_DATA_HOME" || name === "PANACODE_DB")) &&
         name !== "PANACODE_PTY_HANDOFF" &&
         !name.startsWith(`${ProductIdentity.upstreamEnvPrefix}_`)
       )
@@ -262,10 +264,14 @@ export function processEnv(env: Info["env"]) {
 export const options = Effect.fnUntraced(function* (input: { readonly checkVersion?: boolean } = {}) {
   const { file, legacyRegistrationFiles } = yield* paths
   yield* Effect.forEach(legacyRegistrationFiles, (legacy) => migrateRegistration(legacy, file))
+  const target = yield* Effect.tryPromise(() => managedServiceTarget(file))
+  const configuredEnv = processEnv((yield* read()).env, !!target.env || process.env.PANACODE_SERVICE_COEXIST === "1")
+  const env: Record<string, string> | undefined = target.env ? { ...configuredEnv, ...target.env } : configuredEnv
   return {
-    file,
+    file: target.file,
+    privateProfile: target.env,
     version: input.checkVersion ? OPENCODE_VERSION : undefined,
-    env: processEnv((yield* read()).env),
+    env,
     command: [...selfCommand(), "serve", "--service"],
   }
 })
@@ -354,6 +360,11 @@ export const get = Effect.fn("cli.service-config.get")(function* (key?: string, 
       return port === undefined ? "" : String(port)
     }
     case "password": {
+      const target = yield* options()
+      if (target.privateProfile || process.env.PANACODE_SERVICE_COEXIST === "1") {
+        const info = yield* Service.verifiedRegistration(target)
+        if (info?.password) return info.password
+      }
       return yield* password()
     }
     case "cors": {

@@ -120,6 +120,8 @@ function parseControl(input: unknown): Info["control"] | undefined {
 /** A registration file read result. `problem` means the file exists but is not a Panacode owner. */
 export type Registration = {
   readonly info?: Info
+  /** A legacy PID can rule out a dead candidate; it never authorizes an operation. */
+  readonly pid?: number
   /** A validated loopback endpoint from a record that is otherwise unusable. */
   readonly url?: string
   readonly problem?: string
@@ -147,6 +149,7 @@ export function parseRegistration(text: string): Registration {
     return {
       problem: "The local service registration does not identify a Panacode instance.",
       url: info.url,
+      pid: info.pid,
     }
   return { info }
 }

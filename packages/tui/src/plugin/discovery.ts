@@ -2,6 +2,7 @@ import { readdir, stat } from "node:fs/promises"
 import path from "node:path"
 import { localSource } from "@opencode/plugin/source"
 import { ProductIdentity } from "@opencode/util/product-identity"
+import { nativeConfigPath } from "@opencode/util/product-path"
 import { isMissingPath, localProjectDirectory, projectConfigDirectories } from "../util/config-directories"
 
 export { localSource }
@@ -19,13 +20,17 @@ export async function localPluginDirectories(cwd: string, configDirectory: strin
       )
     }),
   )
-  return directories.filter((_, index) => exists[index]).map((directory) => path.join(directory, "plugins"))
+  return directories
+    .filter((_, index) => exists[index])
+    .map((directory) => path.join(directory, "plugins"))
+    .filter((directory) => nativeConfigPath(directory, true))
 }
 
 export async function discoverPluginTargets(directories: string[]) {
   return (
     await Promise.all(
       directories.map(async (directory) => {
+        if (!nativeConfigPath(directory, true)) return []
         const entries = await readdir(directory, { withFileTypes: true }).catch((error: unknown) => {
           if (isMissingPath(error)) return []
           return Promise.reject(error)
@@ -43,7 +48,7 @@ export async function discoverPluginTargets(directories: string[]) {
                     (info) => info.isDirectory(),
                     (error) => (isMissingPath(error) ? false : Promise.reject(error)),
                   ))
-                if (!isDirectory) return undefined
+                if (!isDirectory || !nativeConfigPath(plugin, true)) return undefined
                 return plugin
               }),
           )

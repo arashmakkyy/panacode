@@ -131,6 +131,9 @@ describe("SkillFile.parse", () => {
     expect(parse("disable-model-invocation: true")).toMatchObject({ skill: { autoinvoke: false } })
     expect(parse("disable-model-invocation: yes")).toMatchObject({ skill: { autoinvoke: false } })
     expect(parse("disable-model-invocation: false")).not.toMatchObject({ skill: { autoinvoke: expect.anything() } })
+    expect(parse("metadata:\n  panacode/autoinvoke: false\n  opencode/autoinvoke: true")).toMatchObject({
+      skill: { autoinvoke: false },
+    })
     expect(parse("disable-model-invocation: maybe")).not.toMatchObject({ skill: { autoinvoke: expect.anything() } })
     expect(
       parse("disable-model-invocation: true\nmetadata:\n  opencode/autoinvoke: true"),
@@ -246,6 +249,44 @@ describe("ConfigSkillPlugin.Plugin", () => {
           expect((yield* skill.list()).find((item) => item.id === "deploy")?.description).toBe("Deploy")
           expect((yield* skill.list()).find((item) => item.id === "review")?.description).toBe("Second")
           expect(pulls).toEqual(["https://example.test/skills/"])
+        }),
+      ),
+    ),
+  )
+
+  it.live("loads Panacode project skills without loading or watching OpenCode skills", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const directory = path.join(tmp.path, "project")
+          const native = path.join(directory, ".panacode", "skills")
+          const foreign = path.join(directory, ".opencode", "skills")
+          const alias = path.join(directory, "imported-skills")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(native, "review"), { recursive: true })
+            await fs.mkdir(path.join(foreign, "external"), { recursive: true })
+            await write(native, "review", "Panacode project skill")
+            await write(foreign, "external", "OpenCode project skill")
+            await fs.symlink(foreign, alias, process.platform === "win32" ? "junction" : "dir")
+            await fs.writeFile(path.join(directory, "panacode.json"), JSON.stringify({ skills: [foreign, alias] }))
+          })
+
+          const discovered = yield* discover(directory, path.join(tmp.path, "global"))
+          const skill = yield* startEntries(
+            discovered.entries,
+            directory,
+            directory,
+            emptyDiscovery,
+            discovered.compatibility,
+          )
+          const skills = yield* skill.list()
+          expect(skills.find((item) => item.id === "review")?.path).toBe(AbsolutePath.make(path.join(native, "review", "SKILL.md")))
+          expect(skills.some((item) => item.id === "external")).toBe(false)
+          const watcher = yield* Watcher.Test
+          const watched = (yield* watcher.subscriptions()).map((target) => target.path)
+          expect(watched).toContain(native)
+          expect(watched).not.toContain(foreign)
+          expect(watched).not.toContain(alias)
         }),
       ),
     ),

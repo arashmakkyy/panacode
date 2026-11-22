@@ -25,16 +25,18 @@ function Install-Checked([string]$Executable, [string]$Label) {
     } finally { $setup.Dispose() }
 }
 
-function Test-OwnedListener([int]$ProcessId) {
-    $found = @(Get-NetTCPConnection -State Listen -LocalPort $port -LocalAddress '127.0.0.1' -ErrorAction SilentlyContinue)
+function Test-OwnedListener([int]$ProcessId, [int]$LocalPort = $port) {
+    $found = @(Get-NetTCPConnection -State Listen -LocalPort $LocalPort -LocalAddress '127.0.0.1' -ErrorAction SilentlyContinue)
     return $found.Count -eq 1 -and $found[0].OwningProcess -eq $ProcessId
 }
 
-function Local-Request([string]$Route,[string]$Password,[string]$Payload) {
+function Local-Request([string]$Route,[string]$Password,[string]$Payload,[string]$Origin = $base,[int]$ExpectedStatus = 200) {
     $headers = @{ Authorization = 'Basic ' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("opencode:$Password")) }
-    $params = @{Uri = "$base$Route"; Headers = $headers; NoProxy = $true; MaximumRedirection = 0; TimeoutSec = 8}
+    $params = @{Uri = "$Origin$Route"; Headers = $headers; NoProxy = $true; MaximumRedirection = 0; TimeoutSec = 8}
     if ($Payload) { return Invoke-RestMethod @params -Method Post -ContentType 'application/json' -Body $Payload }
-    return Invoke-RestMethod @params -Method Get
+    $body = Invoke-RestMethod @params -Method Get -SkipHttpErrorCheck -StatusCodeVariable statusCode
+    if ($statusCode -ne $ExpectedStatus) { throw "Expected HTTP $ExpectedStatus, received $statusCode." }
+    return $body
 }
 
 try {
@@ -111,7 +113,7 @@ try {
     }
     if ($old.HasExited -or !(Test-OwnedListener $old.Id)) { throw 'Installation stopped the unverified r10 listener.' }
     $errFile = Join-Path $work 'conflict.err'
-    $contender = Start-Process $cli -ArgumentList @('serve','--service') -RedirectStandardError $errFile -PassThru
+    $contender = Start-Process $cli -ArgumentList @('serve','--service','--port',"$port") -RedirectStandardError $errFile -PassThru
     try {
         if (!$contender.WaitForExit(60000)) { $contender.Kill(); throw 'The port conflict exceeded its deadline.' }
         if ($contender.ExitCode -eq 0 -or !(Select-String -LiteralPath $errFile -Pattern '28844.*already in use' -Quiet)) {
@@ -125,7 +127,32 @@ try {
     if ((Test-Path -LiteralPath $newFile) -or (Get-FileHash -LiteralPath $oldFile).Hash -ne $oldStateHash) {
         throw 'The ambiguous registration was replaced or promoted.'
     }
-    Write-Host 'The historical service and unverified registration survived installation and the bounded port conflict.'
+    # With no explicit port, a managed start must succeed alongside the genuine running r10.
+    & $cli service start | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'The candidate could not start beside the r10 service.' }
+    $output = & $cli service status --connection-json
+    if ($LASTEXITCODE -ne 0 -or !$output) { throw 'The new service could not be verified.' }
+    $alternate = $output | ConvertFrom-Json
+    $endpoint = [uri]$alternate.url
+    if ($alternate.product -ne 'panacode' -or !$alternate.id -or $alternate.id -eq $record.id -or
+        $alternate.pid -eq $old.Id -or $endpoint.Host -ne '127.0.0.1' -or $endpoint.Port -eq $port -or
+        !(Test-OwnedListener $alternate.pid $endpoint.Port)) { throw 'Invalid alternate service identity or port.' }
+    if (!$alternate.password -or $alternate.password -ceq $record.password) { throw 'The candidate reused a historical credential.' }
+    $sessionID = [Uri]::EscapeDataString($session.id)
+    $route = "/api/session/$sessionID"
+    if ((Local-Request $route $record.password).data.id -cne $session.id) { throw 'The historical session disappeared.' }
+    $alternateOrigin = $endpoint.GetLeftPart([UriPartial]::Authority)
+    if ((Local-Request '/api/info' $alternate.password -Origin $alternateOrigin).pid -ne $alternate.pid) {
+        throw 'The alternate credential did not authenticate to the new service.'
+    }
+    $null = Local-Request $route $alternate.password -Origin $alternateOrigin -ExpectedStatus 404
+    & $cli service stop | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'The new service could not stop independently.' }
+    if ($old.HasExited -or !(Test-OwnedListener $old.Id) -or (Local-Request '/api/info' $record.password).pid -ne $old.Id -or
+        (Get-FileHash -LiteralPath $oldFile).Hash -ne $oldStateHash -or (Get-FileHash -LiteralPath $oldConfig).Hash -ne $oldConfigHash) {
+        throw 'Running or stopping the new service affected r10 or its files.'
+    }
+    Write-Host 'The candidate ran on another port and stopped while r10 retained its listener and original records.'
 
     # Only this explicitly started disposable child is terminated, leaving an authentic stale r10 record.
     $old.Kill()
@@ -141,7 +168,6 @@ try {
                 if ($current.product -ne 'panacode' -or !$current.id -or $current.id -eq $record.id -or
                     $current.url.TrimEnd('/') -ne $base -or $current.password -cne $record.password -or
                     !(Test-OwnedListener $current.pid)) { throw 'Upgraded service identity or migrated credential is incorrect.' }
-                $sessionID = [Uri]::EscapeDataString($session.id)
                 try {
                     $recovered = (Local-Request "/api/session/$sessionID" $current.password).data
                     if ($recovered.id -eq $session.id -and $recovered.title -ceq $sessionTitle) { break }

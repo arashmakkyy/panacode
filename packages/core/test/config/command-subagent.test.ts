@@ -143,7 +143,7 @@ function project(
     if (format === "markdown")
       yield* Effect.promise(() =>
         Bun.write(
-          path.join(tmp.path, ".opencode/commands/review.md"),
+          path.join(tmp.path, ".panacode/commands/review.md"),
           [
             "---",
             "description: Review code",

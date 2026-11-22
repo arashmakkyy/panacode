@@ -1,6 +1,8 @@
+import { LEGACY_SETTINGS_STORE, SETTINGS_STORE } from "./keys"
+
 export function hasExistingAppState(entries: Array<{ name: string; directory: boolean }>) {
   return entries.some((entry) => {
-    if (entry.name === "opencode.settings") return true
+    if (entry.name === SETTINGS_STORE || entry.name === LEGACY_SETTINGS_STORE) return true
 
     if (entry.name.endsWith(".dat")) return true
 

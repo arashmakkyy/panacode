@@ -9,16 +9,16 @@ import { AbsolutePath } from "../schema.js"
 import { Skill } from "../skill.js"
 import { Config } from "../config.js"
 import os from "os"
-import opencodeContent from "./skill/opencode.md" with { type: "text" }
+import panacodeContent from "./skill/panacode.md" with { type: "text" }
 import reportContent from "./skill/report.md" with { type: "text" }
 
-export const OpencodeContent = opencodeContent
+export const PanacodeContent = panacodeContent
 export const ReportContent = reportContent
 
-export const OpencodeDescription =
+export const PanacodeDescription =
   "Use this skill for any question about Panacode itself, including how Panacode works, using or configuring it, migrating from V1 to V2, troubleshooting it, developing plugins or integrations, using the Panacode SDK, clients, server, or API, and contributing to the Panacode codebase. Also use it for Panacode agents, commands, skills, tools, permissions, MCP servers, providers, models, themes, keybinds, formatters, the CLI, TUI, desktop app, and web app."
 const REPORT_DESCRIPTION =
-  "Use when the user wants to report an panacode issue or bug. Collect standard diagnostics, add user-specific reproduction context, and publish the issue with GitHub CLI."
+  "Use when the user wants to report a Panacode issue or bug. Collect standard diagnostics, add user-specific reproduction context, and publish the issue with GitHub CLI."
 
 export const Plugin = define({
   id: "opencode.skill",
@@ -27,11 +27,11 @@ export const Plugin = define({
     yield* ctx.skill.transform((editor) => {
       editor.add(
         Skill.Info.make({
-          id: Skill.ID.make("opencode"),
+          id: Skill.ID.make("panacode"),
           name: Skill.Name.make("Panacode"),
-          description: OpencodeDescription,
-          path: AbsolutePath.make("skill://opencode/SKILL.md"),
-          content: OpencodeContent,
+          description: PanacodeDescription,
+          path: AbsolutePath.make("skill://panacode/SKILL.md"),
+          content: PanacodeContent,
         }),
       )
       editor.add(
@@ -61,7 +61,7 @@ const reportContentWithDiagnostics = Effect.fn("SkillPlugin.reportContentWithDia
     "",
     "These values were captured when the built-in report skill was registered. Verify them before publishing.",
     "",
-    `- panacode version: ${app.version}`,
+    `- Panacode version: ${app.version}`,
     `- install/channel: ${app.channel}`,
     `- OS: ${os.type()} ${os.release()} (${os.platform()} ${os.arch()}${emulated ? ", emulated on ARM64" : ""})`,
     `- Terminal: ${terminal()}`,

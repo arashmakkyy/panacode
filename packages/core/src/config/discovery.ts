@@ -91,7 +91,8 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
     globalRoots.slice(0, configDirectories.length).includes(current) || options?.project === false
       ? []
       : yield* fs.up({ targets: ["."], start: location.directory }).pipe(Effect.orDie)
-  const candidates = [".claude", ".agents", projectDir, legacyDir, ...names.toReversed(), ...legacyNames.toReversed()]
+  const candidates = [".claude", ".agents", projectDir, ...names.toReversed()]
+  if (options?.importOpenCodeToolOutput) candidates.push(legacyDir, ...legacyNames.toReversed())
   const discovered = yield* Effect.forEach(
     directories,
     (directory) =>

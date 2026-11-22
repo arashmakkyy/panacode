@@ -60,6 +60,8 @@ export interface Interface {
 
 export const Options = Schema.Struct({
   project: Schema.optional(Schema.Boolean),
+  // Read only tool_output from upstream project JSON when the Panacode host explicitly requests it.
+  importOpenCodeToolOutput: Schema.optional(Schema.Boolean),
   // false skips the system and global config dirs, ~/.claude, and ~/.agents;
   // wellknown, file, and content entries still load.
   global: Schema.optional(Schema.Boolean),

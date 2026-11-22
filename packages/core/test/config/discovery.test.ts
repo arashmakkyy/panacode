@@ -24,6 +24,7 @@ function discoverWith(
   directory: string,
   projectDirectory = directory,
   wrapFs?: (base: FSUtil.Interface) => Partial<FSUtil.Interface>,
+  importOpenCodeToolOutput = false,
 ) {
   const globalDir = path.join(root, "global")
   const fsLayer = wrapFs
@@ -33,7 +34,7 @@ function discoverWith(
       ).pipe(Layer.provide(AppNodeBuilder.build(FSUtil.node)))
     : AppNodeBuilder.build(FSUtil.node)
 
-  return ConfigDiscovery.discover({ system: false }).pipe(
+  return ConfigDiscovery.discover({ system: false, importOpenCodeToolOutput }).pipe(
     Effect.provide(
       Layer.mergeAll(
         fsLayer,
@@ -127,7 +128,7 @@ describe("ConfigDiscovery.discover", () => {
     ),
   )
 
-  it.live("discovers legacy OpenCode project config separately from Panacode sources", () =>
+  it.live("discovers OpenCode project files only with explicit tool_output compatibility", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
@@ -141,7 +142,20 @@ describe("ConfigDiscovery.discover", () => {
             await fs.writeFile(path.join(project, "panacode.json"), "{}")
           })
 
-          const sources = yield* discoverWith(root, project, project)
+          const probed: string[] = []
+          const native = yield* discoverWith(root, project, project, (base) => ({
+            resolve: (target) => {
+              probed.push(target)
+              return base.resolve(target)
+            },
+            isFile: (target) => {
+              probed.push(target)
+              return base.isFile(target)
+            },
+          }))
+          expect(native.legacy).toEqual([])
+          expect(probed.filter((target) => /^(?:\.opencode|opencode\.jsonc?)$/.test(path.basename(target)))).toEqual([])
+          const sources = yield* discoverWith(root, project, project, undefined, true)
           const direct = sources.direct.filter((item) => inFixture(project, item)).map((item) => path.relative(project, item))
           expect(direct).toEqual(["panacode.json", "panacode.jsonc"])
           expect(sources.project).toContainEqual({

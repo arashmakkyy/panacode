@@ -2,6 +2,7 @@ export * as ConfigCompatibilityPlugin from "./compatibility.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
 import { FSUtil } from "@opencode/util/fs-util"
+import { nativeConfigPath } from "@opencode/util/product-path"
 import path from "path"
 import { Effect, FiberMap, PubSub, Semaphore, Stream } from "effect"
 import { Config } from "../../config.js"
@@ -45,6 +46,7 @@ export const Plugin = define({
         const directories = [...roots.claude, ...roots.agents].map((root) => path.join(root, "skills"))
         const loaded = new Map<Skill.ID, Skill.Info>()
         for (const directory of directories) {
+          if (!nativeConfigPath(directory, true)) continue
           const resolved = yield* fs.realPath(directory).pipe(Effect.orElseSucceed(() => undefined))
           if (!resolved) continue
           yield* watch(resolved, "directory")

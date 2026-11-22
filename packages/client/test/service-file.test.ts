@@ -3,7 +3,7 @@ import { link, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os"
 import path from "node:path"
 import type { Info } from "../src/service"
-import { publishRegistration, registrationSnapshot, removeOwned, withRegistrationLock } from "../src/service-file"
+import { managedServiceTarget, publishRegistration, registrationSnapshot, removeOwned, withRegistrationLock } from "../src/service-file"
 
 const registration = (id: string, pid: number): Info => ({
   id,
@@ -175,6 +175,27 @@ test("linked state files and handoff sidecars are rejected before reading or pub
   const { environment } = await import("../src/pty-handoff")
   await expect(environment(file)).rejects.toThrow("Unsafe")
   expect(await readFile(foreign, "utf8")).toBe(original)
+})
+
+test("managed profile preserves a live unverified registration and ignores a dead r10 sibling", async () => {
+  await using root = await fixtureRoot()
+  using listener = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("witness") })
+  const file = path.join(root.path, "service.json")
+  const sibling = path.join(root.path, "service-prod.json")
+  const r10 = { id: "historical", pid: process.pid, url: listener.url.href, password: "historical-secret" }
+  for (const [name, record] of [[file, { ...r10, product: "panacode" }], [sibling, r10]] as const) {
+    const bytes = JSON.stringify(record)
+    await writeFile(name, bytes)
+    const target = await managedServiceTarget(file)
+    expect(target.file).not.toBe(file)
+    expect(target.env?.XDG_STATE_HOME).toBe(path.dirname(path.dirname(target.file)))
+    expect(target.env?.XDG_DATA_HOME).toBe(path.join(root.path, "coexist", "service", "data"))
+    expect(await readFile(name, "utf8")).toBe(bytes)
+    await rm(name)
+  }
+  await writeFile(sibling, JSON.stringify({ ...r10, pid: 2_147_483_647 }))
+  expect(await managedServiceTarget(file)).toEqual({ file, env: undefined })
+  expect(await fetch(listener.url).then((res) => res.text())).toBe("witness")
 })
 
 async function fixtureRoot() {

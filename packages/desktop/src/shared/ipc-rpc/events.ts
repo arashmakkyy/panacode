@@ -74,6 +74,7 @@ export class PluginMenubarItemsChanged extends Schema.TaggedClass<PluginMenubarI
 // Main adopted another background service origin; every window moves its sidecar requests to it.
 export class SidecarChanged extends Schema.TaggedClass<SidecarChanged>()("SidecarChanged", {
   url: Schema.String,
+  separateHistory: Schema.optional(Schema.Boolean),
 }) {}
 
 export const DesktopEvent = Schema.Union([

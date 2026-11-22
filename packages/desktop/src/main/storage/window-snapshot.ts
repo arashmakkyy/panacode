@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from "node:fs"
 import path from "node:path"
-import { DatabaseSync } from "node:sqlite"
+import { openPrivateSqlite } from "./open-private-sqlite"
 import type { WindowSnapshot } from "../../shared/ipc-transport"
 import { migrateDatabase } from "./migration"
 import { readEnableState } from "../plugin/enable-state"
@@ -14,7 +14,7 @@ export function readWindowSnapshot(userData: string, names: readonly string[]): 
 
   try {
     const legacy = readdirSync(userData).some((name) => name === "default.dat" || /^opencode\..+\.dat$/.test(name))
-    const db = new DatabaseSync(file)
+    const db = openPrivateSqlite(file)
 
     try {
       migrateDatabase(db)

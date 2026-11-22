@@ -10,6 +10,7 @@ import { httpClient } from "@opencode/util/effect/app-node-platform"
 import { AbsolutePath } from "../schema.js"
 import { Hash } from "@opencode/util/hash"
 
+const versionMarker = ".panacode-version"
 const skillConcurrency = 4
 const fileConcurrency = 8
 
@@ -119,7 +120,7 @@ const layer = Layer.effect(
             }
 
             const skillUrl = new URL(`${encodeURIComponent(skill.name)}/`, source)
-            const versionFile = path.join(root, ".opencode-version")
+            const versionFile = path.join(root, versionMarker)
             const files = skill.files.map((file) => {
               if (!isSafeRelativePath(file)) return undefined
               let resource: URL
@@ -169,7 +170,7 @@ const layer = Layer.effect(
                     (yield* fs.exists(path.join(staging, "SKILL.md")).pipe(Effect.orDie)) ||
                     (yield* fs.exists(path.join(staging, `${skill.name}.md`)).pipe(Effect.orDie))
                   if (!exists) return
-                  yield* fs.writeFileString(path.join(staging, ".opencode-version"), version)
+                  yield* fs.writeFileString(path.join(staging, versionMarker), version)
                   yield* Effect.uninterruptible(
                     Effect.gen(function* () {
                       const cached = yield* fs.exists(root).pipe(Effect.orDie)

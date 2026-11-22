@@ -115,6 +115,7 @@ describe("SkillDiscovery.pull", () => {
       const first = yield* catalog.pull([{ name: "deploy", version: "1", files: ["SKILL.md"] }], {
         "/catalog/deploy/SKILL.md": "# Old",
       })
+      expect(yield* Effect.promise(() => Bun.file(path.join(first.directories[0], ".panacode-version")).text())).toBe("1")
       const second = yield* catalog.pull([{ name: "deploy", version: "2", files: ["SKILL.md"] }], {
         "/catalog/deploy/SKILL.md": "# New",
       })

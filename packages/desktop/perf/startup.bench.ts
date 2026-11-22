@@ -128,7 +128,7 @@ export default bench({
           for (const dir of ["data", "config", "cache", "state", "desktop", "session", "home"])
             mkdirSync(join(root, dir), { recursive: true })
           writeFileSync(
-            join(root, "desktop", "opencode.settings"),
+            join(root, "desktop", "panacode.settings"),
             JSON.stringify({ firstLaunchOnboardingComplete: true }),
           )
           writeFileSync(join(root, "desktop", "opencode.global.dat"), JSON.stringify({ language: '{"locale":"en"}' }))

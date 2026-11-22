@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { mkdir, writeFile } from "node:fs/promises"
+import { link, mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { TerminalColors } from "@opentui/core"
 import { allThemes, hasTheme, getOpenCodeTheme, parseTheme, resolveTheme } from "../src/theme"
@@ -139,9 +139,14 @@ test("theme directories include global config before project directories", async
   const global = path.join(tmp.path, "global")
   const project = path.join(tmp.path, "repo", "package")
   await mkdir(path.join(global, "themes"), { recursive: true })
-  await mkdir(path.join(project, ".opencode", "themes"), { recursive: true })
+  await mkdir(path.join(project, ".panacode", "themes"), { recursive: true })
   await writeFile(path.join(global, "themes", "global.json"), JSON.stringify({ source: "global" }))
-  await writeFile(path.join(project, ".opencode", "themes", "project.json"), JSON.stringify({ source: "project" }))
+  await writeFile(path.join(project, ".panacode", "themes", "project.json"), JSON.stringify({ source: "project" }))
+
+  const foreign = path.join(project, ".opencode", "themes")
+  await mkdir(foreign, { recursive: true })
+  await writeFile(path.join(foreign, "foreign.json"), JSON.stringify({ source: "foreign" }))
+  await link(path.join(foreign, "foreign.json"), path.join(project, ".panacode", "themes", "linked.json"))
 
   await expect(discoverThemes(configDirectories(global, project))).resolves.toEqual({
     global: { source: "global" },

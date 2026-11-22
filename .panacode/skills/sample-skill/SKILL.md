@@ -1,11 +1,11 @@
 ---
 name: sample-skill
-description: Use when the user says sample skill, skill demo, or asks how an opencode SKILL.md should be structured; demonstrates a tiny project-local skill with practical assistant workflow guidance.
+description: Use when the user says sample skill, skill demo, or asks how a Panacode SKILL.md should be structured; demonstrates a tiny project-local skill with practical assistant workflow guidance.
 ---
 
 # Sample Skill
 
-This is a minimal project-local opencode skill. It exists as a reference for how a skill is structured and as a tiny reusable workflow the assistant can load when the user asks for a skill example.
+This is a minimal project-local Panacode skill. It exists as a reference for how a skill is structured and as a tiny reusable workflow the assistant can load when the user asks for a skill example.
 
 ## When To Use
 
@@ -26,6 +26,6 @@ This is a minimal project-local opencode skill. It exists as a reference for how
 When this skill is relevant, keep responses direct and actionable:
 
 ```text
-I created a project-local skill at .opencode/skills/sample-skill/SKILL.md.
-Restart opencode for the new skill to be discovered by future sessions.
+I created a project-local skill at .panacode/skills/sample-skill/SKILL.md.
+The active project watches this directory and refreshes its skill list when files change.
 ```

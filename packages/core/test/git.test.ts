@@ -333,11 +333,11 @@ describe("Git trees", () => {
         yield* Effect.promise(() => $`git --git-dir ${storage} config --local --includes core.autocrlf`.text()),
       ).toBe("false\n")
       expect(
-        (yield* Effect.promise(() => fs.readFile(path.join(storage, "config"), "utf8"))).match(/opencode\.gitconfig/g),
+        (yield* Effect.promise(() => fs.readFile(path.join(storage, "config"), "utf8"))).match(/panacode\.gitconfig/g),
       ).toHaveLength(1)
       expect(
         yield* Effect.promise(() => $`git --git-dir ${storage} config --local --get-all include.path`.text()),
-      ).toBe("opencode.gitconfig\nfirst.gitconfig\nsecond.gitconfig\n")
+      ).toBe("panacode.gitconfig\nfirst.gitconfig\nsecond.gitconfig\n")
       yield* git.index.refresh({ repository, scope: RelativePath.make("scope") })
       const before = yield* git.tree.write(repository)
 
@@ -607,13 +607,33 @@ describe("Git capture recovery", () => {
     return { root, project, repository, capture }
   })
 
+  it.live("preserves the include used by older Panacode snapshot stores", () =>
+    Effect.gen(function* () {
+      const { repository, capture } = yield* setup
+      const config = path.join(repository.gitDirectory, "config")
+      const legacy = path.join(repository.gitDirectory, "opencode.gitconfig")
+      yield* Effect.promise(async () => {
+        await fs.rename(path.join(repository.gitDirectory, "panacode.gitconfig"), legacy)
+        const previous = (await fs.readFile(config, "utf8")).replace("panacode.gitconfig", "opencode.gitconfig")
+        await fs.writeFile(config, previous + "\n[include]\n\tpath = user.gitconfig\n")
+        await fs.writeFile(legacy, "[core]\n\tautocrlf = true\n")
+      })
+      yield* capture()
+      expect(yield* Effect.promise(() => fs.readFile(legacy, "utf8"))).toContain("autocrlf = false")
+      expect(yield* Effect.promise(() => fs.readFile(config, "utf8"))).toContain("path = user.gitconfig")
+      expect(yield* Effect.promise(() => Bun.file(path.join(repository.gitDirectory, "panacode.gitconfig")).exists())).toBe(false)
+    }),
+  )
+
   it.live("sweeps abandoned temporary indexes by their creation time, not their mtime", () =>
     Effect.gen(function* () {
       const { repository, capture } = yield* setup
       const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000
-      const live = path.join(repository.gitDirectory, `index.opencode-${Date.now()}-1-live`)
-      const abandoned = path.join(repository.gitDirectory, `index.opencode-${twoHoursAgo}-1-abandoned`)
+      const live = path.join(repository.gitDirectory, `index.panacode-${Date.now()}-1-live`)
+      const abandoned = path.join(repository.gitDirectory, `index.panacode-${twoHoursAgo}-1-abandoned`)
+      const foreign = path.join(repository.gitDirectory, `index.opencode-${twoHoursAgo}-1-foreign`)
       yield* Effect.promise(async () => {
+        await Bun.write(foreign, "foreign index")
         await Bun.write(live, "")
         await Bun.write(abandoned, "")
         // A hard link to an index nobody wrote for hours carries that old mtime while in use.
@@ -622,6 +642,7 @@ describe("Git capture recovery", () => {
       yield* capture()
       expect(yield* Effect.promise(() => Bun.file(live).exists())).toBe(true)
       expect(yield* Effect.promise(() => Bun.file(abandoned).exists())).toBe(false)
+      expect(yield* Effect.promise(() => Bun.file(foreign).text())).toBe("foreign index")
     }),
   )
 

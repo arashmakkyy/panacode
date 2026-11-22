@@ -73,15 +73,40 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
   return yield* Effect.scoped(
     Effect.gen(function* () {
       const foreground = options.mode === "default"
+      const privateProfile = process.env.PANACODE_SERVICE_COEXIST === "1"
       const serviceOptions = options.mode === "service" ? yield* ServiceConfig.options() : undefined
-      const expectedRegistration = serviceOptions ? yield* Effect.tryPromise(() => registrationSnapshot(serviceOptions.file)) : undefined
       const config = options.mode === "service" ? yield* ServiceConfig.read() : {}
       const runConfig = Effect.runPromiseWith(yield* Effect.context<Global.Service | FileSystem.FileSystem>())
-      const hostname = options.hostname ?? config.hostname ?? "127.0.0.1"
+      const hostname = privateProfile || serviceOptions?.privateProfile ? "127.0.0.1" : options.hostname ?? config.hostname ?? "127.0.0.1"
       const port = options.port ?? config.port ?? (options.mode === "service" ? ServiceConfig.defaultPort() : undefined)
+      const automaticPort =
+        serviceOptions !== undefined &&
+        options.port === undefined &&
+        config.port === undefined &&
+        (hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1")
+      if (serviceOptions?.privateProfile) {
+        // Global paths are captured at import. Start the managed process with its private XDG
+        // roots already set, even for a direct invocation from the historical profile.
+        const pinnedPort = options.port ?? config.port
+        const endpoint = yield* Service.ensure({
+          ...serviceOptions,
+          command: [
+            ...serviceOptions.command,
+            "--hostname",
+            hostname,
+            ...(pinnedPort === undefined ? [] : ["--port", String(pinnedPort)]),
+            ...(options.cors ?? []).flatMap((origin) => ["--cors", origin]),
+          ],
+        })
+        if (pinnedPort && new URL(endpoint.url).port !== String(pinnedPort)) {
+          return yield* Effect.fail(new Error(`The verified service already runs on another port. Stop it before selecting port ${pinnedPort}.`))
+        }
+        return
+      }
+      const expectedRegistration = serviceOptions ? yield* Effect.tryPromise(() => registrationSnapshot(serviceOptions.file)) : undefined
       const findIncumbent =
         serviceOptions !== undefined && port !== undefined
-          ? Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) })
+          ? Service.incumbent({ ...serviceOptions, url: automaticPort ? undefined : serviceURL(hostname, port) })
           : undefined
       if (findIncumbent !== undefined && (yield* findIncumbent) !== undefined) return
       // Desktop can launch the service directly without injecting its saved environment.
@@ -94,7 +119,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const environmentPassword = yield* Env.consumeServerPassword
       const password =
         options.mode === "service"
-          ? config.password || randomBytes(32).toString("base64url")
+          ? (!privateProfile && config.password) || randomBytes(32).toString("base64url")
           : environmentPassword
             ? Redacted.value(environmentPassword)
             : randomBytes(32).toString("base64url")
@@ -104,7 +129,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const instanceID = randomUUID()
       const transform = yield* WebUi.handler()
       const remote = { urls: [] as ReadonlyArray<string> }
-      const launch = start(
+      const launch = (bindPort: number | undefined) => start(
         {
           app: {
             name: process.env.PANACODE_CLIENT ?? OPENCODE_ARTIFACT,
@@ -113,7 +138,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
             instance: instanceID,
           },
           hostname,
-          port,
+          port: bindPort,
           cors: options.cors ?? config.cors,
           password,
           serviceProofKey,
@@ -137,6 +162,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
               truthy(process.env.PANACODE_DISABLE_CLAUDE_CODE) ||
               truthy(process.env.PANACODE_DISABLE_CLAUDE_CODE_SKILLS)
             ),
+            importOpenCodeToolOutput: truthy(process.env.PANACODE_IMPORT_OPENCODE_TOOL_OUTPUT),
             file: process.env.PANACODE_CONFIG,
             content: process.env.PANACODE_CONFIG_CONTENT,
           },
@@ -158,7 +184,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
                 ServiceRegistration.register({
                   controlToken,
                   expectedRegistration,
-                  prepareConfig: config.password ? undefined : () => runConfig(ServiceConfig.password(password)),
+                  prepareConfig: privateProfile || config.password ? undefined : () => runConfig(ServiceConfig.password(password)),
                   terminals,
                   address,
                   password,
@@ -170,10 +196,21 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         transform,
         () => remote.urls,
       )
-      const server = yield* launch.pipe(
+      const server = yield* launch(port).pipe(
         Effect.catch((error) => {
           if (findIncumbent === undefined || !addressInUse(error)) return Effect.fail(error)
           return Effect.gen(function* () {
+            if (automaticPort) {
+              if ((yield* findIncumbent) !== undefined) return
+              // Bind atomically with the kernel. Publication is serialized before boot and the
+              // losing contender may exit only after verifying the winner over its control channel.
+              return yield* launch(0).pipe(
+                Effect.catch((failure) => Effect.gen(function* () {
+                  if ((yield* findIncumbent) !== undefined) return
+                  return yield* Effect.fail(failure)
+                })),
+              )
+            }
             const deadline = Date.now() + 15_000
             while (Date.now() < deadline) {
               const found = yield* findIncumbent.pipe(Effect.timeoutOption(deadline - Date.now()))
@@ -181,7 +218,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
               yield* Effect.sleep("100 millis")
               if (Date.now() >= deadline) break
               // Failed binds close their scope; a successful bind may take longer than this window to boot.
-              const server = yield* launch.pipe(Effect.catchIf(addressInUse, () => Effect.void))
+              const server = yield* launch(port).pipe(Effect.catchIf(addressInUse, () => Effect.void))
               if (server !== undefined) return server
             }
             const owner = port === undefined ? undefined : yield* PortOwner.describe(port, hostname)
@@ -196,7 +233,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         }),
       )
       if (server === undefined) return
-      if (serviceOptions !== undefined && config.remote !== undefined && NetAddress.isInetAddress(server.address)) {
+      if (serviceOptions !== undefined && !privateProfile && config.remote !== undefined && NetAddress.isInetAddress(server.address)) {
         const bound = NetAddress.formatIp(server.address.address)
         // A wildcard bind also listens on loopback, which is all the tunnel needs to reach.
         const target =

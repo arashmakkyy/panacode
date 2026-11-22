@@ -520,6 +520,9 @@ export const dict = {
   "toast.project.copyID.failed.description": "An error occurred while copying the project ID",
 
   "toast.project.reloadFailed.title": "Failed to reload {{project}}",
+  "toast.separateHistory.title": "Separate session history is active",
+  "toast.separateHistory.description":
+    "Another service may be using your usual history. Panacode saves new sessions in a separate profile. To return to your usual history, exit the earlier Panacode installation, stop the separate service, and reopen Panacode.",
   "toast.migration.failed.title": "Data migration failed",
   "toast.migration.progress.clearingOldEvents": "Clearing old events",
   "toast.migration.progress.migratingSessions": "Migrating sessions",

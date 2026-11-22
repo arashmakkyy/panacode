@@ -12,6 +12,7 @@ const saved = {
   path: process.env.PATH,
 }
 
+const installedName = process.platform === "win32" ? "panacode-pty.exe" : "panacode-pty"
 const executable = process.platform === "win32" ? "opencode-pty.exe" : "opencode-pty"
 
 afterEach(() => {
@@ -29,13 +30,13 @@ describe("Bun persistent PTY resolver", () => {
       await fs.writeFile(source, bytes)
 
       const installed = await resolveBun(cache, { path: source, version: "1.2.3", sha256 })
-      expect(installed).toBe(path.join(cache, "opencode-pty", `1.2.3-${sha256.slice(0, 16)}`, executable))
+      expect(installed).toBe(path.join(cache, "panacode-pty", `1.2.3-${sha256.slice(0, 16)}`, installedName))
       expect(await fs.readFile(installed)).toEqual(bytes)
 
       await expect(
         resolveBun(cache, { path: source, version: "9.9.9", sha256: "0".repeat(64) }),
       ).rejects.toThrow("Embedded opencode-pty checksum mismatch")
-      await expect(fs.stat(path.join(cache, "opencode-pty", `9.9.9-${"0".repeat(16)}`, executable))).rejects.toMatchObject({
+      await expect(fs.stat(path.join(cache, "panacode-pty", `9.9.9-${"0".repeat(16)}`, installedName))).rejects.toMatchObject({
         code: "ENOENT",
       })
     } finally {
@@ -120,7 +121,7 @@ describe("Bun persistent PTY resolver", () => {
       process.env.PANACODE_PTY_BIN = lookalike
 
       const installed = await resolveBun(cache, { path: source, version: "3.0.0", sha256 })
-      expect(installed.startsWith(path.join(cache, "opencode-pty"))).toBeTrue()
+      expect(installed.startsWith(path.join(cache, "panacode-pty"))).toBeTrue()
       expect(installed).not.toBe(lookalike)
       expect(await fs.readFile(lookalike, "utf8")).toBe("not the asset")
     } finally {

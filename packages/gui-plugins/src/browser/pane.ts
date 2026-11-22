@@ -96,7 +96,7 @@ export function createBrowserPane(input: {
       if (win.isDestroyed() || win.webContents.isDestroyed()) throw new Error("browser.pane.owner.unavailable")
       const sessionID = SessionID.make(target.session)
       const storageKey = `${target.server}\n${sessionID}`
-      const partition = `opencode-browser-${crypto.randomUUID()}`
+      const partition = `panacode-browser-${crypto.randomUUID()}`
 
       // Navigation guards cover documents; subresources (img, script, fetch) also must not read
       // file: URLs outside the roots. One listener per partition covers every page in this attachment.

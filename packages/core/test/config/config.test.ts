@@ -86,6 +86,12 @@ function testLayer(
   return Layer.mergeAll(built, watcher)
 }
 
+function legacyConfigLayer(directory: string, global: string) {
+  return testLayer(directory, global, directory, undefined, undefined, undefined, undefined, {
+    importOpenCodeToolOutput: true,
+  })
+}
+
 // A path-and-bytes snapshot: a legacy operation that creates a dependency directory or an empty
 // cache directory must fail the same comparison as a rewritten file.
 async function snapshotTree(root: string) {
@@ -748,7 +754,7 @@ describe("Config", () => {
               )
               expect(legacy).toHaveLength(2)
               expect(legacy.map((entry) => entry.info.tool_output)).toEqual([{ max_lines: 42, max_bytes: 4096 }, { max_lines: 7 }])
-            }).pipe(Effect.provide(testLayer(project, global))),
+            }).pipe(Effect.provide(legacyConfigLayer(project, global))),
           ),
         )
       }),
@@ -781,7 +787,7 @@ describe("Config", () => {
           )
           expect(plugins).toEqual([])
           expect(Config.latest(entries, "shell")).toBeUndefined()
-          expect(Config.latest(entries, "tool_output")).toEqual({ max_lines: 47 })
+          expect(Config.latest(entries, "tool_output")).toBeUndefined()
           if (!service.update) throw new Error("Missing config update entry point")
           expect((yield* Effect.exit(service.update({ shell: "new-shell" })))._tag).toBe("Failure")
           expect(yield* Effect.promise(() => fs.readFile(path.join(foreign, "opencode.json"), "utf8"))).toBe(text)
@@ -869,7 +875,7 @@ describe("Config", () => {
               expect(yield* Effect.promise(() => readOptional(imported))).toBeUndefined()
               expect(yield* Effect.promise(() => readOptional(commandRan))).toBeUndefined()
               expect(yield* Effect.promise(() => snapshotTree(project))).toEqual(before)
-            }).pipe(Effect.provide(testLayer(project, global))),
+            }).pipe(Effect.provide(legacyConfigLayer(project, global))),
           ),
         )
       }),
@@ -981,7 +987,7 @@ describe("Config", () => {
               ).toEqual(["child/.opencode/opencode.json"])
               expect([...after.keys()].filter((file) => !before.has(file))).toEqual([])
               expect(after.size).toBe(before.size)
-            }).pipe(Effect.provide(testLayer(child, global, child))),
+            }).pipe(Effect.provide(legacyConfigLayer(child, global))),
           ),
         )
       }),

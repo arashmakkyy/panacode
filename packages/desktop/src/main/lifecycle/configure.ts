@@ -66,7 +66,7 @@ export function acquireApplicationLock() {
 function createTestRoot() {
   if (app.isPackaged) return
   const root = testOnboarding
-    ? path.join(tmpdir(), `opencode-onboarding-${randomUUID()}`)
+    ? path.join(tmpdir(), `panacode-onboarding-${randomUUID()}`)
     : process.env.PANACODE_DESKTOP_TEST_ROOT
 
   if (!root) return undefined

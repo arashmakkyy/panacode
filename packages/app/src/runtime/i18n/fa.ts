@@ -549,6 +549,9 @@ export const dict = {
   "workspace.delete.confirm": "فضای کاری «{{name}}» حذف شود؟",
   "workspace.delete.button": "حذف فضای کاری",
   "dialog.usageExceeded.dontShowAgain": "دیگر نشان نده",
+  "toast.separateHistory.title": "تاریخچهٔ جداگانهٔ گفت‌وگوها فعال است",
+  "toast.separateHistory.description":
+    "ممکن است سرویس دیگری در حال استفاده از تاریخچهٔ اصلی باشد. پاناکد گفت‌وگوهای تازه را در پروفایل جداگانه ذخیره می‌کند. برای بازگشت، از نصب قبلی پاناکد خارج شو، سرویس پروفایل جداگانه را متوقف کن و پاناکد را دوباره باز کن.",
   "toast.migration.failed.title": "انتقال داده‌ها ناموفق بود",
   "command.session.background": "انتقال به پس‌زمینه",
   "settings.tab.preferences": "ترجیحات",

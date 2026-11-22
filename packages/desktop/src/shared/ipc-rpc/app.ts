@@ -3,6 +3,7 @@ import { Rpc, RpcGroup } from "effect/rpc"
 
 const ServerReadyData = Schema.Struct({
   url: Schema.String,
+  separateHistory: Schema.optional(Schema.Boolean),
 })
 
 export const AppAwaitInitialization = Rpc.make("AppAwaitInitialization", { success: ServerReadyData })

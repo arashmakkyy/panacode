@@ -70,7 +70,7 @@ const pageStatsScript = `(() => {
 
 const setup: Plugin.MainSetup = (ctx) => {
   const capture = async (root: string, includeServer: boolean) => {
-    const directory = path.join(root, `opencode-heap-${new Date().toISOString().replace(/[:.]/g, "")}`)
+    const directory = path.join(root, `panacode-heap-${new Date().toISOString().replace(/[:.]/g, "")}`)
 
     // Snapshots hold prompts, file contents and credentials. Recursive, because Downloads can be missing on Linux.
     await mkdir(directory, { recursive: true, mode: 0o700 })

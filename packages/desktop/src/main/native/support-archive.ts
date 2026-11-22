@@ -34,7 +34,7 @@ const Diagnostic = Schema.Struct({
   errorCode: Schema.optional(
     Schema.Literals(["startup-timeout", "bind-failed", "spawn-failed", "exit", "missing-cli", "unknown"]),
   ),
-  reason: Schema.optional(Schema.Literals(["missing", "version-mismatch"])),
+  reason: Schema.optional(Schema.Literals(["missing", "version-mismatch", "private-profile"])),
 })
 
 export type DiagnosticRecord = Omit<typeof Diagnostic.Type, "at">

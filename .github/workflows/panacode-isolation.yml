@@ -153,6 +153,10 @@ jobs:
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/core --min-pass 58 --max-skip 1 -- ./test/config/config.test.ts ./test/config/discovery.test.ts ./test/config/watch.test.ts ./test/storage-isolation.test.ts
 
+      - name: Product skill discovery and watch isolation
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        run: bun script/panacode-test-contract.ts --cwd packages/core --min-pass 21 --test-timeout 30000 --require-pass "loads Panacode project skills without loading or watching OpenCode skills" -- ./test/config/skill.test.ts ./test/plugin/skill.test.ts ./test/skill-discovery.test.ts
+
       - name: Persistent PTY resolver, daemon and handoff
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/core --min-pass 40 --max-skip 0 --test-timeout 30000 -- ./test/persistent-pty-binary.test.ts ./test/persistent-pty-daemon.test.ts ./test/persistent-pty-session.test.ts ./test/shell-daemon.test.ts
@@ -206,7 +210,7 @@ jobs:
       - name: Client registration, control channel and recovery
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         timeout-minutes: 20
-        run: bun script/panacode-test-contract.ts --cwd packages/client --min-pass 90 --max-skip 0 --test-timeout 30000 --timeout-ms 900000 -- ./test/service-probe.test.ts ./test/service-decision.test.ts ./test/service-control.test.ts ./test/service-file.test.ts ./test/service-reconnect.test.ts ./test/service-witness.test.ts ./test/service.test.ts ./test/promise-service.test.ts ./test/service-contender-pool.test.ts
+        run: bun script/panacode-test-contract.ts --cwd packages/client --min-pass 90 --max-skip 0 --test-timeout 30000 --timeout-ms 900000 --require-pass "managed profile preserves a live unverified registration and ignores a dead r10 sibling" -- ./test/service-probe.test.ts ./test/service-decision.test.ts ./test/service-control.test.ts ./test/service-file.test.ts ./test/service-reconnect.test.ts ./test/service-witness.test.ts ./test/service.test.ts ./test/promise-service.test.ts ./test/service-contender-pool.test.ts
 
   linux-cli:
     name: linux cli contracts (ubuntu-latest)
@@ -241,7 +245,7 @@ jobs:
       - name: Service, debug and upgrade contracts
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         timeout-minutes: 20
-        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 50 --max-skip 3 --test-timeout 30000 --timeout-ms 900000 -- ./test/service.test.ts ./test/server-connection.test.ts ./test/debug-config.test.ts ./test/debug-heap-dump.test.ts ./test/upgrade.test.ts
+        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 50 --max-skip 3 --test-timeout 30000 --timeout-ms 900000 --require-pass "an occupied channel default still elects exactly one authenticated service" -- ./test/service.test.ts ./test/server-connection.test.ts ./test/debug-config.test.ts ./test/debug-heap-dump.test.ts ./test/upgrade.test.ts
 
   windows-acceptance:
     name: windows acceptance (windows-latest)
@@ -287,7 +291,7 @@ jobs:
       - name: Service, updater and environment contracts
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         timeout-minutes: 20
-        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 60 --max-skip 3 --test-timeout 30000 --timeout-ms 900000 --require-pass "registers upgrade in root help" --require-pass "documents upgrade options in command help" -- ./test/service.test.ts ./test/server-connection.test.ts ./test/debug-config.test.ts ./test/debug-heap-dump.test.ts ./test/upgrade.test.ts ./test/updater-isolation.test.ts ./test/env.test.ts
+        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 60 --max-skip 3 --test-timeout 30000 --timeout-ms 900000 --require-pass "registers upgrade in root help" --require-pass "documents upgrade options in command help" --require-pass "an occupied channel default still elects exactly one authenticated service" -- ./test/service.test.ts ./test/server-connection.test.ts ./test/debug-config.test.ts ./test/debug-heap-dump.test.ts ./test/upgrade.test.ts ./test/updater-isolation.test.ts ./test/env.test.ts
 
       - name: Support ZIP private-data exclusion
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
@@ -314,7 +318,7 @@ jobs:
       - name: Client registration, control channel and recovery
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         timeout-minutes: 20
-        run: bun script/panacode-test-contract.ts --cwd packages/client --min-pass 88 --max-skip 2 --test-timeout 30000 --timeout-ms 900000 -- ./test/service-probe.test.ts ./test/service-decision.test.ts ./test/service-control.test.ts ./test/service-file.test.ts ./test/service-reconnect.test.ts ./test/service-witness.test.ts ./test/service.test.ts ./test/promise-service.test.ts ./test/service-contender-pool.test.ts
+        run: bun script/panacode-test-contract.ts --cwd packages/client --min-pass 88 --max-skip 2 --test-timeout 30000 --timeout-ms 900000 --require-pass "managed profile preserves a live unverified registration and ignores a dead r10 sibling" -- ./test/service-probe.test.ts ./test/service-decision.test.ts ./test/service-control.test.ts ./test/service-file.test.ts ./test/service-reconnect.test.ts ./test/service-witness.test.ts ./test/service.test.ts ./test/promise-service.test.ts ./test/service-contender-pool.test.ts
 
       # Real-WSL execution is a separate acceptance row; the repeatable WSL script/install
       # path runs through wsl/local.test.ts with Git Bash.

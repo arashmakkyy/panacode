@@ -10,14 +10,16 @@ import {
   ServerConnection,
   useCommand,
   useCurrentRoute,
+  useLanguage,
   usePluginServers,
   useTabs,
   type LayoutRoute,
   type Platform,
 } from "@opencode/app/desktop"
+import { showToast, toaster } from "@opencode/ui/toast"
 import { useTheme } from "@opencode/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
-import { createEffect, createMemo, createSignal, lazy, onCleanup, Show, Suspense, untrack } from "solid-js"
+import { createEffect, createMemo, createSignal, lazy, onCleanup, onMount, Show, Suspense, untrack } from "solid-js"
 import type { ElectronAPI } from "./api-types"
 import { DesktopFirstLaunchOnboarding } from "./onboarding"
 import { createDesktopPlatform } from "./platform"
@@ -116,6 +118,9 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
         <Show when={selectInterfaceMounted(startup.state())}>
           <AppInterface servers={servers()} router={router}>
             <DesktopStartupReady dispatch={startup.dispatch} />
+            <Show when={selectStartupRevealed(startup.state()) && selectSidecar(startup.state())?.separateHistory}>
+              <SeparateHistoryNotice />
+            </Show>
             <DesktopFirstLaunchOnboarding
               api={props.api}
               initialUrl={initialUrl}
@@ -257,6 +262,19 @@ function createStartupDriver(input: {
   initial.effects.forEach(run)
 
   return { state, dispatch }
+}
+
+function SeparateHistoryNotice() {
+  const language = useLanguage()
+  onMount(() => {
+    const id = showToast({
+      title: language.t("toast.separateHistory.title"),
+      description: language.t("toast.separateHistory.description"),
+      persistent: true,
+    })
+    onCleanup(() => toaster.dismiss(id))
+  })
+  return null
 }
 
 function DesktopStartupReady(props: { dispatch: (event: StartupEvent) => void }) {

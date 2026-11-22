@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test"
-import { mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs"
+import { linkSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
@@ -7,6 +7,7 @@ import { sql } from "drizzle-orm"
 import { Effect, Layer } from "effect"
 import { openDatabase } from "./database"
 import { importLegacyStores } from "./legacy"
+import { readWindowSnapshot } from "./window-snapshot"
 
 const now = new Date("2026-07-01T00:00:00.000Z")
 
@@ -64,6 +65,32 @@ describe("legacy store import", () => {
       { name: "opencode.window.w1.dat", key: "tabs", value: "[]" },
     ])
     expect(listing(root)).toEqual(["opencode.settings", "unrelated.txt"])
+  })
+
+  test("leaves shared legacy files and SQLite sidecars untouched across desktop startup", async () => {
+    const root = tempRoot()
+    const foreign = tempRoot()
+    const database = openDatabase(":memory:")
+    const store = path.join(foreign, "opencode.global.dat")
+    const native = path.join(root, "drafts.sqlite")
+    const content = JSON.stringify({ language: "private to another app" })
+    writeFileSync(store, content)
+    linkSync(store, path.join(root, "opencode.global.dat"))
+    writeStore(root, "default.dat", JSON.stringify({ theme: "dark" }))
+    try {
+      expect(await run(database.db, root)).toEqual({ imported: 1, removed: ["default.dat"] })
+      expect(rows(database.db)).toEqual([{ name: "default.dat", key: "theme", value: "dark" }])
+      expect(listing(root)).toEqual(["opencode.global.dat"])
+      // Exercise both the early window snapshot and the application's regular open.
+      writeFileSync(native, "")
+      linkSync(store, native + "-wal")
+      expect(readWindowSnapshot(root, ["opencode.global.dat"])).toEqual({ storage: {} })
+      expect(() => openDatabase(native)).toThrow()
+      expect(readFileSync(store, "utf8")).toBe(content)
+      expect(readFileSync(native)).toHaveLength(0)
+    } finally {
+      database.close()
+    }
   })
 
   test("does not overwrite state that already exists", async () => {

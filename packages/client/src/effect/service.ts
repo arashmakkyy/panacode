@@ -1,11 +1,11 @@
 import { Effect, Option, Schedule, Schema } from "effect"
 import type { DiscoverOptions, EnsureDiagnostic, EnsureOptions, StopOptions } from "../service.js"
 import { contenderPool, exitDiagnostic, spawnServiceContender } from "../service-contender.js"
-import { ensureTiming } from "../service-timing.js"
+import { ensureTiming, withEnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
 import { stopOwned } from "../service-stop.js"
-import { currentOwner, registrationBytes, removeOwned } from "../service-file.js"
+import { currentOwner, managedServiceTarget, registrationBytes, removeOwned } from "../service-file.js"
 import {
   decide,
   fallback,
@@ -34,6 +34,7 @@ export type Info = typeof Info.Type
 // Never spawns; escalation to ensure() is the caller's policy.
 /** Discover a healthy, compatible local service without starting one. */
 export const discoverInstance = Effect.fn("service.discoverInstance")(function* (options: DiscoverOptions = {}) {
+  if (options.file === undefined) options = { ...options, file: (yield* Effect.tryPromise(() => managedServiceTarget(fallback()))).file }
   const registration = yield* registered(options.file)
   if (registration.problem !== undefined) return undefined
   const found = registration.service
@@ -49,20 +50,26 @@ export const discover = (options: DiscoverOptions = {}) =>
 
 /** Recognize an authenticated compatible service bound to an expected URL, including while it starts or fails. */
 export const incumbent = Effect.fn("service.incumbent")(function* (
-  options: DiscoverOptions & { readonly url: string },
+  options: DiscoverOptions & { readonly url?: string },
 ) {
   const registration = yield* read(options.file)
   if (registration.problem !== undefined) {
     // An unidentified registration is never adopted. Probe the configured port without a
     // credential so the caller can still distinguish an occupied port from a free one.
-    yield* Effect.promise(() => occupied(options.url))
+    if (options.url) {
+      const url = options.url
+      yield* Effect.promise(() => occupied(url))
+    }
     return undefined
   }
   const info = registration.info
   if (info === undefined) return undefined
   const origin = localEndpoint(info)
-  const expected = localEndpoint({ url: options.url })
-  if (!origin || !expected || new URL(origin).origin !== new URL(expected).origin) return undefined
+  if (!origin) return undefined
+  if (options.url !== undefined) {
+    const expected = localEndpoint({ url: options.url })
+    if (!expected || new URL(origin).origin !== new URL(expected).origin) return undefined
+  }
   const found = (yield* Effect.promise(() => probeResult(info))).service
   if (!found?.compatible || found.error) return undefined
   if (!matchesVersion(found.version, options)) return undefined
@@ -82,6 +89,10 @@ export const verifiedRegistration = (options: DiscoverOptions = {}) =>
 /** Ensure a healthy, compatible local service is running. */
 export const ensureInstance = Effect.fn("service.ensureInstance")(function* (options: EnsureOptions = {}) {
   const timing = ensureTiming(options)
+  if (options.file === undefined) {
+    const target = yield* Effect.tryPromise(() => managedServiceTarget(fallback()))
+    options = { ...options, file: target.file, env: { ...options.env, ...target.env } }
+  }
   const pool = contenderPool(timing)
   const started = performance.now()
   let timeouts: { readonly info: Info; readonly count: number } | undefined
@@ -204,6 +215,10 @@ export const ensure = (options: EnsureOptions = {}) =>
 
 /** Stop the registered local service. */
 export const stop = Effect.fn("service.stop")(function* (options: StopOptions = {}) {
+  if (options.file === undefined) {
+    const target = yield* Effect.tryPromise(() => managedServiceTarget(fallback()))
+    options = withEnsureTiming({ ...options, file: target.file }, ensureTiming(options))
+  }
   const registration = yield* read(options.file)
   if (registration.problem !== undefined)
     return yield* Effect.fail(new Error(`${registration.problem} Refusing to stop an unidentified process.`))

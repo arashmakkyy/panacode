@@ -1,10 +1,12 @@
 import { readdir, readFile } from "node:fs/promises"
 import path from "node:path"
+import { nativeConfigPath } from "@opencode/util/product-path"
 
 export async function discoverThemes(directories: string[]) {
   const result: Record<string, unknown> = {}
   for (const directory of directories) {
     const themeDirectory = path.join(directory, "themes")
+    if (!nativeConfigPath(themeDirectory, true)) continue
     const entries = await readdir(themeDirectory, { withFileTypes: true }).catch((error: unknown) => {
       if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return []
       return Promise.reject(error)
@@ -14,6 +16,7 @@ export async function discoverThemes(directories: string[]) {
       .map((entry) => path.join(themeDirectory, entry.name))
       .sort()
     for (const file of files) {
+      if (!nativeConfigPath(file)) continue
       result[path.basename(file, ".json")] = JSON.parse(await readFile(file, "utf8")) as unknown
     }
   }

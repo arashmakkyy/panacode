@@ -29,7 +29,7 @@ export function onChange(listener: () => void) {
 
 /** What the renderer learns about the sidecar: its origin, never its credential. */
 export function ready(data: Data): ServerReadyData {
-  return { url: data.url }
+  return { url: data.url, ...(data.separateHistory ? { separateHistory: true } : {}) }
 }
 
 /** The Basic credential for a request to the sidecar origin, or undefined for any other URL. */

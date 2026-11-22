@@ -1,4 +1,6 @@
 import { Effect, FileSystem, Option, Path, Schema } from "effect"
+import { privateFileBytes } from "@opencode/client/service"
+import { privateInput } from "@opencode/util/product-path"
 import type { Database } from "./database"
 import { state } from "./schema"
 
@@ -27,10 +29,14 @@ export const importLegacyStores = Effect.fn("DesktopStorage.importLegacyStores")
     names,
     Effect.fnUntraced(function* (name) {
       const file = path.join(userData, name)
+      if (!privateInput(file)) return
       const stats = yield* fs.stat(file).pipe(Effect.orElseSucceed(() => undefined))
 
       if (stats?.type !== "File") return
-      const raw = yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => undefined))
+      const raw = yield* Effect.tryPromise(() => privateFileBytes(file)).pipe(
+        Effect.map((bytes) => bytes?.toString("utf8")),
+        Effect.orElseSucceed(() => undefined),
+      )
 
       if (raw === undefined) return
       const entries = decode(raw)
@@ -80,12 +86,13 @@ export const importLegacyStores = Effect.fn("DesktopStorage.importLegacyStores")
     })
   }
 
-  yield* Effect.forEach(candidates, (file) => fs.remove(file.path, { force: true }), {
+  const removable = candidates.filter((file) => privateInput(file.path))
+  yield* Effect.forEach(removable, (file) => fs.remove(file.path, { force: true }), {
     concurrency: "unbounded",
     discard: true,
   })
 
-  return { imported: rows.length, removed: candidates.map((file) => file.name) }
+  return { imported: rows.length, removed: removable.map((file) => file.name) }
 })
 
 function isStoreFile(name: string) {

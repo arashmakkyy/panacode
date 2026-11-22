@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, linkSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { createSettingsStore } from "./store"
@@ -17,6 +17,42 @@ describe("settings store", () => {
       JSON.stringify({ windowIds: ["a"], backgroundColor: "#ffffff" }, null, "\t"),
     )
     expect(createSettingsStore(file).get("backgroundColor")).toBe("#ffffff")
+  })
+
+  test("adopts an earlier Panacode settings file once and keeps the native file authoritative", () => {
+    const root = dir()
+    const file = path.join(root, "panacode.settings")
+    const previous = path.join(root, "opencode.settings")
+    const contents = JSON.stringify({ language: "fa", windowIds: ["a"], unknown: { keep: true } })
+    writeFileSync(previous, contents)
+    const store = createSettingsStore(file)
+    expect(store.get("language")).toBe("fa")
+    expect(readFileSync(file, "utf8")).toBe(contents)
+    expect(existsSync(previous)).toBe(false)
+    writeFileSync(previous, '{"language":"other"}')
+    expect(createSettingsStore(file).get("language")).toBe("fa")
+  })
+
+  test("skips linked legacy settings and keeps shared destinations and scratch files untouched", () => {
+    const root = dir()
+    const foreign = path.join(dir(), "opencode.settings")
+    const file = path.join(root, "panacode.settings")
+    const contents = '{"language":"private"}'
+    writeFileSync(foreign, contents)
+    linkSync(foreign, path.join(root, "opencode.settings"))
+    linkSync(foreign, file + ".tmp")
+    const store = createSettingsStore(file)
+    expect(store.get("language")).toBeUndefined()
+    expect(existsSync(file)).toBe(false)
+    store.set("language", "fa")
+    expect(readFileSync(foreign, "utf8")).toBe(contents)
+    const occupied = path.join(dir(), "panacode.settings")
+    linkSync(foreign, occupied)
+    const shared = createSettingsStore(occupied)
+    expect(shared.get("language")).toBeUndefined()
+    expect(() => shared.set("language", "fa")).toThrow()
+    expect(shared.get("language")).toBeUndefined()
+    expect(readFileSync(foreign, "utf8")).toBe(contents)
   })
 
   test("starts empty without a file, creates it on the first write, and refuses undefined", () => {

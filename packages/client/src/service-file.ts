@@ -3,7 +3,7 @@ import { createHash } from "node:crypto"
 import { constants } from "node:fs"
 import { connect } from "node:net"
 import { lstat, open, rename, rm, writeFile } from "node:fs/promises"
-import { resolve } from "node:path"
+import { basename, dirname, join, resolve } from "node:path"
 import { setTimeout as delay } from "node:timers/promises"
 import lockfile from "proper-lockfile"
 import { request } from "./service-control.js"
@@ -107,6 +107,64 @@ function listening(origin: URL) {
     socket.once("error", (error: NodeJS.ErrnoException) => finish(error.code !== "ECONNREFUSED"))
     socket.setTimeout(1_000, () => finish(true))
   })
+}
+
+/** Desktop and CLI select the same private profile while an older, unverified local service
+ * may still be using this profile's database. Never send HTTP credentials to a port witness. */
+export async function managedServiceTarget(file: string) {
+  const name = basename(file)
+  const profile = join(dirname(file), "coexist", name.replace(/\.json$/, ""))
+  const env = {
+    XDG_STATE_HOME: join(profile, "state"),
+    XDG_DATA_HOME: join(profile, "data"),
+    PANACODE_DB: "panacode.db",
+    PANACODE_SERVICE_COEXIST: "1",
+  }
+  const alternate = join(env.XDG_STATE_HOME, "panacode", name)
+  const normal = { file, env: undefined }
+  const isolated = { file: alternate, env }
+  // The private profile lives beneath the original state directory. A redirected component
+  // must not turn its data/state roots into another installation's directories.
+  for (const directory of [
+    dirname(profile),
+    profile,
+    env.XDG_STATE_HOME,
+    dirname(alternate),
+    env.XDG_DATA_HOME,
+    join(env.XDG_DATA_HOME, "panacode"),
+  ]) {
+    const entry = await lstat(directory).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error
+    })
+    if (!entry) continue
+    if (
+      !entry.isDirectory() ||
+      entry.isSymbolicLink() ||
+      (process.platform !== "win32" && (entry.uid !== process.getuid?.() || (entry.mode & 0o022) !== 0))
+    ) {
+      throw new Error("Unsafe Panacode coexistence profile directory")
+    }
+  }
+  // Keep reconnect/status/stop on the same instance after the historical process exits.
+  const active = await registrationBytes(alternate)
+  if (active) {
+    const record = parseRegistration(active.toString("utf8")).info
+    if (record?.control && (await request(record, "ping", 2_000)).ok) return isolated
+  }
+  const records = name === "service.json" ? [file, join(dirname(file), "service-prod.json")] : [file]
+  for (const candidate of records) {
+    const bytes = await registrationBytes(candidate)
+    if (!bytes) continue
+    const record = parseRegistration(bytes.toString("utf8"))
+    if (record.info?.control && (await request(record.info, "ping", 2_000)).ok) return normal
+    const url = record.info?.url ?? record.url
+    // A stale sibling cannot own the old database. It may name the port now held by our own
+    // contender between bind and publication. The primary record is itself a publication guard.
+    const pid = record.info?.pid ?? record.pid
+    if (candidate !== file && pid && !alive(pid)) continue
+    if (url && (await listening(new URL(url)))) return isolated
+  }
+  return normal
 }
 
 async function checkPrevious(bytes: Buffer, expected: string | undefined, next: Info) {

@@ -19,12 +19,10 @@ export class Repository extends Schema.Class<Repository>("Git.Repository")({
   commonDirectory: AbsolutePath,
 }) {}
 
-// Included from $GIT_DIR/config via include.path (git >= 1.7.10); OpenCode owns
+// Included from $GIT_DIR/config via include.path (git >= 1.7.10); Panacode owns
 // this file entirely, so updates are plain rewrites with no config parsing.
-const snapshotConfigFile = "opencode.gitconfig"
-const snapshotConfigInclude = `[include]
-	path = ${snapshotConfigFile}
-`
+const snapshotConfigFile = "panacode.gitconfig"
+const previousSnapshotConfigFile = "opencode.gitconfig"
 const snapshotConfig = `[core]
 	autocrlf = false
 	longpaths = true
@@ -43,7 +41,7 @@ const snapshotConfig = `[core]
 export const TreeID = Schema.String.pipe(Schema.brand("Git.TreeID"))
 export type TreeID = typeof TreeID.Type
 
-const temporaryIndexPrefix = "index.opencode-"
+const temporaryIndexPrefix = "index.panacode-"
 // Like `git gc --auto`, pack once loose objects accumulate, and combine packs before lookups slow down.
 // Room for paths on one Git command line after the Git path, repository flags, and quoting. Windows caps a command
 // line at 32,767 characters. macOS caps arguments plus environment at 1 MiB, and Linux caps them at 2 MiB by default.
@@ -243,7 +241,7 @@ const layer = Layer.effect(
 
     // Covers linked worktrees (gitdir file + commondir), HEAD and the ref it points at,
     // loose/packed/reftable refs, repository/worktree/global/XDG/system config, and the
-    // cached `opencode` project id, so external `git init`, a first commit or `git remote`
+    // cached `panacode` project id, so external `git init`, a first commit or `git remote`
     // edits change the stamp.
     const fingerprint = Effect.fn("Git.repo.fingerprint")(function* (dotGit: AbsolutePath) {
       const dot = yield* fs.stat(dotGit).pipe(Effect.orElseSucceed(() => undefined))
@@ -266,7 +264,7 @@ const layer = Layer.effect(
         path.join(gitDir, "config.worktree"),
         path.join(commonDir, "packed-refs"),
         path.join(commonDir, "reftable", "tables.list"),
-        path.join(commonDir, "opencode"),
+        path.join(commonDir, "panacode"),
         ...(ref ? [path.join(commonDir, ref), path.join(gitDir, ref)] : []),
         process.env.GIT_CONFIG_GLOBAL || path.join(home, ".gitconfig"),
         path.join(process.env.XDG_CONFIG_HOME || path.join(home, ".config"), "git", "config"),
@@ -477,6 +475,13 @@ const layer = Layer.effect(
       return repository
     })
 
+    // Older Panacode stores keep their original include and lock names so both versions
+    // serialize maintenance and read the same settings inside that private snapshot store.
+    const storeConfigFile = (directory: string) =>
+      fs.existsSafe(path.join(directory, previousSnapshotConfigFile)).pipe(
+        Effect.map((previous) => previous ? previousSnapshotConfigFile : snapshotConfigFile),
+      )
+
     const initRepository = Effect.fnUntraced(function* (input: {
       worktree: AbsolutePath
       gitDirectory: AbsolutePath
@@ -492,7 +497,9 @@ const layer = Layer.effect(
         ["init"],
       )
       yield* Effect.gen(function* () {
-        yield* fs.writeFileString(path.join(input.directory, snapshotConfigFile), snapshotConfig)
+        const name = yield* storeConfigFile(input.directory)
+        const snapshotConfigInclude = `[include]\n\tpath = ${name}\n`
+        yield* fs.writeFileString(path.join(input.directory, name), snapshotConfig)
         const config = path.join(input.directory, "config")
         const current = yield* fs.readFileString(config)
         if (current.includes(snapshotConfigInclude)) return
@@ -907,7 +914,7 @@ const layer = Layer.effect(
         "ls-files",
         "-z",
         "--",
-        literalPathspec(".opencode-probe"),
+        literalPathspec(".panacode-probe"),
       ]).pipe(Effect.match({ onSuccess: () => false, onFailure: (error) => error.cause === undefined }))
     })
 
@@ -926,9 +933,9 @@ const layer = Layer.effect(
       ).pipe(Effect.ignore, Effect.ensuring(fs.remove(temporary, { force: true }).pipe(Effect.ignore)))
     })
 
-    // Stores created by earlier releases would otherwise keep their original settings; only OpenCode's include file is rewritten, never `config`.
+    // Refresh the Panacode-owned include when the snapshot store's Git settings change.
     const ensureSnapshotConfig = Effect.fnUntraced(function* (repository: Repository) {
-      const file = path.join(repository.gitDirectory, snapshotConfigFile)
+      const file = path.join(repository.gitDirectory, yield* storeConfigFile(repository.gitDirectory))
       const current = yield* fs.readFileStringSafe(file).pipe(Effect.orElseSucceed(() => undefined))
       if (current === undefined || current === snapshotConfig) return
       // Concurrent Git processes must never read a partially written file.
@@ -1365,8 +1372,9 @@ const layer = Layer.effect(
 
     // Cross-process exclusion: concurrent packing would stay lossless but duplicate work and objects.
     const withPackLock = <A, E, R>(repository: Repository, effect: Effect.Effect<A, E, R>) => {
-      const file = path.join(repository.gitDirectory, "opencode-pack.lock")
       return Effect.gen(function* () {
+        const legacy = (yield* storeConfigFile(repository.gitDirectory)) === previousSnapshotConfigFile
+        const file = path.join(repository.gitDirectory, legacy ? "opencode-pack.lock" : "panacode-pack.lock")
         const stale = yield* fs.stat(file).pipe(
           Effect.map((info) => (Option.getOrUndefined(info.mtime)?.getTime() ?? 0) < Date.now() - 60 * 60 * 1000),
           Effect.orElseSucceed(() => false),

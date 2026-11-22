@@ -5,12 +5,12 @@ export { withEnsureTiming }
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
 import { stopOwned } from "../service-stop.js"
-import { currentOwner, registrationBytes, removeOwned } from "../service-file.js"
+import { currentOwner, managedServiceTarget, registrationBytes, removeOwned } from "../service-file.js"
 import { decide, fallback, headers, occupied, parseRegistration, probeResult, same } from "../service-probe.js"
 
 export * from "../service.js"
 export { fallback, headers }
-export { publishRegistration, migrateOwnedRegistration, registrationSnapshot, registrationBytes, privateFileBytes, currentOwner, renameServiceFile, withRegistrationLock } from "../service-file.js"
+export { managedServiceTarget, publishRegistration, migrateOwnedRegistration, registrationSnapshot, registrationBytes, privateFileBytes, currentOwner, renameServiceFile, withRegistrationLock } from "../service-file.js"
 export { answerControl, request as requestControl, type TerminalAction } from "../service-control.js"
 
 // Find, start, and stop the local opencode background service.
@@ -25,6 +25,7 @@ export async function discover(options: DiscoverOptions = {}) {
 }
 
 export async function discoverInstance(options: DiscoverOptions = {}) {
+  if (options.file === undefined) options = { ...options, file: (await managedServiceTarget(fallback())).file }
   const registration = await registered(options.file)
   if (registration.problem !== undefined) return undefined
   const found = registration.service
@@ -38,6 +39,10 @@ export async function discoverInstance(options: DiscoverOptions = {}) {
 /** Ensure a healthy, compatible local service is running. */
 export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   const timing = ensureTiming(options)
+  if (options.file === undefined) {
+    const target = await managedServiceTarget(fallback())
+    options = { ...options, file: target.file, env: { ...options.env, ...target.env } }
+  }
   const deadline = Date.now() + timing.promiseTimeout
   const pool = contenderPool(timing)
   const started = performance.now()
@@ -150,6 +155,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
 
 /** Stop the registered local service. */
 export async function stop(options: StopOptions = {}) {
+  if (options.file === undefined) options = withEnsureTiming({ ...options, file: (await managedServiceTarget(fallback())).file }, ensureTiming(options))
   const registration = await read(options.file)
   if (registration.problem !== undefined)
     throw new Error(`${registration.problem} Refusing to stop an unidentified process.`)

@@ -142,6 +142,7 @@ function makeRoutes<AuthError, AuthServices>(
       Config.configured({
         project: options.config?.project,
         claude: options.config?.claude,
+        importOpenCodeToolOutput: options.config?.importOpenCodeToolOutput,
         file: options.config?.file,
         content: options.config?.content,
       }),

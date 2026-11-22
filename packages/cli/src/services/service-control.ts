@@ -79,12 +79,15 @@ function ensureControlDirectory(directory: string) {
 }
 
 function controlPath(file: string, id: string) {
-  if (process.platform === "win32")
-    return `\\\\.\\pipe\\panacode-${createHash("sha256")
-      .update(path.resolve(path.dirname(file)))
-      .digest("hex")
-      .slice(0, 16)}-${id}`
-  return path.join(path.dirname(file), "control", `${id}.sock`)
+  const directory = path.dirname(file)
+  const scope = createHash("sha256").update(path.resolve(directory)).digest("hex").slice(0, 16)
+  if (process.platform === "win32") return `\\\\.\\pipe\\panacode-${scope}-${id}`
+  const socket = path.join(directory, "control", `${id}.sock`)
+  // sockaddr_un.sun_path is 104 bytes including NUL on macOS. Nested private profiles can
+  // exceed it even on ordinary user homes. The same owner-only directory checks apply in /tmp.
+  if (Buffer.byteLength(socket) < 104) return socket
+  const short = path.join("/tmp", `panacode-${process.getuid?.()}-${scope}`)
+  return path.join(short, id.length <= 36 ? id + ".sock" : createHash("sha256").update(id).digest("hex").slice(0, 32) + ".sock")
 }
 
 function isPipe(value: string) {

@@ -18,5 +18,6 @@ describe("sidecar authorization", () => {
 
   test("hands the renderer the origin only", () => {
     expect(ready(sidecar)).toEqual({ url: sidecar.url })
+    expect(ready({ ...sidecar, separateHistory: true })).toEqual({ url: sidecar.url, separateHistory: true })
   })
 })

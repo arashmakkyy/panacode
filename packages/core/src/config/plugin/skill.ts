@@ -4,6 +4,7 @@ import { define } from "@opencode/plugin/effect/plugin"
 import type { Entry } from "@opencode/schema/config"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
+import { nativeConfigPath } from "@opencode/util/product-path"
 import path from "path"
 import { Effect, FiberMap, PubSub, Semaphore, Stream } from "effect"
 import { Config } from "../../config.js"
@@ -117,9 +118,10 @@ export const Plugin = define({
                 }).pipe(Effect.as([] as AbsolutePath[])),
               ),
             )
-      const roots = (yield* Effect.forEach(directories, watchDirectory)).flat()
+      const allowed = directories.filter((dir) => nativeConfigPath(dir, true))
+      const roots = (yield* Effect.forEach(allowed, watchDirectory)).flat()
       const skills: Skill.Info[] = []
-      for (const directory of directories) {
+      for (const directory of allowed) {
         for (const filepath of yield* SkillScan.scan(directory)) {
           const resolved = yield* fs.realPath(filepath).pipe(Effect.orElseSucceed(() => filepath))
           if (!roots.some((root) => FSUtil.contains(root, resolved))) yield* watch(resolved, "file")

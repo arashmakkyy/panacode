@@ -114,13 +114,14 @@ serviceTest(
     )
     await until(() => snapshot(home).then((state) => state.info))
 
-    await expect(cli(home, "service", "start")).rejects.toThrow("no verified control channel")
+    // This home pins the old service's port. The CLI must report that conflict without taking it over.
+    await expect(cli(home, "service", "start")).rejects.toThrow(`Managed service port ${home.port} on 127.0.0.1 is already in use`)
     await expect(ensure(home)).rejects.toThrow("no verified control channel")
     // Protocol compatibility is checked before version, so even a required version must not
     // replace or take over an endpoint whose health contract cannot be verified.
     await expect(ensure(home, OPENCODE_VERSION)).rejects.toThrow("no verified control channel")
     expect(old.exitCode).toBe(null)
-    // No contender was spawned, and the old owner still holds the registration and port.
+    // The old owner still holds the registration and port, and no new service was left running.
     expect(await servers(home)).toEqual([])
     expect((await snapshot(home)).info?.pid).toBe(old.pid)
   },
