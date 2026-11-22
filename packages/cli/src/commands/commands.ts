@@ -507,7 +507,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         Spec.make("status", {
           description: "Show background server status",
           params: {
-            connectionJson: Flag.Boolean("connection-json").pipe(Flag.withDescription("Print private connection details of the verified service for the desktop SSH client")),
+            connectionJson: Flag.Boolean("connection-json").pipe(
+              Flag.withDescription("Print private connection details of the verified service for the desktop SSH client"),
+              Flag.withDefault(false),
+            ),
           },
         }),
         Spec.make("stop", { description: "Stop the background server" }),

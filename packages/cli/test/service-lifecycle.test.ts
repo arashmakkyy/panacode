@@ -1,5 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { Service } from "@opencode/client/effect/service"
+import { deriveServiceProofKey } from "@opencode/schema/service-proof"
 import { expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import fs from "node:fs/promises"
@@ -18,6 +19,12 @@ const entry = path.join(import.meta.dir, "../src/index.ts")
 // suite runs there too; `processes()` observes the fixture through the OS instead of pgrep.
 const serviceTest = test
 
+serviceTest("status without a running service prints stopped and private mode prints no credentials", async () => {
+  await using home = await serviceHome()
+  expect(await cli(home, "service", "status")).toBe("stopped")
+  expect(await cli(home, "service", "status", "--connection-json")).toBe("")
+}, 30_000)
+
 serviceTest(
   "concurrent CLI and client starts converge on one server",
   async () => {
@@ -29,7 +36,18 @@ serviceTest(
       ...Array.from({ length: 3 }, () => ensure(home, OPENCODE_VERSION)),
     ])
 
-    await settled(home)
+    const info = await settled(home)
+    const publicStatus = await cli(home, "service", "status")
+    expect(publicStatus === info.url).toBe(true)
+    const privateStatus = JSON.parse(await cli(home, "service", "status", "--connection-json"))
+    expect(Object.keys(privateStatus).sort()).toEqual(["id", "password", "pid", "product", "proofKey", "url", "version"])
+    expect(privateStatus.product).toBe("panacode")
+    expect(privateStatus.url).toBe(publicStatus)
+    expect(privateStatus.id).toBe(info.id)
+    expect(privateStatus.pid).toBe(info.pid)
+    expect(privateStatus.version).toBe(info.version)
+    expect(typeof info.password === "string" && privateStatus.password === info.password).toBe(true)
+    expect(info.control !== undefined && privateStatus.proofKey === deriveServiceProofKey(info.control.token)).toBe(true)
     await stopped(home)
   },
   120_000,

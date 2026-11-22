@@ -199,7 +199,7 @@ jobs:
       - name: Real service lifecycle
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         timeout-minutes: 20
-        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 7 --max-skip 0 --test-timeout 120000 --timeout-ms 900000 --require-pass "concurrent CLI and client starts converge on one server" -- ./test/service-lifecycle.test.ts
+        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 8 --max-skip 0 --test-timeout 120000 --timeout-ms 900000 --require-pass "concurrent CLI and client starts converge on one server" --require-pass "status without a running service prints stopped and private mode prints no credentials" -- ./test/service-lifecycle.test.ts
 
       - name: Service, debug and upgrade contracts
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
@@ -229,7 +229,7 @@ jobs:
       - name: Real service lifecycle (Windows service processes)
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         timeout-minutes: 20
-        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 7 --max-skip 0 --test-timeout 120000 --timeout-ms 900000 --require-pass "concurrent CLI and client starts converge on one server" -- ./test/service-lifecycle.test.ts
+        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 8 --max-skip 0 --test-timeout 120000 --timeout-ms 900000 --require-pass "concurrent CLI and client starts converge on one server" --require-pass "status without a running service prints stopped and private mode prints no credentials" -- ./test/service-lifecycle.test.ts
 
       - name: Database path junction, alias and sidecar guard
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}

@@ -282,11 +282,28 @@ try {
     if (!$target.WaitForExit(15000)) { $target.Kill(); if (!$target.WaitForExit(5000)) { throw 'Panacode did not close before uninstall.' } }
     # Use the same XDG state as the desktop; stop goes through the installed CLI's ownership proof.
     $null = Invoke-OwnedCli $ours @('service','stop')
+    $installKey = 'HKCU:\Software\' + $ours.Row.PSChildName
+    $installed = Get-ItemProperty -LiteralPath $installKey
+    $receipt = @($installed.PanacodeInstallReceipt -split '/', 3)
+    $manifest = Join-Path $ours.Directory '.panacode-install'
+    if ($installed.InstallLocation -ne $ours.Directory -or $receipt.Count -ne 3 -or
+        $receipt[0] -ne (Get-FileHash -LiteralPath $manifest).Hash -or
+        $receipt[1] -ne (Get-FileHash -LiteralPath $ours.Uninstaller).Hash -or
+        (Get-FileHash -LiteralPath $ours.Exe).Hash -ne $records.Panacode.Files[$ours.Exe]) {
+        throw 'Panacode registered uninstaller, executable or ownership receipt changed.'
+    }
     $uninstall = Start-Process -FilePath $ours.Uninstaller -ArgumentList '/S /currentuser' -PassThru
     if (!$uninstall.WaitForExit(180000) -or $uninstall.ExitCode -ne 0) { throw 'Panacode uninstall failed.' }
+    # The registered uninstaller hands off to a temporary child; registry cleanup follows file removal.
+    $ownedPaths = @($ours.Exe, $ours.Cli, $ours.Uninstaller, $manifest, $installKey, $ours.Row.PSPath)
     $deadline = [DateTime]::UtcNow.AddSeconds(90)
-    while ((Test-Path -LiteralPath $ours.Exe) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 500 }
-    if ((Test-Path -LiteralPath $ours.Exe) -or (Get-UninstallRow 'Panacode')) { throw 'Panacode uninstall did not finish.' }
+    do {
+        $remaining = @($ownedPaths | Where-Object { Test-Path -LiteralPath $_ })
+        if ($remaining.Count -eq 0) { break }
+        Start-Sleep -Milliseconds 500
+    } while ([DateTime]::UtcNow -lt $deadline)
+    if ($remaining.Count) { throw ('Panacode uninstall left: ' + ($remaining -join ', ')) }
+    if (Get-UninstallRow 'Panacode') { throw 'A Panacode uninstall registration remains.' }
     Check-Desktop 'OpenCode'
     Assert-SessionWitness 'OpenCode' $sessions.OpenCode
     Write-Host "$Order passed with both desktop windows and isolated sessions; the original upstream GUI, session, registry, shortcuts and cache survived Panacode uninstall."
