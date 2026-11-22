@@ -10,6 +10,13 @@ $work = Join-Path $env:RUNNER_TEMP ("panacode-installed-" + [guid]::NewGuid().To
 $install = Join-Path $work "application"
 $logs = Join-Path $env:APPDATA "ai.panacode.desktop\logs"
 New-Item -Type Directory -Path $work | Out-Null
+$foreignRoot = Join-Path $work 'foreign-tree'
+$outside = Join-Path $foreignRoot 'witness.txt'
+$null = New-Item -ItemType Directory -Path $foreignRoot
+[IO.File]::WriteAllText($outside, [guid]::NewGuid().ToString())
+$outsideHash = (Get-FileHash -LiteralPath $outside).Hash
+$outsideAcl = @{}
+foreach ($path in @($work, $foreignRoot, $outside)) { $outsideAcl[$path] = (Get-Acl -LiteralPath $path).Sddl }
 $xdg = if ($SharedXdgRoot) { $SharedXdgRoot } else { $work }
 foreach ($kind in "DATA","CONFIG","CACHE","STATE") {
     [Environment]::SetEnvironmentVariable("XDG_${kind}_HOME", (Join-Path $xdg $kind), "Process")
@@ -39,9 +46,52 @@ function Install-Candidate {
         }
     } finally { $setup.Dispose() }
 }
-Install-Candidate
+function Assert-InstallBoundary([string]$Phase) {
+    # This test owns a fresh parent. Production deliberately keeps unknown files in an old install.
+    # No unknown file was placed in this install before reinstall, so every temporary sibling must be gone.
+    $prefix = [regex]::Escape([IO.Path]::GetFileName($install))
+    $residue = @(Get-ChildItem -LiteralPath $work -Force | Where-Object { $_.Name -match "^$prefix\.(?:old(?:-.*)?|update-.*|staging-.*)$" })
+    if ($residue.Count) { throw "$Phase left an installer stage or backup." }
+    foreach ($path in $outsideAcl.Keys) {
+        if ((Get-Acl -LiteralPath $path).Sddl -cne $outsideAcl[$path]) { throw "$Phase changed an unrelated ACL." }
+    }
+    if ((Get-FileHash -LiteralPath $outside).Hash -ne $outsideHash) { throw "$Phase changed the outside witness." }
+}
+
+function Assert-SandboxAcl {
+    # Same well-known SID and (OI)(CI)(RX) grant as customInstallStagedApp. Check the effective
+    # on-disk entries without parsing locale-specific icacls account names or abbreviated rights.
+    $rx = [int][Security.AccessControl.FileSystemRights]::ReadAndExecute
+    $permitted = $rx -bor [int][Security.AccessControl.FileSystemRights]::Synchronize
+    $inherit = [Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
+    foreach ($path in @($install, $app, $cli, (Join-Path $install 'resources/app.asar'))) {
+        $rootEntry = $path -eq $install
+        $acl = Get-Acl -LiteralPath $path
+        $entries = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | Where-Object {
+            $_.IdentityReference.Value -eq 'S-1-15-2-2'
+        })
+        foreach ($entry in $entries) {
+            if (($entry.AccessControlType -eq 'Deny' -and ([int]$entry.FileSystemRights -band $rx)) -or
+                ($entry.AccessControlType -eq 'Allow' -and ([int]$entry.FileSystemRights -band (-bnot $permitted)))) {
+                throw 'Restricted AppContainer has an unexpected grant or denial on installed files.'
+            }
+        }
+        $rules = @($entries | Where-Object {
+            $_.AccessControlType -eq 'Allow' -and
+            $_.IsInherited -eq (!$rootEntry) -and (!$rootEntry -or $_.InheritanceFlags -eq $inherit) -and
+            $_.PropagationFlags -eq 'None' -and ([int]$_.FileSystemRights -band $rx) -eq $rx -and
+            ([int]$_.FileSystemRights -band (-bnot $permitted)) -eq 0
+        })
+        if (!$rules.Count) { throw 'Installed payload did not inherit the restricted AppContainer read/execute grant.' }
+    }
+}
+
 $app = Join-Path $install "Panacode.exe"
 $cli = Join-Path $install "resources\panacode-cli.exe"
+Install-Candidate
+Assert-InstallBoundary 'Fresh install'
+Assert-SandboxAcl
+Write-Host 'Fresh install verified the restricted AppContainer RX grant on the payload and left no installer stage.'
 if (!(Test-Path $app -PathType Leaf) -or !(Test-Path $cli -PathType Leaf)) { throw "Installed executable missing" }
 function Read-Launch([string]$Kind) {
     $before = @(Get-ChildItem $logs -Directory -ErrorAction SilentlyContinue | ForEach-Object FullName)
@@ -103,7 +153,15 @@ if ($LASTEXITCODE -ne 0) { throw "Could not stop the verified service" }
 $status = (& $cli service status | Select-Object -Last 1)
 if ($LASTEXITCODE -ne 0 -or $status -ne 'stopped') { throw "Service still registered after stop" }
 if ($CheckPeer) { & $CheckPeer }
-& node "$PSScriptRoot/windows-installed-export.mjs" $app
+# Resolve the native Downloads known folder even when the Windows profile redirects it.
+$shell = New-Object -ComObject Shell.Application
+$folder = $shell.NameSpace('shell:Downloads')
+if (!$folder) { throw 'Windows did not resolve the Downloads known folder.' }
+$downloads = $folder.Self.Path
+if (![IO.Path]::IsPathFullyQualified($downloads) -or !(Test-Path -LiteralPath $downloads -PathType Container)) {
+    throw 'The Windows Downloads known folder is missing.'
+}
+& node "$PSScriptRoot/windows-installed-export.mjs" $app $downloads
 if ($LASTEXITCODE -ne 0) { throw 'Installed port conflict or Export Logs check failed.' }
 if ($CheckPeer) { & $CheckPeer }
 
@@ -113,6 +171,9 @@ $null = New-Item -ItemType Directory -Path (Split-Path $profileWitness) -Force
 [IO.File]::WriteAllText($profileWitness, [guid]::NewGuid().ToString())
 $profileHash = (Get-FileHash -LiteralPath $profileWitness).Hash
 Install-Candidate
+Assert-InstallBoundary 'Reinstall'
+Assert-SandboxAcl
+Write-Host 'Reinstall preserved external ACLs and removed the previous owned installation and its stage.'
 if ((Get-FileHash -LiteralPath $profileWitness).Hash -ne $profileHash) { throw 'Reinstall changed the Panacode profile.' }
 if ($CheckPeer) { & $CheckPeer }
 
@@ -148,16 +209,13 @@ foreach ($ownedFile in @($app,$cli)) {
     $relative = [IO.Path]::GetRelativePath($install,$ownedFile)
     $digest = (Get-FileHash -LiteralPath $ownedFile).Hash
     if ($manifest -notcontains "$digest`t$relative") { throw "Receipt did not verify installed $relative." }
+    Write-Host "Installed $relative SHA-256 $digest"
 }
 # An unrelated file and junction inside the install directory must survive uninstall.
 $foreignFile = Join-Path $install 'foreign-witness.txt'
-$foreignRoot = Join-Path $work 'foreign-tree'
 $junction = Join-Path $install 'foreign-junction'
-$null = New-Item -ItemType Directory -Path $foreignRoot
-$outside = Join-Path $foreignRoot 'witness.txt'
-foreach ($file in @($foreignFile,$outside)) { [IO.File]::WriteAllText($file,[guid]::NewGuid().ToString()) }
+[IO.File]::WriteAllText($foreignFile, [guid]::NewGuid().ToString())
 $insideHash = (Get-FileHash -LiteralPath $foreignFile).Hash
-$outsideHash = (Get-FileHash -LiteralPath $outside).Hash
 $null = New-Item -ItemType Junction -Path $junction -Target $foreignRoot
 $uninstall = Start-Process $uninstallerPath -ArgumentList '/S' -PassThru -Wait
 if ($uninstall.ExitCode -ne 0) { throw "Installed uninstaller failed" }
@@ -171,6 +229,13 @@ do {
     Start-Sleep -Milliseconds 500
 } while ([DateTime]::UtcNow -lt $deadline)
 if ($remaining.Count) { throw "Uninstall left owned files or a product registration." }
+Assert-InstallBoundary 'Uninstall'
+# Inspect just the top-level entries to avoid traversing the deliberately foreign junction.
+$expected = @([IO.Path]::GetFileName($foreignFile), [IO.Path]::GetFileName($junction))
+$retained = @(Get-ChildItem -LiteralPath $install -Force | ForEach-Object Name)
+if (Compare-Object -ReferenceObject $expected -DifferenceObject $retained) {
+    throw 'Uninstall left an unexpected payload entry or removed an unrelated entry.'
+}
 if ((Get-FileHash -LiteralPath $foreignFile).Hash -ne $insideHash -or
     (Get-FileHash -LiteralPath $outside).Hash -ne $outsideHash -or
     (Get-FileHash -LiteralPath $profileWitness).Hash -ne $profileHash -or

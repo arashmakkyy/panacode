@@ -88,7 +88,7 @@ function toDiagnostic(record: DiagnosticRecord) {
 export function diagnosticErrorCode(reason: string | undefined): DiagnosticErrorCode {
   const value = reason?.toLowerCase() ?? ""
 
-  if (/eaddrinuse|address already in use|failed to bind|cannot bind/.test(value)) return "bind-failed"
+  if (/eaddrinuse|address already in use|service port [^\n]*already in use|failed to bind|cannot bind/.test(value)) return "bind-failed"
 
   if (/timed out|timeout|deadline/.test(value)) return "startup-timeout"
 

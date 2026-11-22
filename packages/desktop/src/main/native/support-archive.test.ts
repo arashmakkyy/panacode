@@ -85,6 +85,8 @@ function expectSafe(value: string) {
 describe("Support archive", () => {
   test.each([
     ["bind", "listen EADDRINUSE: address already in use", "bind-failed"],
+    ["foreign listener", "Local service port 28844 is already in use. Ownership check failed.", "bind-failed"],
+    ["managed port", "Managed service port 28844 on localhost is already in use by another process.", "bind-failed"],
     ["timeout", "startup timed out after 15000ms", "startup-timeout"],
     ["spawn", "spawn /usr/local/bin/panacode ENOENT", "spawn-failed"],
     ["missing CLI", "The bundled Panacode CLI is missing. Reinstall Panacode to restore it.", "missing-cli"],

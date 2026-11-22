@@ -27,7 +27,8 @@ on:
       - "panacode-desktop-win-x64-r*"
 
 concurrency:
-  group: panacode-windows-${{ inputs.release_tag || github.ref_name }}
+  # Keep releases serialized by tag. An installed QA run always checks its own immutable candidate.
+  group: panacode-windows-${{ inputs.release_tag || (github.ref == 'refs/heads/isolation-fixes' && github.sha) || github.ref_name }}
   cancel-in-progress: false
 
 permissions:
@@ -137,12 +138,6 @@ jobs:
           compression-level: 0
           retention-days: 14
 
-      - name: Exercise installed desktop on the isolation branch
-        if: github.event_name == 'push' && github.ref == 'refs/heads/isolation-fixes'
-        shell: pwsh
-        timeout-minutes: 23
-        run: ./packages/desktop/script/windows-upstream-coexistence.ps1 -Installer ./dist/desktop/panacode-desktop-win-x64.exe
-
       - name: Publish release
         if: steps.meta.outputs.tag != ''
         env:
@@ -185,13 +180,13 @@ jobs:
     if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/isolation-fixes' && needs.windows-x64.outputs.artifact != '' }}
     needs: windows-x64
     runs-on: windows-latest
-    timeout-minutes: 22
+    timeout-minutes: 28
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        scenario: [r10, OpenCodeFirst, PanacodeFirst]
+        scenario: [installed, r10, OpenCodeFirst, PanacodeFirst]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
@@ -200,6 +195,18 @@ jobs:
         with:
           name: panacode-desktop-win-x64
           path: candidate
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: matrix.scenario == 'installed'
+        with:
+          node-version: "24"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        if: matrix.scenario == 'installed'
+        with:
+          bun-version-file: package.json
+      - name: Install renderer test dependencies
+        if: matrix.scenario == 'installed'
+        shell: bash
+        run: bun install --frozen-lockfile
       - name: Exercise the installed candidate in a fresh Windows user profile
         shell: pwsh
         env:
@@ -210,7 +217,9 @@ jobs:
           if ($expected -notmatch '^[0-9a-f]{64}$' -or (Get-FileHash -LiteralPath $installer).Hash -ne $expected) {
             throw 'Candidate SHA-256 mismatch'
           }
-          if ($env:SCENARIO -eq 'r10') {
+          if ($env:SCENARIO -eq 'installed') {
+            ./packages/desktop/script/windows-upstream-coexistence.ps1 -Installer $installer
+          } elseif ($env:SCENARIO -eq 'r10') {
             ./packages/desktop/script/windows-r10-upgrade.ps1 -Installer $installer
           } else {
             ./packages/desktop/script/windows-dual-desktop.ps1 -Installer $installer -Order $env:SCENARIO

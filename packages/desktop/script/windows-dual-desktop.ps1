@@ -17,13 +17,15 @@ $stateBase = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.local/sta
 $builds = @{ Panacode = (Resolve-Path -LiteralPath $Installer).Path; OpenCode = (Join-Path $root 'upstream.exe') }
 $records = @{}
 $windows = @{}
+$terminals = @{}
 $rules = [Collections.Generic.List[string]]::new()
 $shell = New-Object -ComObject WScript.Shell
 $handler = [Net.Http.HttpClientHandler]::new()
 $handler.UseProxy = $false
 $handler.AllowAutoRedirect = $false
 $http = [Net.Http.HttpClient]::new($handler)
-$http.Timeout = [TimeSpan]::FromSeconds(4)
+$http.Timeout = [TimeSpan]::FromSeconds(30)
+. "$PSScriptRoot/windows-dual-witnesses.ps1"
 
 function Get-UninstallRow([string]$Name) {
     $bases = @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
@@ -98,15 +100,15 @@ function Invoke-OwnedCli($Product, [string[]]$Command) {
     try {
         $output = $proc.StandardOutput.ReadToEndAsync()
         $errors = $proc.StandardError.ReadToEndAsync()
-        if (!$proc.WaitForExit(20000)) { $proc.Kill(); throw 'Installed Panacode CLI timed out.' }
-        if ($proc.ExitCode -ne 0) { throw 'Installed Panacode CLI service check failed.' }
+        if (!$proc.WaitForExit(20000)) { $proc.Kill(); throw "Installed $($Product.Name) CLI timed out." }
+        if ($proc.ExitCode -ne 0) { throw "Installed $($Product.Name) CLI service check failed." }
         $null = $errors.GetAwaiter().GetResult()
         return $output.GetAwaiter().GetResult()
     } finally { $proc.Dispose() }
 }
 
-function Invoke-LocalRequest($Record, [string]$Route, [int]$Expected = 200, [string]$Body) {
-    $method = if ($Body) { [Net.Http.HttpMethod]::Post } else { [Net.Http.HttpMethod]::Get }
+function Invoke-LocalRequest($Record, [string]$Route, [int]$Expected = 200, [string]$Body, [switch]$Remove) {
+    $method = if ($Remove) { [Net.Http.HttpMethod]::Delete } elseif ($Body) { [Net.Http.HttpMethod]::Post } else { [Net.Http.HttpMethod]::Get }
     $request = [Net.Http.HttpRequestMessage]::new($method, ($Record.url.TrimEnd('/') + $Route))
     $auth = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('opencode:' + $Record.password))
     $request.Headers.Authorization = [Net.Http.Headers.AuthenticationHeaderValue]::new('Basic', $auth)
@@ -115,6 +117,7 @@ function Invoke-LocalRequest($Record, [string]$Route, [int]$Expected = 200, [str
         $reply = $http.SendAsync($request).GetAwaiter().GetResult()
         try {
             if ([int]$reply.StatusCode -ne $Expected) { throw "Expected HTTP $Expected, got $([int]$reply.StatusCode)." }
+            if ($Expected -eq 204) { return }
             return ($reply.Content.ReadAsStringAsync().GetAwaiter().GetResult() | ConvertFrom-Json)
         } finally { $reply.Dispose() }
     } finally { $request.Dispose() }
@@ -232,6 +235,8 @@ function Install-Desktop([string]$Name) {
         $null = New-NetFirewallRule -Name $ruleName -DisplayName $ruleName -Program $product.Exe -Direction Outbound -Action Block -Profile Any `
             -RemoteAddress @('0.0.0.0-126.255.255.255','128.0.0.0-255.255.255.255','::2-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff')
         $rules.Add($ruleName)
+        # Have the actual bundled OpenCode CLI write its own configuration before its first launch.
+        $null = Invoke-OwnedCli $product @('service','set','hostname','127.0.0.1')
     }
     $health = Start-Desktop $product
     $files = @{}
@@ -239,6 +244,11 @@ function Install-Desktop([string]$Name) {
         $files[$file] = (Get-FileHash -LiteralPath $file).Hash
     }
     if ($Name -eq 'OpenCode') {
+        $settings = Join-Path $env:XDG_CONFIG_HOME 'opencode/service.json'
+        if ((Get-Content -Raw -LiteralPath $settings | ConvertFrom-Json).hostname -cne '127.0.0.1') {
+            throw 'The genuine upstream CLI did not write its expected settings file.'
+        }
+        $files[$settings] = (Get-FileHash -LiteralPath $settings).Hash
         $metadata = Join-Path $product.Directory 'resources/app-update.yml'
         $files[$metadata] = (Get-FileHash -LiteralPath $metadata).Hash
         $match = [regex]::Match([IO.File]::ReadAllText($metadata), '(?m)^updaterCacheDirName:\s*[''"]?([a-zA-Z0-9_.@-]+)[''"]?\s*$')
@@ -267,16 +277,24 @@ try {
     Install-Desktop $sequence[0]
     $sessions = @{}
     $sessions[$sequence[0]] = New-SessionWitness $sequence[0]
+    $terminals[$sequence[0]] = New-TerminalWitness $sequence[0] $sessions[$sequence[0]]
     Install-Desktop $sequence[1]
     $sessions[$sequence[1]] = New-SessionWitness $sequence[1]
+    $terminals[$sequence[1]] = New-TerminalWitness $sequence[1] $sessions[$sequence[1]]
     if ($sessions.Panacode.ID -ceq $sessions.OpenCode.ID) { throw 'The session fixtures unexpectedly share an ID.' }
     foreach ($name in $sequence) {
         foreach ($session in $sessions.Values) { Assert-SessionWitness $name $session }
+        $peerName = if ($name -eq 'Panacode') { 'OpenCode' } else { 'Panacode' }
+        Assert-TerminalWitness $terminals[$name] $terminals[$peerName]
     }
+    if ($terminals.Panacode.ProcessId -eq $terminals.OpenCode.ProcessId) { throw 'Both terminals reported the same live process.' }
     Check-Desktop 'OpenCode'
     Check-Desktop 'Panacode'
     $ours = $records.Panacode.Product
     if ($ours.Directory -eq $records.OpenCode.Product.Directory) { throw 'The two installations share an install directory.' }
+    $userPath = Read-UserPathBytes
+    Remove-TerminalWitness $terminals.Panacode
+    $terminals.Remove('Panacode')
     $target = $windows.Panacode
     $null = $target.CloseMainWindow()
     if (!$target.WaitForExit(15000)) { $target.Kill(); if (!$target.WaitForExit(5000)) { throw 'Panacode did not close before uninstall.' } }
@@ -304,10 +322,17 @@ try {
     } while ([DateTime]::UtcNow -lt $deadline)
     if ($remaining.Count) { throw ('Panacode uninstall left: ' + ($remaining -join ', ')) }
     if (Get-UninstallRow 'Panacode') { throw 'A Panacode uninstall registration remains.' }
+    if ((Read-UserPathBytes) -cne $userPath) { throw 'Panacode uninstall changed the user PATH registry value.' }
     Check-Desktop 'OpenCode'
     Assert-SessionWitness 'OpenCode' $sessions.OpenCode
-    Write-Host "$Order passed with both desktop windows and isolated sessions; the original upstream GUI, session, registry, shortcuts and cache survived Panacode uninstall."
+    Assert-TerminalWitness $terminals.OpenCode
+    Remove-TerminalWitness $terminals.OpenCode
+    $terminals.Remove('OpenCode')
+    Write-Host "$Order passed with both desktop windows and isolated sessions and terminals. The original upstream app, service, session, terminal, configuration, PATH, registry, shortcuts and cache survived Panacode uninstall."
 } finally {
+    foreach ($terminal in $terminals.Values) {
+        try { Remove-TerminalWitness $terminal } catch { Write-Warning 'The test terminal could not be verified for cleanup.' }
+    }
     foreach ($proc in $windows.Values) {
         if (!$proc.HasExited) { $null = $proc.CloseMainWindow(); if (!$proc.WaitForExit(5000)) { $proc.Kill() } }
         $proc.Dispose()
