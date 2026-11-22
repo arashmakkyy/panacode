@@ -30,8 +30,7 @@ export type LocalService = {
   readonly compatible: boolean
   /** A definite reason this endpoint must not be reused or controlled. */
   readonly error?: string
-  /** PID the endpoint reported, when it answered but its registration could not be trusted. */
-  readonly answeredPid?: number
+  /** The port answered without proving ownership of this registration. */
   readonly unverified?: boolean
 }
 
@@ -262,7 +261,7 @@ export async function probeResult(
   }
 }
 
-function denied(info: Info, origin: string, message: string, answeredPid?: number) {
+function denied(info: Info, origin: string, message: string) {
   return {
     service: {
       info,
@@ -271,7 +270,6 @@ function denied(info: Info, origin: string, message: string, answeredPid?: numbe
       state: "failed",
       compatible: true,
       error: message,
-      ...(answeredPid === undefined ? {} : { answeredPid }),
     } satisfies LocalService,
     timedOut: false,
   }

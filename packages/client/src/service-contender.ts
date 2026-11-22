@@ -63,11 +63,13 @@ export function contenderPool(timing: EnsureTiming) {
   let failure: Error | undefined
   let spawnDelay = timing.spawnDelay
   let lastSpawn = 0
+  let publicationDeadline: number | undefined
   return {
     /** The first startup failure seen since the last eviction. */
     failure: () => failure,
     /** A registered service answered, so the next attempt waits the base delay again. */
-    serviceAnswered() {
+    serviceAnswered(unverified = false) {
+      if (!unverified) publicationDeadline = undefined
       spawnDelay = timing.spawnDelay
     },
     /**
@@ -82,6 +84,7 @@ export function contenderPool(timing: EnsureTiming) {
         }
       }
       failure = undefined
+      publicationDeadline = undefined
       lastSpawn = 0
     },
     /** Let the next attempt start without waiting a spawn delay. */
@@ -111,11 +114,12 @@ export function contenderPool(timing: EnsureTiming) {
       contenders.add(contender)
       lastSpawn = Date.now()
     },
-    pending: () => [...contenders].some((item) => !contenderFinished(item)),
-    /** Whether this ensure call spawned the process that answered. */
-    has(pid: number) {
-      for (const item of contenders) if (item.child.pid === pid) return true
-      return false
+    /** Binding can precede atomic publication. Give an in-flight contender a bounded opportunity
+     * to produce its own proof; a foreign listener must never renew the full startup deadline. */
+    awaitingPublication() {
+      if (![...contenders].some((item) => !contenderFinished(item))) return false
+      publicationDeadline ??= Date.now() + Math.max(1_000, Math.min(15_000, timing.requestTimeout * 2))
+      return Date.now() < publicationDeadline
     },
     /**
      * Startup timeout. Keeps the stderr of any attempt still running, so a server that started but

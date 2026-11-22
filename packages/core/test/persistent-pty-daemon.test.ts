@@ -1,44 +1,55 @@
-import { expect } from "bun:test"
+import { expect, spyOn, test } from "bun:test"
 import { spawn } from "node:child_process"
 import { createHash } from "node:crypto"
 import { existsSync } from "node:fs"
-import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises"
+import { copyFile, link, mkdir, readFile, symlink, writeFile } from "node:fs/promises"
 import net from "node:net"
 import path from "node:path"
 import { binaryPath } from "@opencode/pty"
 import { Effect, Fiber, type Scope } from "effect"
+import { matchesUnixDaemonSocket, readPtyRegistration, runtimeDirectory } from "../src/persistent-pty/runtime-path"
 import { resolve as resolveBun } from "../src/persistent-pty/binary.bun"
 import { makeDaemonTransport, type DaemonTransport } from "../src/persistent-pty/daemon"
-import { frame, listen, pong, temporaryDirectory, terminal, writeRegistration } from "./fixture/persistent-pty-daemon"
+import {
+  fakeDaemon,
+  frame,
+  fixtureSocket,
+  listen,
+  pong,
+  temporaryDirectory,
+  terminal,
+  writeRegistration,
+} from "./fixture/persistent-pty-daemon"
 import { it } from "./lib/effect"
 
 it.live("rediscovers a same-protocol daemon after its registration rotates", () =>
   Effect.gen(function* () {
     const { root, directory } = yield* temporaryRuntime()
-    const socketPath = path.join(directory, "daemon.sock")
+    const sockets = [...new Set(["1", "2", "3"].map((n) => fixtureSocket(directory, n.repeat(32))))]
     let token = "old-token"
-    let instance = "old-instance"
+    let instance = "1".repeat(32)
     let creates = 0
-    yield* listen(socketPath, (_socket, request, receivedToken) => {
-      if (receivedToken !== token) return { type: "error", message: "authentication failed" }
-      if (request.op === "ping") return { ...pong, instance_id: instance }
-      if (request.op === "create") creates++
-      return request.op === "list" ? { type: "processes", processes: [] } : { type: "ok" }
-    })
-    yield* Effect.promise(() => writeRegistration(directory, socketPath, instance, token))
+    for (const endpoint of sockets)
+      yield* listen(endpoint, (_socket, request, receivedToken) => {
+        if (receivedToken !== token) return { type: "error", message: "authentication failed" }
+        if (request.op === "ping") return { ...pong, instance_id: instance }
+        if (request.op === "create") creates++
+        return request.op === "list" ? { type: "processes", processes: [] } : { type: "ok" }
+      })
+    yield* Effect.promise(() => writeRegistration(directory, fixtureSocket(directory, instance), instance, token))
     const daemon = yield* makeDaemonTransport(root, "daemon")
     yield* daemon.request({ op: "list" })
 
     token = "new-token"
-    instance = "new-instance"
-    yield* Effect.promise(() => writeRegistration(directory, socketPath, instance, token))
+    instance = "2".repeat(32)
+    yield* Effect.promise(() => writeRegistration(directory, fixtureSocket(directory, instance), instance, token))
 
     const running = yield* daemon.requestIfRunning({ op: "list" })
     expect(running).toEqual({ type: "processes", processes: [] })
 
     token = "newest-token"
-    instance = "newest-instance"
-    yield* Effect.promise(() => writeRegistration(directory, socketPath, instance, token))
+    instance = "3".repeat(32)
+    yield* Effect.promise(() => writeRegistration(directory, fixtureSocket(directory, instance), instance, token))
     yield* daemon.request({ op: "create" }, true)
     expect(creates).toBe(1)
   }),
@@ -47,34 +58,35 @@ it.live("rediscovers a same-protocol daemon after its registration rotates", () 
 it.live("rediscovers a rotated registration when acquiring a subscription", () =>
   Effect.gen(function* () {
     const { root, directory } = yield* temporaryRuntime()
-    const socketPath = path.join(directory, "daemon.sock")
+    const sockets = [...new Set(["1", "2", "3"].map((n) => fixtureSocket(directory, n.repeat(32))))]
     let token = "old-token"
-    let instance = "old-instance"
+    let instance = "1".repeat(32)
     let subscriptions = 0
-    yield* listen(socketPath, (_socket, request, receivedToken) => {
-      if (receivedToken !== token) return { type: "error", message: "authentication failed" }
-      if (request.op === "ping") return { ...pong, instance_id: instance }
-      if (request.op !== "subscribe") return { type: "processes", processes: [] }
-      subscriptions++
-      return {
-        type: "attached",
-        process: terminal(1),
-        role: "observer",
-        generation: 1,
-        requested_offset: 0,
-        available_offset: 0,
-        end_offset: 0,
-        truncated: false,
-        replay_base64: "",
-      }
-    })
-    yield* Effect.promise(() => writeRegistration(directory, socketPath, instance, token))
+    for (const endpoint of sockets)
+      yield* listen(endpoint, (_socket, request, receivedToken) => {
+        if (receivedToken !== token) return { type: "error", message: "authentication failed" }
+        if (request.op === "ping") return { ...pong, instance_id: instance }
+        if (request.op !== "subscribe") return { type: "processes", processes: [] }
+        subscriptions++
+        return {
+          type: "attached",
+          process: terminal(1),
+          role: "observer",
+          generation: 1,
+          requested_offset: 0,
+          available_offset: 0,
+          end_offset: 0,
+          truncated: false,
+          replay_base64: "",
+        }
+      })
+    yield* Effect.promise(() => writeRegistration(directory, fixtureSocket(directory, instance), instance, token))
     const daemon = yield* makeDaemonTransport(root, "daemon")
     yield* daemon.request({ op: "list" })
 
     token = "new-token"
-    instance = "new-instance"
-    yield* Effect.promise(() => writeRegistration(directory, socketPath, instance, token))
+    instance = "2".repeat(32)
+    yield* Effect.promise(() => writeRegistration(directory, fixtureSocket(directory, instance), instance, token))
 
     const attachment = yield* daemon.subscribe(1, {
       cursor: 0,
@@ -92,7 +104,7 @@ it.live("rediscovers a rotated registration when acquiring a subscription", () =
 it.live("waits on its own connection until the process exits", () =>
   Effect.gen(function* () {
     const { root, directory } = yield* temporaryRuntime()
-    const socketPath = path.join(directory, "daemon.sock")
+    const socketPath = fixtureSocket(directory)
     const waiting: net.Socket[] = []
     yield* listen(socketPath, (socket, request) => {
       if (request.op === "ping") return pong
@@ -127,7 +139,7 @@ it.live("waits on its own connection until the process exits", () =>
 it.live("closes the wait connection when the wait is interrupted", () =>
   Effect.gen(function* () {
     const { root, directory } = yield* temporaryRuntime()
-    const socketPath = path.join(directory, "daemon.sock")
+    const socketPath = fixtureSocket(directory)
     const waiting: net.Socket[] = []
     yield* listen(socketPath, (socket, request) => {
       if (request.op === "ping") return pong
@@ -148,7 +160,7 @@ it.live("closes the wait connection when the wait is interrupted", () =>
 it.live("reports a daemon that goes away during a wait as unreachable", () =>
   Effect.gen(function* () {
     const { root, directory } = yield* temporaryRuntime()
-    const socketPath = path.join(directory, "daemon.sock")
+    const socketPath = fixtureSocket(directory)
     yield* listen(socketPath, (socket, request) => {
       if (request.op === "ping") return pong
       socket.destroy()
@@ -164,8 +176,8 @@ it.live("reports a daemon that goes away during a wait as unreachable", () =>
 it.live("retries a start-required request when connection fails before dispatch", () =>
   Effect.gen(function* () {
     const { root, directory } = yield* temporaryRuntime()
-    const firstSocket = path.join(directory, "first.sock")
-    const secondSocket = path.join(directory, "second.sock")
+    const firstSocket = fixtureSocket(directory)
+    const secondSocket = fixtureSocket(directory)
     const first = yield* listen(firstSocket, (_socket, request) => {
       if (request.op === "ping") return pong
       return { type: "processes", processes: [] }
@@ -190,7 +202,7 @@ it.live("retries a start-required request when connection fails before dispatch"
 it.live("does not replay a dispatched mutating request when its response is lost", () =>
   Effect.gen(function* () {
     const { root, directory } = yield* temporaryRuntime()
-    const socketPath = path.join(directory, "daemon.sock")
+    const socketPath = fixtureSocket(directory)
     let creates = 0
     yield* listen(socketPath, (socket, request) => {
       if (request.op === "ping") return pong
@@ -232,6 +244,7 @@ it.live("rejects incompatible daemons without replacing or killing them", () =>
           token: "old",
           features: [],
         }),
+        { mode: 0o600 },
       ),
     )
     const daemon = yield* makeDaemonTransport(root, "daemon", () => Promise.resolve("/missing/opencode-pty"))
@@ -269,10 +282,76 @@ it.live("starts fresh instead of failing when an inherited registration is gone 
   }),
 )
 
-it.live("stops a discovered inherited daemon when adoption fails", () =>
+test("recognizes both native Unix socket generations only for the private runtime that produced the hash", () => {
+  const directory = "/srv/panacode-state/pty/previous"
+  const native = "opencode-pty-42/c0d99e5e6755cc59abd8ff757e20c526.sock"
+  for (const file of ["/tmp/" + native, "/tmp/panacode-pty-42/" + native]) {
+    expect(matchesUnixDaemonSocket(directory, file, "/tmp", 42)).toBeTrue()
+    expect(matchesUnixDaemonSocket("/srv/other/pty/previous", file, "/tmp", 42)).toBeFalse()
+  }
+})
+
+it.live("abandons a rejected ownership ticket without shutting down the verified daemon", () =>
+  Effect.gen(function* () {
+    const existing = yield* fakeDaemon()
+    const replacement = yield* makeDaemonTransport(existing.options.root, "replacement", undefined, {
+      ...existing.options.handoff,
+      ticket: "wrong-ticket",
+    })
+    expect(yield* replacement.handoff).toBeNull()
+    expect(existing.ops).toContain("ping")
+    expect(existing.ops).not.toContain("shutdown")
+  }),
+)
+
+it.live("rejects a foreign, redirected or stale handoff before contacting its endpoint", () =>
   Effect.gen(function* () {
     const { root, directory } = yield* temporaryRuntime()
-    const socketPath = path.join(directory, "daemon.sock")
+    const other = yield* temporaryDirectory()
+    const foreign = path.join(other, "foreign")
+    const alias = path.join(root, "alias")
+    yield* Effect.promise(async () => {
+      await mkdir(foreign)
+      await writeRegistration(foreign, "foreign-endpoint")
+      await writeRegistration(directory, "unbound-endpoint")
+      await symlink(foreign, alias, process.platform === "win32" ? "junction" : "dir")
+    })
+    const transport = spyOn(net, "createConnection")
+    try {
+      for (const [location, instance] of [
+        [foreign, "test"],
+        [alias, "test"],
+        [directory, "stale"],
+        [directory, "test"],
+      ]) {
+        const daemon = yield* makeDaemonTransport(root, "fresh", undefined, {
+          directory: location,
+          instanceID: instance,
+          expiresAt: Date.now() + 60000,
+          ticket: "sensitive-ticket",
+        })
+        expect(yield* daemon.handoff).toBeNull()
+      }
+      expect(transport).not.toHaveBeenCalled()
+      expect(() => runtimeDirectory(root, path.join(root, ".."))).toThrow()
+      const hard = path.join(root, "hard")
+      yield* Effect.promise(async () => {
+        await mkdir(hard)
+        await link(path.join(foreign, "service.json"), path.join(hard, "service.json"))
+      })
+      yield* Effect.promise(async () => {
+        await expect(readPtyRegistration(hard)).rejects.toThrow("Unsafe PTY registration")
+      })
+    } finally {
+      transport.mockRestore()
+    }
+  }),
+)
+
+it.live("leaves a discovered daemon running when its handoff belongs to another instance", () =>
+  Effect.gen(function* () {
+    const { root, directory } = yield* temporaryRuntime()
+    const socketPath = fixtureSocket(directory)
     let shutdowns = 0
     yield* listen(socketPath, (_socket, request) => {
       if (request.op === "ping") return pong
@@ -286,7 +365,7 @@ it.live("stops a discovered inherited daemon when adoption fails", () =>
       ticket: "ticket",
       expiresAt: Date.now() + 60_000,
     })
-    expect(shutdowns).toBe(1)
+    expect(shutdowns).toBe(0)
   }),
 )
 
@@ -321,6 +400,7 @@ if (process.platform !== "win32")
             "#!/bin/sh",
             `echo spawn >> ${JSON.stringify(spawns)}`,
             'mkdir -p "$3/$5"',
+            "umask 077",
             `printf '{"instance_id":"old","pid":%s,"protocol":7,"socket":"none","token":"t","features":[]}' $$ > "$3/$5/service.json"`,
             "exec sleep 30",
           ].join("\n"),
@@ -400,7 +480,9 @@ realTest(
       yield* Effect.promise(() => mkdir(path.dirname(source), { recursive: true }))
       yield* Effect.promise(() => copyFile(realBinary, source))
       const installed = yield* Effect.promise(async () => {
-        const sha256 = createHash("sha256").update(await readFile(source)).digest("hex")
+        const sha256 = createHash("sha256")
+          .update(await readFile(source))
+          .digest("hex")
         return resolveBun(path.join(root, "cache"), { path: source, version: "test", sha256 })
       })
 

@@ -106,23 +106,15 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       } else timeouts = undefined
 
       if (registration.service !== undefined) {
-        pool.serviceAnswered()
         const service = registration.service
+        pool.serviceAnswered(service.unverified)
         const identity = `${service.info.id ?? "?"}:${service.info.pid}:${service.state}`
         if (identity !== observedHealth) {
           observedHealth = identity
           report({ stage: "health", pid: service.info.pid, state: service.state })
         }
         const decision = decide(service, options)
-        // A contender this call spawned can answer before it publishes its own registration. That
-        // endpoint is ours, not a foreign owner, so keep polling instead of failing on the stale
-        // record. Adoption still waits for a matching registration.
-        if (
-          decision._tag === "fail" &&
-          !(service.unverified && pool.pending()) &&
-          (service.answeredPid === undefined || !pool.has(service.answeredPid))
-        )
-          throw decision.error
+        if (decision._tag === "fail" && !(service.unverified && pool.awaitingPublication())) throw decision.error
         if (decision._tag === "reuse") {
           if (!(await PtyHandoff.complete(options.file ?? fallback(), service.info))) continue
           report({ stage: "ready", pid: service.info.pid })

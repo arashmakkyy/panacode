@@ -147,7 +147,7 @@ export const ensureInstance = Effect.fn("service.ensureInstance")(function* (opt
       }
     } else timeouts = undefined
     if (service !== undefined) {
-      pool.serviceAnswered()
+      pool.serviceAnswered(service.unverified)
       const identity = `${service.info.id ?? "?"}:${service.info.pid}:${service.state}`
       if (identity !== observedHealth) {
         observedHealth = identity
@@ -155,14 +155,7 @@ export const ensureInstance = Effect.fn("service.ensureInstance")(function* (opt
       }
       const decision = decide(service, options)
       if (decision._tag === "fail") {
-        // A contender this call spawned can answer before it publishes its own registration. That
-        // endpoint is ours, not a foreign owner, so keep polling instead of failing on the stale
-        // record. Adoption still waits for a matching registration.
-        if (
-          (service.unverified && pool.pending()) ||
-          (service.answeredPid !== undefined && pool.has(service.answeredPid))
-        )
-          return Option.none()
+        if (service.unverified && pool.awaitingPublication()) return Option.none()
         return yield* Effect.fail(decision.error)
       }
       if (decision._tag === "reuse") {

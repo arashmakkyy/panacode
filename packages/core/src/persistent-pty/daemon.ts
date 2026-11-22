@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process"
-import { readFile } from "node:fs/promises"
+import { checkDaemonEndpoint, nativeSocketBase, readPtyRegistration, runtimeDirectory } from "./runtime-path.js"
 import net from "node:net"
 import path from "node:path"
 import { Cause, Data, Duration, Effect, Schema, Semaphore } from "effect"
@@ -205,6 +205,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
   const startup = Semaphore.makeUnsafe(1)
   // Each daemon owns the runtime directory `<root>/<id>`.
   let id = initialID
+  let adoptedInstance: string | undefined
   let registration: Registration | undefined
   let owner: Awaited<ReturnType<typeof openOwner>> | undefined
   let closed = false
@@ -241,14 +242,24 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       }),
     )
 
-  const discover = Effect.fn("PersistentPty.daemon.discover")(function* (directory = path.join(root, id)) {
+  const discover = Effect.fn("PersistentPty.daemon.discover")(function* (
+    directory = path.join(root, id),
+    expectedInstance = adoptedInstance,
+    expectedPid?: number,
+  ) {
+    const verifiedDirectory = yield* Effect.try({
+      try: () => runtimeDirectory(root, directory),
+      catch: (cause) => failure("connect", cause),
+    })
     const value = yield* Effect.tryPromise({
-      try: () => readFile(path.join(directory, "service.json"), "utf8"),
+      try: () => readPtyRegistration(verifiedDirectory),
       catch: (cause) => failure("connect", cause),
     })
     const decoded = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Registration))(value).pipe(
       Effect.mapError((cause) => failure("protocol", cause)),
     )
+    if (expectedPid !== undefined && decoded.pid !== expectedPid)
+      return yield* Effect.fail(new DaemonError({ kind: "connect", message: "Waiting for spawned PTY registration" }))
     if (decoded.protocol !== ProtocolVersion)
       return yield* Effect.fail(
         new DaemonError({
@@ -257,6 +268,12 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
           pid: decoded.pid,
         }),
       )
+    if (expectedInstance !== undefined && decoded.instance_id !== expectedInstance)
+      return yield* Effect.fail(new DaemonError({ kind: "registration", message: "PTY restart daemon changed" }))
+    yield* Effect.try({
+      try: () => checkDaemonEndpoint(verifiedDirectory, decoded.socket, decoded.instance_id),
+      catch: (cause) => failure("registration", cause),
+    })
     const response = yield* oneShot(decoded, { op: "ping" })
     if (
       response.type !== "pong" ||
@@ -273,7 +290,11 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     const child = yield* Effect.tryPromise({
       try: () =>
         new Promise<ReturnType<typeof spawn>>((resolve, reject) => {
+          runtimeDirectory(root, path.join(root, id), true)
+          const env =
+            process.platform === "win32" ? process.env : { ...process.env, OPENCODE_PTY_SOCKET_DIR: nativeSocketBase() }
           const child = spawn(executable, ["daemon", "--runtime-dir", root, "--name", id], {
+            env,
             detached: true,
             windowsHide: true,
             stdio: "ignore",
@@ -290,7 +311,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       const deadline = Date.now() + 5_000
       let last: DaemonError | undefined
       while (Date.now() < deadline && child.exitCode === null && child.signalCode === null) {
-        const found = yield* discover().pipe(
+        const found = yield* discover(undefined, undefined, child.pid).pipe(
           Effect.map((value) => ({ value })),
           Effect.catch((error) => {
             // The binary we just started speaks another protocol: waiting longer cannot help.
@@ -338,6 +359,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     owner?.socket.destroy()
     owner = undefined
     registration = undefined
+    adoptedInstance = undefined
     id = crypto.randomUUID()
   }
 
@@ -459,15 +481,13 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
   // A replacement must own its inherited daemon before the server becomes ready. Terminals are
   // best-effort: any failure abandons the old daemon so the restart itself always succeeds.
   if (inherited) {
-    let found: Registration | undefined
     yield* Effect.gen(function* () {
       if (inherited.expiresAt <= Date.now())
         return yield* Effect.fail(new DaemonError({ kind: "registration", message: "PTY restart handoff expired" }))
-      id = path.basename(inherited.directory)
-      found = yield* discover(inherited.directory)
-      if (found.instance_id !== inherited.instanceID)
-        return yield* Effect.fail(new DaemonError({ kind: "registration", message: "PTY restart daemon changed" }))
+      const found = yield* discover(inherited.directory, inherited.instanceID)
       yield* claim(found, inherited.ticket)
+      id = path.basename(inherited.directory)
+      adoptedInstance = found.instance_id
     }).pipe(
       Effect.catchCause((cause) =>
         Effect.gen(function* () {
@@ -475,7 +495,6 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
           yield* Effect.logWarning("Discarding PTY restart handoff; persistent terminals will start fresh", {
             cause: Cause.pretty(cause),
           })
-          if (found) yield* oneShot(found, { op: "shutdown" }).pipe(Effect.ignore)
           abandon()
         }),
       ),
