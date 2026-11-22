@@ -1,13 +1,18 @@
 # Runs on a disposable GitHub-hosted Windows runner against the installer just built.
-param([Parameter(Mandatory)][string]$Installer)
+param(
+    [Parameter(Mandatory)][string]$Installer,
+    [string]$SharedXdgRoot,
+    [scriptblock]$CheckPeer
+)
 $ErrorActionPreference = 'Stop'
 $installerPath = (Resolve-Path $Installer).Path
 $work = Join-Path $env:RUNNER_TEMP ("panacode-installed-" + [guid]::NewGuid().ToString("N"))
 $install = Join-Path $work "application"
 $logs = Join-Path $env:APPDATA "ai.panacode.desktop\logs"
 New-Item -Type Directory -Path $work | Out-Null
+$xdg = if ($SharedXdgRoot) { $SharedXdgRoot } else { $work }
 foreach ($kind in "DATA","CONFIG","CACHE","STATE") {
-    [Environment]::SetEnvironmentVariable("XDG_${kind}_HOME", (Join-Path $work $kind), "Process")
+    [Environment]::SetEnvironmentVariable("XDG_${kind}_HOME", (Join-Path $xdg $kind), "Process")
 }
 $env:PANACODE_DISABLE_MODELS_FETCH = "1"
 $setup = Start-Process $installerPath -ArgumentList "/S /D=$install" -PassThru
@@ -43,6 +48,15 @@ function Read-Launch([string]$Kind) {
             }
             Start-Sleep -Milliseconds 500
         }
+        $dirs = @(Get-ChildItem $logs -Directory -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notin $before })
+        foreach ($dir in $dirs) {
+            foreach ($line in @(Get-Content (Join-Path $dir.FullName "diagnostics.jsonl") -Tail 12 -ErrorAction SilentlyContinue)) {
+                try { $item = $line | ConvertFrom-Json } catch { continue }
+                if ($item.event -in @("app.start","app.error","service.start","service.boot","service.ready","service.error")) {
+                    Write-Host ("Observed event={0}, stage={1}, status={2}, code={3}" -f $item.event,$item.stage,$item.status,$item.errorCode)
+                }
+            }
+        }
         throw "Installed desktop never reported a ready local service on $Kind launch"
     } finally {
         if (!$desktop.HasExited) {
@@ -53,7 +67,9 @@ function Read-Launch([string]$Kind) {
 }
 try {
     $cold = Read-Launch "cold"
+    if ($CheckPeer) { & $CheckPeer }
     $warm = Read-Launch "warm"
+    if ($CheckPeer) { & $CheckPeer }
     if ($cold.Instance -ne $warm.Instance -or $cold.ProcessId -ne $warm.ProcessId) {
         throw "Warm desktop launch replaced the healthy background service"
     }
@@ -63,6 +79,7 @@ try {
 if ($LASTEXITCODE -ne 0) { throw "Could not stop the verified service" }
 $status = (& $cli service status | Select-Object -Last 1)
 if ($LASTEXITCODE -ne 0 -or $status -ne 'stopped') { throw "Service still registered after stop" }
+if ($CheckPeer) { & $CheckPeer }
 $uninstallers = @(Get-ChildItem $install -File -Filter "Uninstall*.exe")
 if ($uninstallers.Count -ne 1) { throw "Missing unique registered uninstaller" }
 $uninstall = Start-Process $uninstallers[0].FullName -ArgumentList "/S" -PassThru -Wait
@@ -70,4 +87,5 @@ if ($uninstall.ExitCode -ne 0) { throw "Installed uninstaller failed" }
 $deadline = [DateTime]::UtcNow.AddSeconds(90)
 while ((Test-Path $app) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 500 }
 if (Test-Path $app) { throw "Uninstall left the owned desktop executable" }
+if ($CheckPeer) { & $CheckPeer }
 Write-Host "Installed cold and warm launch, verified CLI status, and uninstall passed."

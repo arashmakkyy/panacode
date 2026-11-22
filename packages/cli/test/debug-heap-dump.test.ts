@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import fs from "node:fs/promises"
+import { debugService } from "./fixture/debug-service"
 import path from "node:path"
 import { ServiceConfig } from "../src/services/service-config"
 import { OPENCODE_VERSION } from "../src/version"
@@ -12,16 +12,14 @@ import { tmpdir } from "./fixture/tmpdir"
 test("prints the snapshot path from the registered server without replacing it", async () => {
   await using root = await tmpdir()
   const requests: Array<{ method: string; path: string; authorization: string | null }> = []
-  const instance = crypto.randomUUID()
-  using server = fake((request) => {
+  await using registration = await debugService(path.join(root.path, "state", "panacode", ServiceConfig.filename()), (request) => {
     requests.push({
       method: request.method,
       path: new URL(request.url).pathname,
       authorization: request.headers.get("authorization"),
     })
     return Response.json({ path: "/server/log/heap-1-2.heapsnapshot", pid: process.pid })
-  }, instance)
-  const registration = await register(root.path, server.url.href, instance)
+  })
 
   const result = await cli(root.path, ["debug", "heap-dump"])
 
@@ -41,21 +39,20 @@ test("sends --directory as an absolute path and warns only when the server ignor
   // The command runs from packages/cli (see `cli`), so a relative directory resolves there.
   const directory = path.join(import.meta.dir, "..", "snapshots")
   const sent: Array<string | null> = []
-  const instance = crypto.randomUUID()
-  using server = fake((request) => {
+  await using registered = await debugService(path.join(root.path, "state", "panacode", ServiceConfig.filename()), (request) => {
     const requested = new URL(request.url).searchParams.get("directory") ?? ""
     sent.push(requested)
     // Answer like a current server, which joins the directory and file name, for the first request, and like one
     // that predates `directory` for the second.
     const folder = sent.length === 1 ? requested : "/server/log"
     return Response.json({ path: path.join(folder, "heap-1-2.heapsnapshot"), pid: process.pid })
-  }, instance)
-  await register(root.path, server.url.href, instance)
+  })
 
   // A trailing separator is not a different directory.
   const current = await cli(root.path, ["debug", "heap-dump", "--directory", directory + path.sep])
   const old = await cli(root.path, ["debug", "heap-dump", "--directory", "snapshots"])
 
+  expect(registered.probes()).toBe(2)
   expect(sent).toEqual([directory + path.sep, directory])
   expect([current, old].map((result) => ({ code: result.code, stderr: result.stderr.trim() }))).toEqual([
     { code: 0, stderr: "" },
@@ -98,14 +95,6 @@ function fake(handle: (request: Request) => Response, instance?: string) {
         ? Response.json({ version: OPENCODE_VERSION, instance, pid: process.pid, product: "panacode", urls: [] })
         : handle(request),
   })
-}
-
-async function register(root: string, url: string, id: string) {
-  const file = path.join(root, "state", "panacode", ServiceConfig.filename())
-  const info = { id, product: "panacode", version: OPENCODE_VERSION, url, pid: process.pid, password: "secret" }
-  await fs.mkdir(path.dirname(file), { recursive: true })
-  await fs.writeFile(file, JSON.stringify(info))
-  return { file, info }
 }
 
 async function cli(root: string, args: string[], env: Record<string, string> = {}) {

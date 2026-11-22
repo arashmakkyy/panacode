@@ -29,6 +29,33 @@ test("an owner removes exactly its own registration", async () => {
   expect(await readdir(root.path)).toEqual([])
 })
 
+test("two sibling registration locks release independently after migration", async () => {
+  await using root = await fixtureRoot()
+  const source = path.join(root.path, "service-legacy.json")
+  const target = path.join(root.path, "service.json")
+  await withRegistrationLock(source, () =>
+    withRegistrationLock(target, async () => {
+      expect(await readdir(root.path)).toHaveLength(2)
+    }),
+  )
+  expect(await readdir(root.path)).toEqual([])
+})
+
+test("a config write must finish before discovery and a losing publisher cannot change it", async () => {
+  await using root = await fixtureRoot()
+  const file = path.join(root.path, "service.json")
+  const next = JSON.stringify(registration("next", process.pid))
+  await expect(publishRegistration(file, next, undefined, async () => {
+    expect(await Bun.file(file).exists()).toBe(false)
+    throw new Error("configuration write failed")
+  })).rejects.toThrow("configuration write failed")
+  expect(await readdir(root.path)).toEqual([])
+  await publishRegistration(file, next)
+  let writes = 0
+  await expect(publishRegistration(file, next, undefined, async () => ++writes)).rejects.toThrow("newer")
+  expect(writes).toBe(0)
+})
+
 test("a stale owner never removes a registration written by a newer service", async () => {
   await using root = await fixtureRoot()
   const file = path.join(root.path, "service.json")

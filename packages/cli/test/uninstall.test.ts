@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { realpathSync } from "node:fs"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -31,7 +32,7 @@ test("uninstall --dry-run reports a service and cache without stopping or deleti
     expect(result.stdout).toContain("Panacode ownership not proven")
     expect(result.stdout).not.toMatch(/Package: .*(?:uninstall|remove)/)
     expect(result.stdout).toContain(`Stop background service and persistent terminals: ${registration}`)
-    expect(result.stdout).toContain(`Cache: ${cache}`)
+    expect(result.stdout).toContain(`Cache: ${realpathSync.native(cache)}`)
     expect(await fs.readFile(registration, "utf8")).toBe(before)
     expect(await fs.readFile(path.join(cache, "marker"), "utf8")).toBe("cache")
     expect(await fs.readFile(shell, "utf8")).toBe(shellBefore)

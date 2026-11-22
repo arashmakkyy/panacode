@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { constants, lstatSync } from "node:fs"
+import { constants, lstatSync, mkdtempSync, realpathSync, rmdirSync } from "node:fs"
 import { open } from "node:fs/promises"
 import path from "node:path"
 import { physicalPath, upstreamRoots, within } from "@opencode/util/product-path"
@@ -12,21 +12,48 @@ function checkOwner(info: { uid: number; mode: number }) {
     throw new Error("Unsafe PTY runtime ownership")
 }
 
-export function runtimeDirectory(root: string, directory: string, create = false) {
-  if (!path.isAbsolute(directory) || path.relative(path.resolve(root), path.dirname(path.resolve(directory))) !== "")
-    throw new Error("PTY directory is outside the managed runtime")
-  if ([".", ".."].includes(path.basename(directory))) throw new Error("Invalid PTY runtime name")
+function runtimeRoot(root: string, create = false) {
   const physical = physicalPath(root)
   if (
     physical.toLowerCase().split(path.sep).includes(".opencode") ||
     upstreamRoots().some((entry) => within(entry, physical))
   )
-    throw new Error("Refusing an OpenCode PTY runtime")
+    throw new Error("The terminal runtime belongs to another application")
   const base = privateDirectory(root, create)
   checkOwner(lstatSync(base))
-  const target = privateDirectory(path.join(base, path.basename(directory)), create)
+  return base
+}
+
+// The native sweeper inspects siblings of its own registration directory. A fresh,
+// exclusively allocated parent keeps older registrations outside its scan.
+const isSpawnParent = (name: string) => /^spawn-[A-Za-z0-9]{6}$/.test(name)
+
+export function createDaemonRuntime(root: string) {
+  const parent = mkdtempSync(path.join(runtimeRoot(root, true), "spawn-"))
+  return path.join(root, path.basename(parent), "daemon")
+}
+
+export function runtimeDirectory(root: string, directory: string) {
+  if (!path.isAbsolute(directory) || directory.split(path.sep).some((part) => part === "." || part === ".."))
+    throw new Error("Invalid PTY runtime name")
+  const parts = path.relative(path.resolve(root), directory).split(path.sep)
+  const direct = parts.length === 1 && parts[0] !== "" && parts[0] !== ".." && !isSpawnParent(parts[0])
+  const isolated = parts.length === 2 && isSpawnParent(parts[0]) && parts[1] === "daemon"
+  if (!direct && !isolated) throw new Error("PTY directory is outside the managed runtime")
+  const base = runtimeRoot(root)
+  const target = privateDirectory(path.join(base, ...parts))
   checkOwner(lstatSync(target))
   return target
+}
+
+export function removeEmptySpawnParent(root: string, directory: string) {
+  const parts = path.relative(root, directory).split(path.sep)
+  if (parts.length !== 2 || !isSpawnParent(parts[0]) || parts[1] !== "daemon") return
+  try {
+    rmdirSync(privateDirectory(path.join(runtimeRoot(root), parts[0])))
+  } catch {
+    // Native cleanup may still be running. Never delete files to empty the parent.
+  }
 }
 
 export async function readPtyRegistration(directory: string) {
@@ -67,7 +94,7 @@ export function checkDaemonEndpoint(directory: string, socket: string, instance:
   checkOwner(lstatSync(socketDir))
   // Native 0.5.2 hashes the canonical runtime directory to fit Unix socket path limits.
   // Earlier Panacode installations used the upstream's default short socket root.
-  if (!matchesUnixDaemonSocket(directory, file, privateDirectory("/tmp"), uid))
+  if (!matchesUnixDaemonSocket(directory, file, realpathSync.native("/tmp"), uid))
     throw new Error("PTY socket does not belong to its runtime directory")
 }
 

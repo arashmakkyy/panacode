@@ -47,6 +47,10 @@ describe("PersistentPty session cleanup", () => {
         const deleted = yield* session.create({ location })
         const kept = yield* session.create({ location })
         const terminal = yield* pty.create(deleted.id, { args: [], cwd: directory.path, title: "deleted", env: {} })
+        if (process.platform !== "win32") {
+          const request = daemon.requests.find((request) => request.op === "create_pty")
+          expect(request?.env).toMatchObject({ OPENCODE_PTY_SOCKET_DIR: "/tmp" })
+        }
         const other = yield* pty.create(kept.id, { args: [], cwd: directory.path, title: "kept", env: {} })
         const removed = yield* nextRemoved(bus)
 

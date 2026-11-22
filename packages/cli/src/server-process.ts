@@ -9,7 +9,7 @@ import { Global } from "@opencode/util/global"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
 import { AppProcess } from "@opencode/util/process"
 import { randomBytes, randomUUID } from "node:crypto"
-import { Effect, Option, Redacted, Schema } from "effect"
+import { Effect, FileSystem, Option, Redacted, Schema } from "effect"
 import { deriveServiceProofKey } from "@opencode/schema/service-proof"
 import { PersistentPty } from "@opencode/schema/persistent-pty"
 import { HttpServer } from "effect/http"
@@ -76,6 +76,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const serviceOptions = options.mode === "service" ? yield* ServiceConfig.options() : undefined
       const expectedRegistration = serviceOptions ? yield* Effect.tryPromise(() => registrationSnapshot(serviceOptions.file)) : undefined
       const config = options.mode === "service" ? yield* ServiceConfig.read() : {}
+      const runConfig = Effect.runPromiseWith(yield* Effect.context<Global.Service | FileSystem.FileSystem>())
       const hostname = options.hostname ?? config.hostname ?? "127.0.0.1"
       const port = options.port ?? config.port ?? (options.mode === "service" ? ServiceConfig.defaultPort() : undefined)
       const findIncumbent =
@@ -161,19 +162,16 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           ? undefined
           : {
               onListen: (address, shutdown, terminals) =>
-                Effect.gen(function* () {
-                  const cleanup = yield* ServiceRegistration.register({
-                    controlToken,
-                    expectedRegistration,
-                    terminals,
-                    address,
-                    password,
-                    id: instanceID,
-                    file: serviceOptions.file,
-                    shutdown,
-                  })
-                  if (!config.password) yield* ServiceConfig.password(password).pipe(Effect.onError(() => cleanup))
-                  return cleanup
+                ServiceRegistration.register({
+                  controlToken,
+                  expectedRegistration,
+                  prepareConfig: config.password ? undefined : () => runConfig(ServiceConfig.password(password)),
+                  terminals,
+                  address,
+                  password,
+                  id: instanceID,
+                  file: serviceOptions.file,
+                  shutdown,
                 }),
             },
         transform,

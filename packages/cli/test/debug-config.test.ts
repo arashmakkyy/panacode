@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { OPENCODE_VERSION } from "../src/version"
+import { debugService } from "./fixture/debug-service"
 import { redactConfig } from "../src/commands/handlers/debug/redact"
 
 describe("debug config command", () => {
@@ -22,7 +22,6 @@ describe("debug config command", () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-debug-config-"))
     const project = path.join(import.meta.dir, "..")
     const registration = path.join(root, "state", "panacode", "service-local.json")
-    const instance = "debug-config-instance"
     const entries = [
       {
         type: "document",
@@ -44,42 +43,13 @@ describe("debug config command", () => {
       },
     ]
     let requested: URL | undefined
-    let healthProbes = 0
     const authorization: Array<string | null> = []
-    const server = Bun.serve({
-      port: 0,
-      fetch(request) {
-        const url = new URL(request.url)
-        if (url.pathname === "/api/info") {
-          healthProbes += 1
-          return Response.json({
-            version: OPENCODE_VERSION,
-            instance,
-            pid: process.pid,
-            product: "panacode",
-            urls: [],
-            paths: { tmp: "/tmp/panacode" },
-          })
-        }
-        requested = url
+    try {
+      await using server = await debugService(registration, (request) => {
+        requested = new URL(request.url)
         authorization.push(request.headers.get("authorization"))
         return Response.json(entries)
-      },
-    })
-
-    try {
-      await fs.mkdir(path.dirname(registration), { recursive: true })
-      await fs.writeFile(
-        registration,
-        JSON.stringify({
-          id: instance,
-          product: "panacode",
-          version: OPENCODE_VERSION,
-          url: server.url.toString(),
-          pid: process.pid,
-          password: "secret",
-        }),
-      )
+      })
       const result = await cli(["debug", "config"], project, { XDG_STATE_HOME: path.join(root, "state") })
 
       expect({ exitCode: result.exitCode, stderr: result.stderr }).toEqual({ exitCode: 0, stderr: "" })
@@ -98,9 +68,8 @@ describe("debug config command", () => {
       expect(requested?.pathname).toBe("/api/config")
       expect(requested?.searchParams.get("location[directory]")).toBe(project)
       expect(authorization).toEqual([`Basic ${btoa("opencode:secret")}`])
-      expect(healthProbes).toBe(1)
+      expect(server.probes()).toBe(1)
     } finally {
-      server.stop(true)
       await fs.rm(root, { recursive: true, force: true })
     }
   })

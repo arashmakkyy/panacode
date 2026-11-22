@@ -138,8 +138,8 @@ jobs:
       - name: Exercise installed desktop on the isolation branch
         if: github.event_name == 'push' && github.ref == 'refs/heads/isolation-fixes'
         shell: pwsh
-        timeout-minutes: 14
-        run: ./packages/desktop/script/windows-installed-smoke.ps1 -Installer ./dist/desktop/panacode-desktop-win-x64.exe
+        timeout-minutes: 19
+        run: ./packages/desktop/script/windows-upstream-coexistence.ps1 -Installer ./dist/desktop/panacode-desktop-win-x64.exe
 
       - name: Publish release
         if: steps.meta.outputs.tag != ''

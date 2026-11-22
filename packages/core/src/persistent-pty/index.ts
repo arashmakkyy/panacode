@@ -258,7 +258,9 @@ const makeLayer = (options: Options = {}) =>
             cwd,
             title: input.title,
             group_id: sessionID,
-            env: input.env,
+            // Native 0.5.2 overlays terminal variables onto its own environment. Restore the
+            // upstream socket default so a nested OpenCode doesn't inherit our daemon-only path.
+            env: process.platform === "win32" ? input.env : { OPENCODE_PTY_SOCKET_DIR: "/tmp", ...input.env },
             cols: input.cols ?? 80,
             rows: input.rows ?? 24,
           },

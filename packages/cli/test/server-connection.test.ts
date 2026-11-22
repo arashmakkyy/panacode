@@ -12,13 +12,17 @@ import { Spec } from "../src/framework/spec"
 import { ServerConnection } from "../src/services/server-connection"
 import { ServiceConfig } from "../src/services/service-config"
 import { isolatedEnv } from "./fixture/environment"
+import { healthProof, testControl } from "../../client/test/fixture/control"
+import { serviceProofPath } from "@opencode/schema/service-proof"
 
 test("resolution groups Effect-native lifecycle operations only for the managed service", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "panacode-server-resolution-"))
   const id = "server-resolution-test"
   const server = Bun.serve({
     port: 0,
-    fetch() {
+    hostname: "127.0.0.1",
+    fetch(request) {
+      if (new URL(request.url).pathname === serviceProofPath) return healthProof(request, channel.control.token, id)
       return Response.json({
         version: OPENCODE_VERSION,
         instance: id,
@@ -28,6 +32,15 @@ test("resolution groups Effect-native lifecycle operations only for the managed 
       })
     },
   })
+  const identity = {
+    id,
+    product: "panacode" as const,
+    version: OPENCODE_VERSION,
+    url: server.url.toString(),
+    pid: process.pid,
+    password: "resolution-secret",
+  }
+  await using channel = await testControl(() => identity)
   const registration = path.join(root, "state", ServiceConfig.filename())
   const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })
   const runPromise = <A, E>(effect: Effect.Effect<A, E, Global.Service | FileSystem.FileSystem | Scope.Scope>) =>
@@ -35,17 +48,7 @@ test("resolution groups Effect-native lifecycle operations only for the managed 
 
   try {
     await fs.mkdir(path.dirname(registration), { recursive: true })
-    await fs.writeFile(
-      registration,
-      JSON.stringify({
-        id,
-        product: "panacode",
-        version: OPENCODE_VERSION,
-        url: server.url.toString(),
-        pid: process.pid,
-        password: "resolution-secret",
-      }),
-    )
+    await fs.writeFile(registration, JSON.stringify({ ...identity, control: channel.control }))
     const resolved = await runPromise(ServerConnection.resolve())
 
     expect(resolved.endpoint.url).toBe(server.url.toString())

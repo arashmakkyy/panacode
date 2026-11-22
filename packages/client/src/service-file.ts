@@ -3,7 +3,7 @@ import { createHash } from "node:crypto"
 import { constants } from "node:fs"
 import { connect } from "node:net"
 import { lstat, open, rename, rm, writeFile } from "node:fs/promises"
-import { dirname, resolve } from "node:path"
+import { resolve } from "node:path"
 import { setTimeout as delay } from "node:timers/promises"
 import lockfile from "proper-lockfile"
 import { request } from "./service-control.js"
@@ -14,7 +14,10 @@ import { localEndpoint, parseRegistration, same } from "./service-probe.js"
 // pathname, including the interval before the first registration exists. The actual publication
 // is still an atomic rename, so readers and the daemon's watcher never see an intermediate file.
 export async function withRegistrationLock<T>(file: string, operation: () => Promise<T>) {
-  const release = await lockfile.lock(dirname(resolve(file)), {
+  // proper-lockfile tracks held locks by its first argument. Sibling registrations may be
+  // locked together during migration, including a destination that does not exist yet.
+  const release = await lockfile.lock(resolve(file), {
+    realpath: false,
     lockfilePath: resolve(file) + ".mutation-lock",
     retries: { retries: 300, factor: 1.5, minTimeout: 10, maxTimeout: 250, randomize: true },
   })
@@ -135,7 +138,12 @@ async function checkPrevious(bytes: Buffer, expected: string | undefined, next: 
   if (oldOrigin.origin !== new URL(newUrl).origin && (await listening(oldOrigin))) throw refusal()
 }
 
-export async function publishRegistration(file: string, encoded: string, expected?: string) {
+export async function publishRegistration(
+  file: string,
+  encoded: string,
+  expected?: string,
+  prepareConfig?: () => Promise<unknown>,
+) {
   const next = parseRegistration(encoded).info
   if (!next) throw new Error("Invalid local service registration for publication")
   const temporary = file + "." + crypto.randomUUID() + ".tmp"
@@ -143,8 +151,10 @@ export async function publishRegistration(file: string, encoded: string, expecte
   try {
     await withRegistrationLock(file, async () => {
       const previous = await registrationBytes(file)
+      if (previous) await checkPrevious(previous, expected, next)
+      // Only the winning publisher persists its credential, before readers can observe it.
+      await prepareConfig?.()
       if (previous) {
-        await checkPrevious(previous, expected, next)
         // Leave the live name continuously available while keeping the captured stale bytes
         // private for recovery. No timestamp or file chosen by the previous writer is trusted.
         await writeFile(file + "." + crypto.randomUUID() + ".stale", previous, { flag: "wx", mode: 0o600 })

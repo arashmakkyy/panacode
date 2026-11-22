@@ -3,6 +3,7 @@ declare module "proper-lockfile" {
     lock(
       file: string,
       options: {
+        realpath: boolean
         lockfilePath: string
         retries: { retries: number; factor: number; minTimeout: number; maxTimeout: number; randomize: boolean }
       },

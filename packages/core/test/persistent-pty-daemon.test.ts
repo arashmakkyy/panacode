@@ -1,13 +1,19 @@
 import { expect, spyOn, test } from "bun:test"
 import { spawn } from "node:child_process"
 import { createHash } from "node:crypto"
-import { existsSync } from "node:fs"
-import { copyFile, link, mkdir, readFile, symlink, writeFile } from "node:fs/promises"
+import { existsSync, realpathSync } from "node:fs"
+import { copyFile, link, mkdir, readFile, readdir, rmdir, symlink, writeFile } from "node:fs/promises"
 import net from "node:net"
 import path from "node:path"
 import { binaryPath } from "@opencode/pty"
 import { Effect, Fiber, type Scope } from "effect"
-import { matchesUnixDaemonSocket, readPtyRegistration, runtimeDirectory } from "../src/persistent-pty/runtime-path"
+import {
+  createDaemonRuntime,
+  matchesUnixDaemonSocket,
+  readPtyRegistration,
+  removeEmptySpawnParent,
+  runtimeDirectory,
+} from "../src/persistent-pty/runtime-path"
 import { resolve as resolveBun } from "../src/persistent-pty/binary.bun"
 import { makeDaemonTransport, type DaemonTransport } from "../src/persistent-pty/daemon"
 import {
@@ -291,6 +297,32 @@ test("recognizes both native Unix socket generations only for the private runtim
   }
 })
 
+it.live("allocates a separate sweep parent per new daemon and keeps legacy runtimes readable", () =>
+  Effect.gen(function* () {
+    const { root, directory: legacy } = yield* temporaryRuntime()
+    const first = createDaemonRuntime(root)
+    const second = createDaemonRuntime(root)
+    yield* Effect.promise(async () => {
+      expect(path.dirname(first)).not.toBe(path.dirname(second))
+      expect(path.dirname(first)).not.toBe(root)
+      expect(await readdir(path.dirname(first))).toEqual([])
+      await mkdir(first, { mode: 0o700 })
+      expect(await readdir(path.dirname(second))).toEqual([])
+      expect(runtimeDirectory(root, first)).toBe(realpathSync.native(first))
+      expect(runtimeDirectory(root, legacy)).toBe(realpathSync.native(legacy))
+      expect(() => runtimeDirectory(root, path.dirname(first))).toThrow()
+      expect(() => runtimeDirectory(root, path.join(legacy, "daemon"))).toThrow()
+      removeEmptySpawnParent(root, first)
+      expect(existsSync(first)).toBeTrue()
+      await rmdir(first)
+      removeEmptySpawnParent(root, first)
+      expect(existsSync(path.dirname(first))).toBeFalse()
+      expect(existsSync(legacy)).toBeTrue()
+      expect(existsSync(path.dirname(second))).toBeTrue()
+    })
+  }),
+)
+
 it.live("abandons a rejected ownership ticket without shutting down the verified daemon", () =>
   Effect.gen(function* () {
     const existing = yield* fakeDaemon()
@@ -521,6 +553,8 @@ function realTerminal(root: string, binary?: () => Promise<string>) {
     expect(yield* waitForTerminalText(daemon, id, "pty-marker")).toContain("pty-marker")
     const handoff = yield* daemon.handoff
     if (!handoff) return yield* Effect.fail(new Error("expected a handoff ticket"))
+    expect(path.dirname(path.dirname(handoff.directory))).toBe(runtime)
+    expect(path.basename(handoff.directory)).toBe("daemon")
     const registration = yield* Effect.promise(() => readFile(path.join(handoff.directory, "service.json"), "utf8"))
     const daemonPID = (JSON.parse(registration) as { pid: number }).pid
     const replacement = yield* makeDaemonTransport(runtime, "replacement", undefined, handoff)

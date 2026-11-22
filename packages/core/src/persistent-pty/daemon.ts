@@ -1,5 +1,12 @@
 import { spawn } from "node:child_process"
-import { checkDaemonEndpoint, nativeSocketBase, readPtyRegistration, runtimeDirectory } from "./runtime-path.js"
+import {
+  checkDaemonEndpoint,
+  createDaemonRuntime,
+  nativeSocketBase,
+  readPtyRegistration,
+  removeEmptySpawnParent,
+  runtimeDirectory,
+} from "./runtime-path.js"
 import net from "node:net"
 import path from "node:path"
 import { Cause, Data, Duration, Effect, Schema, Semaphore } from "effect"
@@ -203,8 +210,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
   inherited?: Handoff,
 ) {
   const startup = Semaphore.makeUnsafe(1)
-  // Each daemon owns the runtime directory `<root>/<id>`.
-  let id = initialID
+  let runtime = path.join(root, initialID)
   let adoptedInstance: string | undefined
   let registration: Registration | undefined
   let owner: Awaited<ReturnType<typeof openOwner>> | undefined
@@ -243,7 +249,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     )
 
   const discover = Effect.fn("PersistentPty.daemon.discover")(function* (
-    directory = path.join(root, id),
+    directory = runtime,
     expectedInstance = adoptedInstance,
     expectedPid?: number,
   ) {
@@ -290,20 +296,26 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     const child = yield* Effect.tryPromise({
       try: () =>
         new Promise<ReturnType<typeof spawn>>((resolve, reject) => {
-          runtimeDirectory(root, path.join(root, id), true)
           const env =
             process.platform === "win32" ? process.env : { ...process.env, OPENCODE_PTY_SOCKET_DIR: nativeSocketBase() }
-          const child = spawn(executable, ["daemon", "--runtime-dir", root, "--name", id], {
-            env,
-            detached: true,
-            windowsHide: true,
-            stdio: "ignore",
-          })
+          const directory = createDaemonRuntime(root)
+          runtime = directory
+          const child = spawn(
+            executable,
+            ["daemon", "--runtime-dir", path.dirname(directory), "--name", path.basename(directory)],
+            {
+              env,
+              detached: true,
+              windowsHide: true,
+              stdio: "ignore",
+            },
+          )
           child.once("spawn", () => {
             child.unref()
             resolve(child)
           })
           child.once("error", reject)
+          child.once("close", () => removeEmptySpawnParent(root, directory))
         }),
       catch: (cause) => failure("spawn", cause),
     })
@@ -360,7 +372,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     owner = undefined
     registration = undefined
     adoptedInstance = undefined
-    id = crypto.randomUUID()
+    runtime = path.join(root, crypto.randomUUID())
   }
 
   const connect = Effect.fn("PersistentPty.daemon.connect")(function* (shouldStart: boolean) {
@@ -436,7 +448,10 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
         Effect.as(true),
         Effect.orElseSucceed(() => false),
       )
-      if (!running) return response
+      if (!running) {
+        removeEmptySpawnParent(root, runtime)
+        return response
+      }
       yield* Effect.sleep(50)
     }
     return yield* Effect.fail(new DaemonError({ kind: "connect", message: "opencode-pty did not stop" }))
@@ -460,7 +475,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       if (response.type !== "handoff")
         return yield* Effect.fail(new DaemonError({ kind: "protocol", message: "Expected PTY handoff ticket" }))
       return {
-        directory: path.join(root, id),
+        directory: runtime,
         instanceID: registered.instance_id,
         ticket: response.ticket,
         expiresAt: response.expires_at,
@@ -486,7 +501,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
         return yield* Effect.fail(new DaemonError({ kind: "registration", message: "PTY restart handoff expired" }))
       const found = yield* discover(inherited.directory, inherited.instanceID)
       yield* claim(found, inherited.ticket)
-      id = path.basename(inherited.directory)
+      runtime = inherited.directory
       adoptedInstance = found.instance_id
     }).pipe(
       Effect.catchCause((cause) =>

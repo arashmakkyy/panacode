@@ -373,10 +373,21 @@ windows(
         await legacy.exited
       }
       expect((await h.install(build.exe, "install", root)).code).toBe(0)
+      const aliasProbe = await h.compile(
+        "short-install-path",
+        `
+      GetFullPathName /SHORT $0 "$INSTDIR"
+      ReadEnvStr $1 "PANACODE_TEST_RESULT"
+      FileOpen $2 "$1" w
+      FileWrite $2 "short=$0$\\r$\\n"
+      FileClose $2`,
+      )
+      const alias = (await h.install(aliasProbe, "alias", root)).result.short
+      expect(alias).toBeTruthy()
       const unrelated = Bun.spawn([fixture], { stdout: "ignore", stderr: "ignore" })
       const owned = Bun.spawn([file], { stdout: "ignore", stderr: "ignore" })
       try {
-        expect((await h.install(build.exe, "verified", root)).code).toBe(0)
+        expect((await h.install(build.exe, "verified", alias)).code).toBe(0)
         expect(await owned.exited).toBe(1)
         expect(unrelated.exitCode).toBeNull()
       } finally {

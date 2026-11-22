@@ -96,6 +96,7 @@ jobs:
         uses: ./.github/actions/setup-bun
 
       - name: Verify pinned Bun
+        id: ready
         run: test "$(bun --version)" = "$(node -p 'require("./package.json").packageManager.split("@")[1]')"
 
       - name: Set up Node for the production SEA smoke test
@@ -104,38 +105,48 @@ jobs:
           node-version: "26.4.0"
 
       - name: Run a real Node single-executable application
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 1 --test-timeout 120000 -- ./test/panacode-sea.test.ts
 
       - name: Product environment and global roots
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/util --min-pass 7 -- ./test/product-env.test.ts ./test/global-roots.test.ts
 
       - name: Legacy config allowlist and storage isolation
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/core --min-pass 58 --max-skip 1 -- ./test/config/config.test.ts ./test/config/discovery.test.ts ./test/config/watch.test.ts ./test/storage-isolation.test.ts
 
       - name: Persistent PTY resolver, daemon and handoff
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/core --min-pass 40 --max-skip 0 --test-timeout 30000 -- ./test/persistent-pty-binary.test.ts ./test/persistent-pty-daemon.test.ts ./test/persistent-pty-session.test.ts ./test/shell-daemon.test.ts
 
       - name: Server process identity
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/server --min-pass 7 -- ./test/process.test.ts ./test/service-status.test.ts
 
       # The product brief calls out this exact path: the old workflow pointed at
       # script/electron-builder.config.test.ts, which does not exist.
       - name: Desktop packaging identity (electron-builder.config.test.ts)
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 8 -- ./electron-builder.config.test.ts
 
       - name: Desktop CLI staging and installer metadata
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 10 -- ./electron.vite.config.test.ts ./script/utils.test.ts
 
       - name: Desktop identity and service contracts
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 75 --max-skip 2 -- ./src/main/lifecycle/configure.test.ts ./src/main/service/desktop-cli-state.test.ts ./src/main/service/cli-stages.test.ts ./src/main/service/cli-service-file.test.ts ./src/main/service/sidecar-probe.test.ts ./src/main/service/cli-version.test.ts ./src/main/service/background-service-machine.test.ts ./src/main/service/state-root.test.ts ./src/main/native/logging-machine.test.ts
 
       - name: Support archive private-data exclusion
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 18 -- ./src/main/native/support-archive.test.ts ./src/main/lifecycle/deep-link.test.ts
 
       # The repeatable WSL script/install path is exercised by wsl/local.test.ts. The real
       # wsl/runtime.test.ts case needs an installed WSL distribution and is tracked as a
       # separate acceptance row; GitHub-hosted Windows runners do not provide one.
       - name: SSH and WSL fixture contracts
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/gui-plugins --min-pass 55 --test-timeout 60000 -- ./src/managed-cli.test.ts ./src/ssh/bootstrap.test.ts ./src/ssh/remote-cli.test.ts ./src/ssh/dialog-machine.test.ts ./src/ssh/main-machine.test.ts ./src/ssh/window-machine.test.ts ./src/wsl/local.test.ts
 
   linux-client:
@@ -152,9 +163,11 @@ jobs:
         uses: ./.github/actions/setup-bun
 
       - name: Verify pinned Bun
+        id: ready
         run: test "$(bun --version)" = "$(node -p 'require("./package.json").packageManager.split("@")[1]')"
 
       - name: Client registration, control channel and recovery
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         timeout-minutes: 20
         run: bun script/panacode-test-contract.ts --cwd packages/client --min-pass 90 --max-skip 0 --test-timeout 30000 --timeout-ms 900000 -- ./test/service-probe.test.ts ./test/service-decision.test.ts ./test/service-control.test.ts ./test/service-file.test.ts ./test/service-reconnect.test.ts ./test/service-witness.test.ts ./test/service.test.ts ./test/promise-service.test.ts ./test/service-contender-pool.test.ts
 
@@ -172,19 +185,24 @@ jobs:
         uses: ./.github/actions/setup-bun
 
       - name: Verify pinned Bun
+        id: ready
         run: test "$(bun --version)" = "$(node -p 'require("./package.json").packageManager.split("@")[1]')"
 
       - name: CLI ownership, shell preservation and manual updates
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 55 --max-skip 1 --test-timeout 30000 -- ./test/updater-isolation.test.ts ./test/env.test.ts ./test/shell-config.test.ts ./test/install-shell.test.ts ./test/uninstall.test.ts ./test/service-witness.test.ts
 
       - name: Database path foreign-root and alias guard
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 18 --max-skip 2 --test-timeout 30000 --require-pass "the real server refuses a foreign PANACODE_DB before writing" -- ./test/database-path.test.ts
 
       - name: Real service lifecycle
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         timeout-minutes: 20
         run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 7 --max-skip 0 --test-timeout 120000 --timeout-ms 900000 --require-pass "concurrent CLI and client starts converge on one server" -- ./test/service-lifecycle.test.ts
 
       - name: Service, debug and upgrade contracts
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         timeout-minutes: 20
         run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 50 --max-skip 3 --test-timeout 30000 --timeout-ms 900000 -- ./test/service.test.ts ./test/server-connection.test.ts ./test/debug-config.test.ts ./test/debug-heap-dump.test.ts ./test/upgrade.test.ts
 
@@ -202,59 +220,74 @@ jobs:
         uses: ./.github/actions/setup-bun
 
       - name: Verify pinned Bun
+        id: ready
         run: test "$(bun --version)" = "$(node -p 'require("./package.json").packageManager.split("@")[1]')"
 
       # Detached service fixture: the suite observes processes through
       # Get-CimInstance Win32_Process with the fixture's exact entry path and creation time,
       # and disposal only signals processes that still match both.
       - name: Real service lifecycle (Windows service processes)
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         timeout-minutes: 20
         run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 7 --max-skip 0 --test-timeout 120000 --timeout-ms 900000 --require-pass "concurrent CLI and client starts converge on one server" -- ./test/service-lifecycle.test.ts
 
       - name: Database path junction, alias and sidecar guard
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 19 --max-skip 1 --test-timeout 30000 --require-pass "the real server refuses a foreign PANACODE_DB before writing" -- ./test/database-path.test.ts
 
       - name: Live foreign PID and PTY witness
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 2 --max-skip 0 -- ./test/service-witness.test.ts
 
       - name: Foreign shell profile preservation
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 5 --max-skip 0 -- ./test/uninstall.test.ts
 
       - name: Shell installer block and cleanup contract
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 36 --max-skip 1 -- ./test/shell-config.test.ts ./test/install-shell.test.ts
 
       - name: Service, updater and environment contracts
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         timeout-minutes: 20
         run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 60 --max-skip 3 --test-timeout 30000 --timeout-ms 900000 -- ./test/service.test.ts ./test/server-connection.test.ts ./test/debug-config.test.ts ./test/debug-heap-dump.test.ts ./test/upgrade.test.ts ./test/updater-isolation.test.ts ./test/env.test.ts
 
       - name: Support ZIP private-data exclusion
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 18 --max-skip 0 -- ./src/main/native/support-archive.test.ts ./src/main/lifecycle/deep-link.test.ts
 
       - name: Persistent PTY resolver, digest and handoff
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/core --min-pass 40 --max-skip 2 --test-timeout 30000 -- ./test/persistent-pty-binary.test.ts ./test/persistent-pty-daemon.test.ts ./test/persistent-pty-session.test.ts ./test/shell-daemon.test.ts
 
       - name: Desktop packaging identity (electron-builder.config.test.ts)
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 8 -- ./electron-builder.config.test.ts
 
       - name: Desktop CLI staging and installer metadata
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 10 -- ./electron.vite.config.test.ts ./script/utils.test.ts
 
       - name: Desktop identity, state root and service contracts
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 75 -- ./src/main/lifecycle/configure.test.ts ./src/main/service/desktop-cli-state.test.ts ./src/main/service/cli-stages.test.ts ./src/main/service/cli-service-file.test.ts ./src/main/service/sidecar-probe.test.ts ./src/main/service/cli-version.test.ts ./src/main/service/background-service-machine.test.ts ./src/main/service/state-root.test.ts ./src/main/native/logging-machine.test.ts
 
       # This step runs alone: the client recovery fixtures use short control-channel and
       # contender deadlines, and CPU contention from another suite makes them flaky.
       - name: Client registration, control channel and recovery
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         timeout-minutes: 20
         run: bun script/panacode-test-contract.ts --cwd packages/client --min-pass 88 --max-skip 2 --test-timeout 30000 --timeout-ms 900000 -- ./test/service-probe.test.ts ./test/service-decision.test.ts ./test/service-control.test.ts ./test/service-file.test.ts ./test/service-reconnect.test.ts ./test/service-witness.test.ts ./test/service.test.ts ./test/promise-service.test.ts ./test/service-contender-pool.test.ts
 
       # Real-WSL execution is a separate acceptance row; the repeatable WSL script/install
       # path runs through wsl/local.test.ts with Git Bash.
       - name: SSH and WSL fixture contracts
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/gui-plugins --min-pass 55 --test-timeout 60000 -- ./src/managed-cli.test.ts ./src/ssh/bootstrap.test.ts ./src/ssh/remote-cli.test.ts ./src/ssh/dialog-machine.test.ts ./src/ssh/main-machine.test.ts ./src/ssh/window-machine.test.ts ./src/wsl/local.test.ts
 
       # Real makensis, plugins, 7za and the production installer include. This is the NSIS
       # executable harness, not a metadata-only test.
       - name: NSIS installer executable harness
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         timeout-minutes: 30
         run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 8 --max-skip 0 --test-timeout 600000 --timeout-ms 1800000 -- ./script/windows-installer.test.ts

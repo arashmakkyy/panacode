@@ -19,6 +19,7 @@ export const register = Effect.fnUntraced(function* (options: {
   readonly password: string
   readonly controlToken: string
   readonly expectedRegistration?: string
+  readonly prepareConfig?: () => Promise<unknown>
   readonly terminals?: (action: TerminalAction) => Promise<unknown>
   readonly id: string
   readonly file: string
@@ -54,7 +55,7 @@ export const register = Effect.fnUntraced(function* (options: {
     found.password === info.password &&
     found.control?.path === info.control.path &&
     found.control?.token === info.control.token
-  yield* Effect.tryPromise(() => publishRegistration(options.file, encoded, options.expectedRegistration))
+  yield* Effect.tryPromise(() => publishRegistration(options.file, encoded, options.expectedRegistration, options.prepareConfig))
   yield* current.pipe(
     Effect.catchCause((cause) =>
       Effect.logWarning("managed service registration check failed; shutting down", {

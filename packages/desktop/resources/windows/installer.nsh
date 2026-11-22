@@ -2,15 +2,16 @@
 ; A previous install is trusted only through the receipt in this channel's own registration.
 !ifndef PANACODE_BUILD_SHA256
   !ifdef APP_ARM64
-    !define /file PANACODE_BUILD_SHA256 "${NSIS_OUTPUT_DIR}/${APP_ID}-arm64.manifest.sha256"
+    !define /file PANACODE_BUILD_SHA256 "${NSIS_OUTPUT_DIR}\${APP_ID}-arm64.manifest.sha256"
   !else
-    !define /file PANACODE_BUILD_SHA256 "${NSIS_OUTPUT_DIR}/${APP_ID}-x64.manifest.sha256"
+    !define /file PANACODE_BUILD_SHA256 "${NSIS_OUTPUT_DIR}\${APP_ID}-x64.manifest.sha256"
   !endif
 !endif
 !define PANACODE_MANUAL_INSTALL
 !define PANACODE_LEGACY_DIRECTORY "@opencodedesktop"
 
 Var panacodePath
+Var panacodeExpanded
 Var panacodePin
 Var panacodeOldPin
 Var panacodeUninstallerPin
@@ -27,11 +28,20 @@ Var panacodeSharedImageOwned
   Var panacodeStage
 !endif
 
-; Lexically canonicalizes a path and drops a trailing separator unless the path is a root.
-; NSIS GetFullPathName returns an empty string for a path that does not exist yet, which is exactly
-; the fresh-install case, so this uses StdUtils instead.
+; Normalize lexical components even on a fresh path. For an existing path, expand 8.3 names too:
+; registry values, TEMP, and QueryFullProcessImageNameW can use different spellings of one path.
 !macro panacodeCanonicalize INPUT OUTPUT
-  ${StdUtils.NormalizePath} ${OUTPUT} "${INPUT}"
+  ${StdUtils.NormalizePath} $panacodeExpanded "${INPUT}"
+  Push $0
+  Push $1
+  System::Call 'kernel32::GetLongPathNameW(w "$panacodeExpanded", w .r0, i ${NSIS_MAX_STRLEN}) i .r1'
+  ${If} $1 > 0
+  ${AndIf} $1 < ${NSIS_MAX_STRLEN}
+    StrCpy $panacodeExpanded $0
+  ${EndIf}
+  Pop $1
+  Pop $0
+  StrCpy ${OUTPUT} $panacodeExpanded
 !macroend
 
 ; Sets RESULT to 1 when DIR does not exist or holds no entries. FindFirst reports "." and "..", so a
@@ -98,7 +108,7 @@ Var panacodeSharedImageOwned
   StrCpy $panacodePath "${DIR}"
   StrCpy $panacodePin "${PIN}"
   InitPluginsDir
-  File "/oname=$PLUGINSDIR\panacode-files.ps1" "${BUILD_RESOURCES_DIR}/windows/install-files.ps1"
+  File "/oname=$PLUGINSDIR\panacode-files.ps1" "${BUILD_RESOURCES_DIR}\windows\install-files.ps1"
   nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\panacode-files.ps1" -Action "${ACTION}" -Root "$panacodePath" -Pin "$panacodePin" -AppId "${APP_ID}" -Executable "${APP_EXECUTABLE_FILENAME}"'
   Pop ${RESULT}
 !macroend
@@ -158,12 +168,13 @@ Var panacodeSharedImageOwned
 ; Refuses the protected directory itself and any of its ancestors. Descendants stay allowed, so the
 ; default per-user install under LocalAppData\Programs keeps working.
 !macro panacodeRefuseProtected PATH
-  ${If} $INSTDIR == "${PATH}"
+  !insertmacro panacodeCanonicalize "${PATH}" $R2
+  ${If} $INSTDIR == $R2
     !insertmacro panacodeRefuse "Panacode cannot install directly into a protected system or profile folder. Choose a private folder."
   ${EndIf}
   StrLen $R0 $INSTDIR
   IntOp $R0 $R0 + 1
-  StrCpy $R1 "${PATH}" $R0
+  StrCpy $R1 $R2 $R0
   ${If} $R1 == "$INSTDIR\"
     !insertmacro panacodeRefuse "Panacode cannot install into a folder that contains a protected system or profile folder. Choose a private folder."
   ${EndIf}
@@ -380,6 +391,10 @@ Var panacodeSharedImageOwned
           ${If} $R4 != 0
             System::Call "kernel32::QueryFullProcessImageNameW(p R4, i 0, w .R5, *i ${NSIS_MAX_STRLEN}) i .R6"
             ${If} $R6 != 0
+              StrCpy $2 $R5 2
+              ${If} $2 != "\\"
+                !insertmacro panacodeCanonicalize "$R5" $R5
+              ${EndIf}
               StrCpy $2 0
               ${If} $R5 == "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
                 ${If} $panacodeImageOwned != 1
