@@ -237,7 +237,14 @@ test("saved service environment cannot move the registration's state directory",
     await fs.mkdir(path.join(root, "config"), { recursive: true })
     await Bun.write(
       path.join(root, "config", ServiceConfig.filename()),
-      JSON.stringify({ env: { XDG_STATE_HOME: path.join(root, "elsewhere"), A: "1" } }),
+      JSON.stringify({
+        env: {
+          xdg_state_home: path.join(root, "elsewhere"),
+          Panacode_Service_Proof_Key: "persisted",
+          panacode_pty_handoff: "persisted",
+          A: "1",
+        },
+      }),
     )
     const options = await Effect.runPromise(
       ServiceConfig.options().pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer)),
@@ -335,6 +342,30 @@ test("service config migrates from the hashed channel filename", async () => {
     await fs.writeFile(target, JSON.stringify({ port: 4099 }))
     await Effect.runPromise(ServiceConfig.migrateConfig(legacy, target).pipe(Effect.provide(NodeFileSystem.layer)))
     expect(await Bun.file(target).json()).toEqual({ port: 4099 })
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+test("r10 production config migrates once ahead of stale hashed settings, without mutating the original", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "panacode-r10-config-"))
+  const legacy = path.join(root, "service-prod.json")
+  const target = path.join(root, "service.json")
+  const text = JSON.stringify({ port: 28844, password: "r10-private" })
+  const migrate = (channel: string) =>
+    Effect.runPromise(ServiceConfig.migrateChannelConfig(root, channel).pipe(Effect.provide(NodeFileSystem.layer)))
+  try {
+    await fs.writeFile(legacy, text)
+    await fs.writeFile(path.join(root, ServiceConfig.legacyFilename("prod")!), '{"password":"older"}')
+    await migrate("latest")
+    expect(await Bun.file(target).exists()).toBe(false)
+    await Promise.all([migrate("prod"), migrate("prod")])
+    expect(await fs.readFile(target, "utf8")).toBe(text)
+    expect(await fs.readFile(legacy, "utf8")).toBe(text)
+    await fs.writeFile(target, '{"password":"current"}')
+    await migrate("prod")
+    expect(await Bun.file(target).json()).toEqual({ password: "current" })
+    expect(await fs.readFile(legacy, "utf8")).toBe(text)
   } finally {
     await fs.rm(root, { recursive: true, force: true })
   }

@@ -153,6 +153,16 @@ try {
     }
     exit 0
 } catch {
-    [Console]::Error.WriteLine($_.Exception.Message)
+    # Report only fixed categories. Native exception messages can contain the user's profile path.
+    $known = @(
+        'Expected a private local path', 'Linked or reparse-point path', 'Missing ownership receipt',
+        'Ownership receipt mismatch', 'Invalid package identity', 'Invalid manifest entry',
+        'Duplicate manifest entry', 'Invalid Windows relative path', 'Missing packaged executable',
+        'Unexpected desktop profile', 'Installed image changed', 'Changed staged file',
+        'Incomplete staged payload', 'Linked file'
+    )
+    $message = $known -eq $_.Exception.GetBaseException().Message
+    if (!$message) { $message = $_.Exception.GetBaseException().GetType().Name }
+    [Console]::Error.WriteLine("Panacode file verification: $message")
     exit 1
 }

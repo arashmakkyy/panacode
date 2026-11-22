@@ -157,26 +157,27 @@ Var panacodeSharedImageOwned
   ${EndIf}
 !macroend
 
-!macro panacodeRefuse REASON
+!macro panacodeFail CODE REASON
   ${IfNot} ${Silent}
     MessageBox MB_OK|MB_ICONSTOP "${REASON}"
   ${EndIf}
-  SetErrorLevel 5
+  SetErrorLevel ${CODE}
   Quit
 !macroend
+
 
 ; Refuses the protected directory itself and any of its ancestors. Descendants stay allowed, so the
 ; default per-user install under LocalAppData\Programs keeps working.
 !macro panacodeRefuseProtected PATH
   !insertmacro panacodeCanonicalize "${PATH}" $R2
   ${If} $INSTDIR == $R2
-    !insertmacro panacodeRefuse "Panacode cannot install directly into a protected system or profile folder. Choose a private folder."
+    !insertmacro panacodeFail 50 "Panacode cannot install directly into a protected system or profile folder. Choose a private folder."
   ${EndIf}
   StrLen $R0 $INSTDIR
   IntOp $R0 $R0 + 1
   StrCpy $R1 $R2 $R0
   ${If} $R1 == "$INSTDIR\"
-    !insertmacro panacodeRefuse "Panacode cannot install into a folder that contains a protected system or profile folder. Choose a private folder."
+    !insertmacro panacodeFail 51 "Panacode cannot install into a folder that contains a protected system or profile folder. Choose a private folder."
   ${EndIf}
 !macroend
 
@@ -184,19 +185,19 @@ Var panacodeSharedImageOwned
   !insertmacro panacodeCanonicalize "$INSTDIR" $INSTDIR
 
   ${If} $INSTDIR == ""
-    !insertmacro panacodeRefuse "Panacode cannot use an empty installation folder. Choose a private folder."
+    !insertmacro panacodeFail 52 "Panacode cannot use an empty installation folder. Choose a private folder."
   ${EndIf}
 
   StrCpy $R0 $INSTDIR 2
   ${If} $R0 == "\\"
-    !insertmacro panacodeRefuse "Panacode cannot install to a network share. Choose a local private folder."
+    !insertmacro panacodeFail 53 "Panacode cannot install to a network share. Choose a local private folder."
   ${EndIf}
 
   StrLen $R0 $INSTDIR
   ${If} $R0 <= 3
     StrCpy $R1 $INSTDIR 1 1
     ${If} $R1 == ":"
-      !insertmacro panacodeRefuse "Panacode cannot install into a drive root. Choose a private folder."
+      !insertmacro panacodeFail 54 "Panacode cannot install into a drive root. Choose a private folder."
     ${EndIf}
   ${EndIf}
 
@@ -218,7 +219,7 @@ Var panacodeSharedImageOwned
 
   !insertmacro panacodePathIsContained "$INSTDIR" $R3
   ${If} $R3 == 0
-    !insertmacro panacodeRefuse "Panacode cannot install through a junction or symbolic link. Choose a real local folder."
+    !insertmacro panacodeFail 55 "Panacode cannot install through a junction or symbolic link. Choose a real local folder."
   ${EndIf}
 
 !macroend
@@ -256,7 +257,7 @@ Var panacodeSharedImageOwned
   ${AndIf} $R8 != "$panacodeShared"
     System::Call 'kernel32::GetFileAttributesW(w "$R8") i .R9'
     ${If} $R9 != -1
-      !insertmacro panacodeRefuse "Panacode is already installed in another folder."
+      !insertmacro panacodeFail 56 "Panacode is already installed in another folder."
     ${EndIf}
   ${EndIf}
 
@@ -264,13 +265,13 @@ Var panacodeSharedImageOwned
   ${If} $R9 != -1
     IntOp $R7 $R9 & 0x10
     ${If} $R7 == 0
-      !insertmacro panacodeRefuse "The installation path must be a directory."
+      !insertmacro panacodeFail 57 "The installation path must be a directory."
     ${EndIf}
     !insertmacro panacodeDirIsEmpty "$INSTDIR" $R6
     ${If} $R6 == 0
       ${If} $R8 != "$INSTDIR"
       ${OrIfNot} ${FileExists} "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
-        !insertmacro panacodeRefuse "Choose an empty directory or this Panacode installation."
+        !insertmacro panacodeFail 58 "Choose an empty directory or this Panacode installation."
       ${EndIf}
       !insertmacro panacodeMatches "$INSTDIR" "$panacodeOldPin" $panacodeVerified
     ${EndIf}
@@ -293,7 +294,7 @@ Var panacodeSharedImageOwned
   ${OrIf} $R5 != $R4
   ${OrIf} $R3 != "$INSTDIR"
   ${OrIf} $R2 != $R1
-    !insertmacro panacodeRefuse "Windows could not finish registering Panacode. The previous files have been retained. Run the installer again after restoring registry access."
+    !insertmacro panacodeFail 70 "Windows could not finish registering Panacode. The previous files have been retained. Run the installer again after restoring registry access."
   ${EndIf}
   ${If} $panacodeBackup != ""
     !insertmacro panacodeRetire "$panacodeBackup"
@@ -323,7 +324,7 @@ Var panacodeSharedImageOwned
   ${If} $R8 != "$INSTDIR"
   ${OrIf} $panacodeOldPin != "${PANACODE_BUILD_SHA256}"
   ${OrIf} $R4 != 1
-    !insertmacro panacodeRefuse "Panacode could not verify the installed build."
+    !insertmacro panacodeFail 59 "Panacode could not verify the installed build."
   ${EndIf}
   SetOutPath $TEMP
   !insertmacro panacodeRetire "$INSTDIR"
@@ -344,7 +345,7 @@ Var panacodeSharedImageOwned
     ${If} $R4 != 1
     ${OrIf} $R8 != "$INSTDIR"
     ${OrIf} $panacodeOldPin != "${PANACODE_BUILD_SHA256}"
-      !insertmacro panacodeRefuse "This uninstaller does not belong to the registered build."
+      !insertmacro panacodeFail 60 "This uninstaller does not belong to the registered build."
     ${EndIf}
   !endif
   ${If} $R8 == "$INSTDIR"
@@ -398,7 +399,7 @@ Var panacodeSharedImageOwned
               StrCpy $2 0
               ${If} $R5 == "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
                 ${If} $panacodeImageOwned != 1
-                  !insertmacro panacodeRefuse "Close the application in the installation folder and try again. Panacode could not verify its running image."
+                  !insertmacro panacodeFail 61 "Close the application in the installation folder and try again. Panacode could not verify its running image."
                 ${EndIf}
                 StrCpy $2 1
               ${EndIf}
@@ -496,12 +497,12 @@ Var panacodeSharedImageOwned
     StrCpy $panacodeStage "$INSTDIR.staging-$R4"
     !insertmacro panacodePathIsContained "$panacodeStage" $R4
     ${If} $R4 != 1
-      !insertmacro panacodeRefuse "The staging directory is not a local private directory."
+      !insertmacro panacodeFail 71 "The staging directory is not a local private directory."
     ${EndIf}
     ; CreateDirectoryW fails on an already existing directory; CreateDirectory (NSIS) succeeds.
     System::Call 'kernel32::CreateDirectoryW(w "$panacodeStage", p 0) i .R4'
     ${If} $R4 == 0
-      !insertmacro panacodeRefuse "Could not create a fresh staging directory."
+      !insertmacro panacodeFail 72 "Could not create a fresh staging directory."
     ${EndIf}
     !ifdef COMPRESS
       SetCompress off
@@ -515,14 +516,14 @@ Var panacodeSharedImageOwned
     SetOutPath $PLUGINSDIR
     !insertmacro panacodeFiles Stage "$panacodeStage" "${PANACODE_BUILD_SHA256}" $R4
     ${If} $R4 != 0
-      !insertmacro panacodeRefuse "The extracted Panacode build is incomplete or changed. The previous installation is intact."
+      !insertmacro panacodeFail 73 "The extracted Panacode build is incomplete or changed. The previous installation is intact."
     ${EndIf}
     !if "${PUBLISH}" == "publish"
       StrCpy $R6 "${STAGED_PACKAGE_HASH}" 16
       ClearErrors
       Rename "$panacodeStage" "$INSTDIR.update-$R6"
       ${If} ${Errors}
-        !insertmacro panacodeRefuse "Could not publish the verified staging directory."
+        !insertmacro panacodeFail 74 "Could not publish the verified staging directory."
       ${EndIf}
     !endif
     panacodeStageReady_${PUBLISH}:
@@ -565,25 +566,25 @@ Var panacodeSharedImageOwned
       File /oname=uninstallerIcon.ico "${UNINSTALLER_ICON}"
     !endif
     ${If} ${Errors}
-      !insertmacro panacodeRefuse "Could not prepare the uninstaller. Your installation is intact."
+      !insertmacro panacodeFail 75 "Could not prepare the uninstaller. Your installation is intact."
     ${EndIf}
     ${StdUtils.HashFile} $panacodeNewUninstallerPin "SHA2-256" "$panacodeStage\${UNINSTALL_FILENAME}"
     StrLen $R4 $panacodeNewUninstallerPin
     ${If} $R4 != 64
-      !insertmacro panacodeRefuse "Could not verify the packaged uninstaller."
+      !insertmacro panacodeFail 76 "Could not verify the packaged uninstaller."
     ${EndIf}
     StrCpy $panacodeNewIconPin ""
     !ifdef UNINSTALLER_ICON
       ${StdUtils.HashFile} $panacodeNewIconPin "SHA2-256" "$panacodeStage\uninstallerIcon.ico"
       StrLen $R4 $panacodeNewIconPin
       ${If} $R4 != 64
-        !insertmacro panacodeRefuse "Could not verify the packaged uninstaller icon."
+        !insertmacro panacodeFail 77 "Could not verify the packaged uninstaller icon."
       ${EndIf}
     !endif
     nsExec::ExecToLog '"$SYSDIR\icacls.exe" "$panacodeStage" /grant "*S-1-15-2-2:(OI)(CI)(RX)"'
     Pop $R4
     ${If} $R4 != 0
-      !insertmacro panacodeRefuse "Windows could not grant sandbox access. Your installation is intact."
+      !insertmacro panacodeFail 78 "Windows could not grant sandbox access. Your installation is intact."
     ${EndIf}
     SetOutPath $PLUGINSDIR
     ${If} $panacodeShared != ""
@@ -601,7 +602,7 @@ Var panacodeSharedImageOwned
       ClearErrors
       Rename "$INSTDIR" "$panacodeBackup"
       ${If} ${Errors}
-        !insertmacro panacodeRefuse "Close the application in the installation folder and retry. Its files are intact."
+        !insertmacro panacodeFail 79 "Close the application in the installation folder and retry. Its files are intact."
       ${EndIf}
     ${Else}
       RMDir "$INSTDIR"
@@ -609,7 +610,7 @@ Var panacodeSharedImageOwned
     !insertmacro panacodePathIsContained "$INSTDIR" $R4
     ${If} $R4 != 1
       ; Never traverse the substituted destination to clean or restore it.
-      !insertmacro panacodeRefuse "Windows changed the final folder. The previous build is retained at $panacodeBackup."
+      !insertmacro panacodeFail 80 "Windows changed the final folder. The previous build is retained at $panacodeBackup."
 
     ${EndIf}
     ClearErrors
@@ -619,10 +620,10 @@ Var panacodeSharedImageOwned
         ClearErrors
         Rename "$panacodeBackup" "$INSTDIR"
         ${If} ${Errors}
-          !insertmacro panacodeRefuse "The previous installation could not be restored. Its files are retained at $panacodeBackup."
+          !insertmacro panacodeFail 81 "The previous installation could not be restored. Its files are retained at $panacodeBackup."
         ${EndIf}
       ${EndIf}
-      !insertmacro panacodeRefuse "Could not activate the verified Panacode build."
+      !insertmacro panacodeFail 82 "Could not activate the verified Panacode build."
     ${EndIf}
     SetOutPath "$INSTDIR"
     StrCpy $R0 "installed"

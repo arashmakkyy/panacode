@@ -6,8 +6,13 @@ import os from "node:os"
 import path from "node:path"
 import { Effect } from "effect"
 
-export const fixtureInstance = "0".repeat(32)
-export const pong = { type: "pong", instance_id: fixtureInstance, pid: process.pid, protocol: 8, features: [] }
+export function fixtureInstance(directory: string, generation = "first") {
+  return createHash("sha256").update(directory + ":" + generation).digest("hex").slice(0, 32)
+}
+
+export function pong(directory: string, instance = fixtureInstance(directory)) {
+  return { type: "pong", instance_id: instance, pid: process.pid, protocol: 8, features: [] }
+}
 
 export function temporaryDirectory() {
   return Effect.acquireRelease(
@@ -110,7 +115,7 @@ export function frame(value: object) {
   return output
 }
 
-export function fixtureSocket(directory: string, instance = fixtureInstance) {
+export function fixtureSocket(directory: string, instance = fixtureInstance(directory)) {
   const uid = process.getuid?.()
   const socket =
     process.platform === "win32"
@@ -125,7 +130,7 @@ export function fixtureSocket(directory: string, instance = fixtureInstance) {
   return socket
 }
 
-export function writeRegistration(directory: string, socket: string, instance = fixtureInstance, token = "test") {
+export function writeRegistration(directory: string, socket: string, instance = fixtureInstance(directory), token = "test") {
   return writeFile(
     path.join(directory, "service.json"),
     JSON.stringify({ instance_id: instance, pid: process.pid, protocol: 8, socket, token, features: [] }),
@@ -210,7 +215,7 @@ export const fakeDaemon = Effect.fn(function* () {
     (connection, request) => {
       ops.push(String(request.op))
       requests.push(request)
-      if (request.op === "ping") return { ...pong, instance_id: instance }
+      if (request.op === "ping") return pong(directory, instance)
       if (request.op === "list") {
         const list = () => ({ type: "processes", processes: processes.filter((item) => item.mode === request.mode) })
         return holdList.until ? holdList.until.then(list) : list()

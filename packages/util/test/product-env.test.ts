@@ -42,8 +42,7 @@ describe("product-env", () => {
   })
 
   test("sanitizeProductEnv strips the complete upstream runtime override set and keeps Panacode names", () => {
-    // Keep this list in sync with the runtime variables OpenCode accepts. It is a boundary
-    // contract: an ambient value for any of these must not reach Panacode's process tree.
+    // Representative published names as well as a future mixed-case override.
     const suffixes = [
       "API_KEY",
       "ARTIFACT",
@@ -85,9 +84,7 @@ describe("product-env", () => {
     const env: NodeJS.ProcessEnv = {
       HTTPS_PROXY: "http://proxy.invalid",
       PANAAI_API_KEY: "pana",
-      // Unknown upstream variables are not rewritten here; the CLI session filter drops every
-      // OPENCODE_* value before a child starts.
-      OPENCODE_SESSION_ONLY: "kept-for-the-cli-filter",
+      OpEnCoDe_FUTURE_SDK_SETTING: "parent-only",
     }
     for (const suffix of suffixes) {
       env[`OPENCODE_${suffix}`] = `upstream-${suffix}`
@@ -95,16 +92,17 @@ describe("product-env", () => {
       env[`opencode_${suffix.toLowerCase()}`] = `upstream-lower-${suffix}`
     }
 
-    sanitizeProductEnv(env)
+    const child = sanitizeProductEnv({ ...env })
 
     for (const suffix of suffixes) {
-      expect(env[`OPENCODE_${suffix}`], suffix).toBeUndefined()
-      expect(env[`opencode_${suffix.toLowerCase()}`], suffix).toBeUndefined()
-      expect(env[`PANACODE_${suffix}`], suffix).toBe(`product-${suffix}`)
+      expect(child[`OPENCODE_${suffix}`], suffix).toBeUndefined()
+      expect(child[`opencode_${suffix.toLowerCase()}`], suffix).toBeUndefined()
+      expect(child[`PANACODE_${suffix}`], suffix).toBe(`product-${suffix}`)
     }
-    expect(env.OPENCODE_SESSION_ONLY).toBe("kept-for-the-cli-filter")
-    expect(env.HTTPS_PROXY).toBe("http://proxy.invalid")
-    expect(env.PANAAI_API_KEY).toBe("pana")
+    expect(child.OpEnCoDe_FUTURE_SDK_SETTING).toBeUndefined()
+    expect(env.OpEnCoDe_FUTURE_SDK_SETTING).toBe("parent-only")
+    expect(child.HTTPS_PROXY).toBe("http://proxy.invalid")
+    expect(child.PANAAI_API_KEY).toBe("pana")
   })
 
   test("identity isolates from upstream OpenCode", () => {

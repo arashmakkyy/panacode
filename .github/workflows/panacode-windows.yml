@@ -36,6 +36,8 @@ permissions:
 jobs:
   windows-x64:
     name: build windows x64 installer
+    outputs:
+      artifact: ${{ steps.installer.outputs.artifact-id }}
     runs-on: windows-latest
     timeout-minutes: 60
     defaults:
@@ -45,7 +47,6 @@ jobs:
       OPENCODE_CHANNEL: prod
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
       NODE_OPTIONS: --max-old-space-size=6144
-      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Check out
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -125,6 +126,7 @@ jobs:
           echo "installer: $(stat -c %s panacode-desktop-win-x64.exe) bytes, sha256 $(cut -d' ' -f1 panacode-desktop-win-x64.exe.sha256)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload artifact
+        id: installer
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: panacode-desktop-win-x64
@@ -138,12 +140,13 @@ jobs:
       - name: Exercise installed desktop on the isolation branch
         if: github.event_name == 'push' && github.ref == 'refs/heads/isolation-fixes'
         shell: pwsh
-        timeout-minutes: 19
+        timeout-minutes: 23
         run: ./packages/desktop/script/windows-upstream-coexistence.ps1 -Installer ./dist/desktop/panacode-desktop-win-x64.exe
 
       - name: Publish release
         if: steps.meta.outputs.tag != ''
         env:
+          GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.meta.outputs.tag }}
           SUFFIX: ${{ steps.meta.outputs.suffix }}
           SHA: ${{ steps.meta.outputs.sha }}
@@ -176,3 +179,28 @@ jobs:
               dist/desktop/panacode-desktop-win-x64.exe dist/desktop/panacode-desktop-win-x64.exe.sha256
           fi
           echo "release: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG}" >> "$GITHUB_STEP_SUMMARY"
+
+  upgrade-r10:
+    name: Upgrade the installed r10 release
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/isolation-fixes' && needs.windows-x64.outputs.artifact != '' }}
+    needs: windows-x64
+    runs-on: windows-latest
+    timeout-minutes: 22
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: panacode-desktop-win-x64
+          path: candidate
+      - name: Verify and upgrade r10 in a fresh Windows user profile
+        shell: pwsh
+        run: |
+          $expected = ((Get-Content candidate/panacode-desktop-win-x64.exe.sha256 -Raw) -split '\s+')[0]
+          if ($expected -notmatch '^[0-9a-f]{64}$' -or (Get-FileHash candidate/panacode-desktop-win-x64.exe).Hash -ne $expected) {
+            throw 'Candidate SHA-256 mismatch'
+          }
+          ./packages/desktop/script/windows-r10-upgrade.ps1 -Installer ./candidate/panacode-desktop-win-x64.exe

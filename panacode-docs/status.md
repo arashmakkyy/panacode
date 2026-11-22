@@ -5,6 +5,8 @@
 
 دور اصلاح پس از `5cbce5da67` شامل مسیر startup ویندوز، احراز سرویس و PTY، مالکیت فایل‌های NSIS، کش و داده، و قراردادهای CI است. نتایج runهای قدیمی این صفحه به snapshot قبلی تعلق دارند. برای شواهد خودکار، هر دو workflow با نام‌های `panacode-isolation` و `panacode-windows` را روی SHA مورد بررسی ببینید. EXE ساخته‌شده از `90c282c11b` برای پذیرش این تغییرات مناسب نیست. Gate پذیرش تعاملی A–G همچنان باز است. [شرح تغییرات](./REVIEW-isolation-fixes.md)
 
+در job نصب ویندوز، گام `Exercise installed desktop on the isolation branch` زمان اجرای سرد و گرم، بقای سرویس OpenCode، پیام اشغال پورت، خروجی ZIP از پنجرهٔ واقعی و نتیجهٔ نصب مجدد و حذف را ثبت می‌کند. برای هر آزمون موفق، SHA همان run و checksum فایل را کنار نتیجه نگه دارید. در پذیرش دستی از CLI نصب‌شده با `service status` استفاده کنید. خروجی خام `--connection-json` شامل رمز است و فقط باید داخل فرایند آزمون مصرف شود.
+
 ## وضعیت ثبت‌شده پیش از این دور
 
 - **بازبینی جداسازی (شاخهٔ `isolation-fixes`):** ۲۷ commit از `9618e4d5ac` تا code/test HEAD `eccc31771e` (۲ commit فقط مستندات) و یک commit مستندات روی آن در همین worktree؛ شاخه به `origin/isolation-fixes` push شده و base آن `panacode-isolation` است؛ PR، merge و انتشار انجام نشده. remote CI روی code/test HEAD `eccc31771e` در run [`44936316557`](https://github.com/arashmakkyy/panacode/actions/runs/44936316557) با هر ۶ job سبز است. هر یافتهٔ P0/P1/P2 با تست رفتاری که روی کد قدیم شکست می‌خورد، نوع واقعی فراخوان و اصلاح حداقلی پوشش داده شد. تست‌ها با Bun `1.4.4` از پوشهٔ هر package اجرا شدند. artifact کاندید (CLI + installer) از working tree معادل `90c282c11b` ساخته شد و رفع‌های بعدی را ندارد، و پذیرش A–G روی EXE نصب‌شده اجرا نشده است (T-019).

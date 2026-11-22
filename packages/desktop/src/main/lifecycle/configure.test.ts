@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { realpathSync } from "node:fs"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -15,7 +16,7 @@ test("uses the Panacode identity for userData and the single-instance lock", asy
 
     expect(result.names).toEqual(["Panacode Dev"])
     expect(result.userModelIDs).toEqual(["ai.panacode.desktop.dev"])
-    expect(result.userData).toBe(path.join(root, "appData", "ai.panacode.desktop.dev"))
+    expect(result.userData).toBe(realpathSync.native(path.join(root, "appData", "ai.panacode.desktop.dev")))
     expect(result.userDataPath).toBe(result.userData)
     // The lock is scoped to that userData directory. A second instance is refused and quit is called.
     expect(result.locks).toEqual([true, false])
@@ -40,7 +41,7 @@ test("keeps the test root, session data and XDG roots inside the fixture", async
     const testRoot = path.join(root, "test-root")
     const result = await run(path.join(root, "appData"), { PANACODE_DESKTOP_TEST_ROOT: testRoot })
 
-    expect(result.userData).toBe(path.join(testRoot, "desktop"))
+    expect(result.userData).toBe(realpathSync.native(path.join(testRoot, "desktop")))
     expect(result.sessionData).toBe(path.join(testRoot, "session"))
     expect(result.xdg).toEqual({
       PANACODE_DB: undefined,

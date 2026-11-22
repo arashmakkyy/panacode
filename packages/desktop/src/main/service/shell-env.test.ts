@@ -9,7 +9,7 @@ import { isNushell, loadShellEnv, parseShellEnv, resolveUserShell } from "./shel
 
 describe("shell env", () => {
   test("parseShellEnv reads null-delimited pairs and ignores invalid entries", () => {
-    expect(parseShellEnv(Buffer.from("PATH=/usr/bin:/bin\0FOO=bar=baz\0\0INVALID\0=empty\0OK=1\0"))).toEqual({
+    expect(parseShellEnv(Buffer.from("PATH=/usr/bin:/bin\0FOO=bar=baz\0\0INVALID\0=empty\0OpEnCoDe_FUTURE=other\0OK=1\0"))).toEqual({
       PATH: "/usr/bin:/bin",
       FOO: "bar=baz",
       OK: "1",

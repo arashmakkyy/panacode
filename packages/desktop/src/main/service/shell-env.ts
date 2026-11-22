@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process"
 import { userInfo } from "node:os"
 import { Effect, Path } from "effect"
+import { sanitizeProductEnv } from "@opencode/util/product-env"
 
 const TIMEOUT = 5_000
 
@@ -36,6 +37,7 @@ export function parseShellEnv(out: Buffer) {
     env[line.slice(0, ix)] = line.slice(ix + 1)
   }
 
+  sanitizeProductEnv(env)
   return env
 }
 

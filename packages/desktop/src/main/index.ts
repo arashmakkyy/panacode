@@ -1,6 +1,7 @@
 // Imported first so its evaluation stamps the moment Electron handed control to this module.
 import { marks } from "./lifecycle/marks"
 import { app } from "electron"
+import { sanitizeProductEnv } from "@opencode/util/product-env"
 import { acquireApplicationLock, configureApplication } from "./lifecycle/configure"
 import { startPackagedSidecarProbe } from "./service/sidecar-probe-electron"
 import { registerStorageSnapshotHandler } from "./storage/snapshot"
@@ -12,6 +13,7 @@ import { registerRendererScheme } from "./windows/scheme"
 // finished, and the first window should be on screen before the rest of the main process — a few
 // hundred milliseconds of module evaluation and layers — loads. Configuration and the scheme must
 // precede ready; the window is created the moment ready fires; everything else is imported after.
+sanitizeProductEnv()
 configureApplication()
 
 if (acquireApplicationLock()) {

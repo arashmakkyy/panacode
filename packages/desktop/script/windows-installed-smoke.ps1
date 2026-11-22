@@ -15,8 +15,31 @@ foreach ($kind in "DATA","CONFIG","CACHE","STATE") {
     [Environment]::SetEnvironmentVariable("XDG_${kind}_HOME", (Join-Path $xdg $kind), "Process")
 }
 $env:PANACODE_DISABLE_MODELS_FETCH = "1"
-$setup = Start-Process $installerPath -ArgumentList "/S /D=$install" -PassThru
-if (!$setup.WaitForExit(180000) -or $setup.ExitCode -ne 0) { throw "Silent installation failed" }
+function Install-Candidate {
+    $setup = Start-Process $installerPath -ArgumentList "/S /D=$install" -PassThru
+    try {
+        if (!$setup.WaitForExit(180000)) { throw "Silent installation exceeded the 180-second deadline." }
+        if ($setup.ExitCode -ne 0) {
+            $code = $setup.ExitCode
+            Write-Host "Panacode installer returned status $code."
+            $stages = @(Get-ChildItem -LiteralPath $work -Directory -Filter 'application.staging-*')
+            $pinPath = Join-Path $PSScriptRoot '../dist/ai.panacode.desktop-x64.manifest.sha256'
+            if ($stages.Count -eq 1 -and (Test-Path -LiteralPath $pinPath -PathType Leaf)) {
+                # Hosted job only. Recheck the exact failed stage without writing/deleting anything.
+                # Emit the category and status; neither paths nor file contents go to workflow logs.
+                $pin = [IO.File]::ReadAllText((Resolve-Path -LiteralPath $pinPath)).Trim()
+                $helper = Join-Path $PSScriptRoot '../resources/windows/install-files.ps1'
+                $nativePS = Join-Path $env:WINDIR 'SysWOW64/WindowsPowerShell/v1.0/powershell.exe'
+                $diagnostic = @(& $nativePS -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $helper -Action Stage -Root $stages[0].FullName -Pin $pin -AppId ai.panacode.desktop -Executable Panacode.exe 2>&1)
+                $verifyStatus = $LASTEXITCODE
+                $category = @($diagnostic | ForEach-Object { "$_" } | Where-Object { $_ -match '^Panacode file verification: [A-Za-z ]+$' })
+                Write-Host "Read-only check of residual stage returned $verifyStatus. $($category -join ' ')"
+            } else { Write-Host "Residual private stages: $($stages.Count)." }
+            throw "Silent installation failed with status $code."
+        }
+    } finally { $setup.Dispose() }
+}
+Install-Candidate
 $app = Join-Path $install "Panacode.exe"
 $cli = Join-Path $install "resources\panacode-cli.exe"
 if (!(Test-Path $app -PathType Leaf) -or !(Test-Path $cli -PathType Leaf)) { throw "Installed executable missing" }
@@ -80,12 +103,80 @@ if ($LASTEXITCODE -ne 0) { throw "Could not stop the verified service" }
 $status = (& $cli service status | Select-Object -Last 1)
 if ($LASTEXITCODE -ne 0 -or $status -ne 'stopped') { throw "Service still registered after stop" }
 if ($CheckPeer) { & $CheckPeer }
-$uninstallers = @(Get-ChildItem $install -File -Filter "Uninstall*.exe")
-if ($uninstallers.Count -ne 1) { throw "Missing unique registered uninstaller" }
-$uninstall = Start-Process $uninstallers[0].FullName -ArgumentList "/S" -PassThru -Wait
-if ($uninstall.ExitCode -ne 0) { throw "Installed uninstaller failed" }
-$deadline = [DateTime]::UtcNow.AddSeconds(90)
-while ((Test-Path $app) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 500 }
-if (Test-Path $app) { throw "Uninstall left the owned desktop executable" }
+& node "$PSScriptRoot/windows-installed-export.mjs" $app
+if ($LASTEXITCODE -ne 0) { throw 'Installed port conflict or Export Logs check failed.' }
 if ($CheckPeer) { & $CheckPeer }
-Write-Host "Installed cold and warm launch, verified CLI status, and uninstall passed."
+
+# Reinstall with an existing profile. It must survive both this replacement and default uninstall.
+$profileWitness = Join-Path $env:XDG_DATA_HOME 'panacode/installed-smoke-witness.txt'
+$null = New-Item -ItemType Directory -Path (Split-Path $profileWitness) -Force
+[IO.File]::WriteAllText($profileWitness, [guid]::NewGuid().ToString())
+$profileHash = (Get-FileHash -LiteralPath $profileWitness).Hash
+Install-Candidate
+if ((Get-FileHash -LiteralPath $profileWitness).Hash -ne $profileHash) { throw 'Reinstall changed the Panacode profile.' }
+if ($CheckPeer) { & $CheckPeer }
+
+# electron-builder's stable production app GUID for ai.panacode.desktop. The installer stores
+# the three SHA-256 pins in one registry value, separately from the files it owns.
+$guid = 'db0dfd4d-fc6c-534b-b1bc-ca31ad2b6748'
+$installKey = "HKCU:\Software\$guid"
+$uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$guid"
+$registration = Get-ItemProperty -LiteralPath $installKey -ErrorAction Stop
+$receipt = @($registration.PanacodeInstallReceipt -split '/', 3)
+$manifestFile = Join-Path $install '.panacode-install'
+if ($receipt.Count -ne 3 -or $receipt[0] -ne (Get-FileHash -LiteralPath $manifestFile).Hash) {
+    throw 'Installed manifest does not match the registered ownership receipt.'
+}
+$registeredCommand = (Get-ItemProperty -LiteralPath $uninstallKey -ErrorAction Stop).UninstallString
+if ($registeredCommand -notmatch '^"([^"]+)"(?:\s|$)') { throw 'Invalid registered uninstall command.' }
+$uninstallerPath = $Matches[1]
+$expectedUninstaller = Join-Path $registration.InstallLocation 'Uninstall Panacode.exe'
+if ($uninstallerPath -ne $expectedUninstaller -or
+    $receipt[1] -ne (Get-FileHash -LiteralPath (Join-Path $install 'Uninstall Panacode.exe')).Hash -or
+    $receipt[1] -ne (Get-FileHash -LiteralPath $uninstallerPath).Hash) {
+    throw 'Registered uninstaller does not match the installed executable.'
+}
+if ($receipt[2] -and $receipt[2] -ne (Get-FileHash -LiteralPath (Join-Path $install 'uninstallerIcon.ico')).Hash) {
+    throw 'Installed icon does not match the ownership receipt.'
+}
+$manifest = [IO.File]::ReadAllLines($manifestFile)
+if ($manifest[0] -cne 'panacode-install 2' -or $manifest[1] -cne 'app=ai.panacode.desktop' -or
+    $manifest[2] -notmatch '^version=.+' -or $manifest[3] -cne 'exe=Panacode.exe') {
+    throw 'Installed ownership manifest has an unexpected identity.'
+}
+foreach ($ownedFile in @($app,$cli)) {
+    $relative = [IO.Path]::GetRelativePath($install,$ownedFile)
+    $digest = (Get-FileHash -LiteralPath $ownedFile).Hash
+    if ($manifest -notcontains "$digest`t$relative") { throw "Receipt did not verify installed $relative." }
+}
+# An unrelated file and junction inside the install directory must survive uninstall.
+$foreignFile = Join-Path $install 'foreign-witness.txt'
+$foreignRoot = Join-Path $work 'foreign-tree'
+$junction = Join-Path $install 'foreign-junction'
+$null = New-Item -ItemType Directory -Path $foreignRoot
+$outside = Join-Path $foreignRoot 'witness.txt'
+foreach ($file in @($foreignFile,$outside)) { [IO.File]::WriteAllText($file,[guid]::NewGuid().ToString()) }
+$insideHash = (Get-FileHash -LiteralPath $foreignFile).Hash
+$outsideHash = (Get-FileHash -LiteralPath $outside).Hash
+$null = New-Item -ItemType Junction -Path $junction -Target $foreignRoot
+$uninstall = Start-Process $uninstallerPath -ArgumentList '/S' -PassThru -Wait
+if ($uninstall.ExitCode -ne 0) { throw "Installed uninstaller failed" }
+# NSIS can relaunch the actual uninstaller from TEMP. The first launcher exiting and the
+# first owned file disappearing both precede registry cleanup.
+$ownedPaths = @($app, $cli, $manifestFile, $uninstallerPath, $installKey, $uninstallKey)
+$deadline = [DateTime]::UtcNow.AddSeconds(90)
+do {
+    $remaining = @($ownedPaths | Where-Object { Test-Path -LiteralPath $_ })
+    if (!$remaining.Count) { break }
+    Start-Sleep -Milliseconds 500
+} while ([DateTime]::UtcNow -lt $deadline)
+if ($remaining.Count) { throw "Uninstall left owned files or a product registration." }
+if ((Get-FileHash -LiteralPath $foreignFile).Hash -ne $insideHash -or
+    (Get-FileHash -LiteralPath $outside).Hash -ne $outsideHash -or
+    (Get-FileHash -LiteralPath $profileWitness).Hash -ne $profileHash -or
+    (Get-Item -LiteralPath $junction -Force).LinkType -ne 'Junction' -or
+    (Get-FileHash -LiteralPath (Join-Path $junction 'witness.txt')).Hash -ne $outsideHash) {
+    throw 'Uninstall changed an unrelated file, junction or user profile.'
+}
+if ($CheckPeer) { & $CheckPeer }
+Write-Host "Installed cold and warm launch, verified service, reinstall and manifest-scoped uninstall passed."

@@ -136,7 +136,7 @@ jobs:
 
       - name: Desktop identity and service contracts
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
-        run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 75 --max-skip 2 -- ./src/main/lifecycle/configure.test.ts ./src/main/service/desktop-cli-state.test.ts ./src/main/service/cli-stages.test.ts ./src/main/service/cli-service-file.test.ts ./src/main/service/sidecar-probe.test.ts ./src/main/service/cli-version.test.ts ./src/main/service/background-service-machine.test.ts ./src/main/service/state-root.test.ts ./src/main/native/logging-machine.test.ts
+        run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 79 --max-skip 2 --require-pass "parseShellEnv reads null-delimited pairs and ignores invalid entries" -- ./src/main/service/shell-env.test.ts ./src/main/lifecycle/configure.test.ts ./src/main/service/desktop-cli-state.test.ts ./src/main/service/cli-stages.test.ts ./src/main/service/cli-service-file.test.ts ./src/main/service/sidecar-probe.test.ts ./src/main/service/cli-version.test.ts ./src/main/service/background-service-machine.test.ts ./src/main/service/state-root.test.ts ./src/main/native/logging-machine.test.ts
 
       - name: Support archive private-data exclusion
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
@@ -270,7 +270,7 @@ jobs:
 
       - name: Desktop identity, state root and service contracts
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
-        run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 75 -- ./src/main/lifecycle/configure.test.ts ./src/main/service/desktop-cli-state.test.ts ./src/main/service/cli-stages.test.ts ./src/main/service/cli-service-file.test.ts ./src/main/service/sidecar-probe.test.ts ./src/main/service/cli-version.test.ts ./src/main/service/background-service-machine.test.ts ./src/main/service/state-root.test.ts ./src/main/native/logging-machine.test.ts
+        run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 78 --max-skip 1 --require-pass "parseShellEnv reads null-delimited pairs and ignores invalid entries" -- ./src/main/service/shell-env.test.ts ./src/main/lifecycle/configure.test.ts ./src/main/service/desktop-cli-state.test.ts ./src/main/service/cli-stages.test.ts ./src/main/service/cli-service-file.test.ts ./src/main/service/sidecar-probe.test.ts ./src/main/service/cli-version.test.ts ./src/main/service/background-service-machine.test.ts ./src/main/service/state-root.test.ts ./src/main/native/logging-machine.test.ts
 
       # This step runs alone: the client recovery fixtures use short control-channel and
       # contender deadlines, and CPU contention from another suite makes them flaky.
@@ -285,9 +285,20 @@ jobs:
         if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         run: bun script/panacode-test-contract.ts --cwd packages/gui-plugins --min-pass 55 --test-timeout 60000 -- ./src/managed-cli.test.ts ./src/ssh/bootstrap.test.ts ./src/ssh/remote-cli.test.ts ./src/ssh/dialog-machine.test.ts ./src/ssh/main-machine.test.ts ./src/ssh/window-machine.test.ts ./src/wsl/local.test.ts
 
+  nsis:
+    name: Native Windows installer contracts
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-bun
+      - name: Verify pinned Bun
+        run: test "$(bun --version)" = "$(node -p 'require("./package.json").packageManager.split("@")[1]')"
+
       # Real makensis, plugins, 7za and the production installer include. This is the NSIS
       # executable harness, not a metadata-only test.
       - name: NSIS installer executable harness
-        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
         timeout-minutes: 30
         run: bun script/panacode-test-contract.ts --cwd packages/desktop --min-pass 8 --max-skip 0 --test-timeout 600000 --timeout-ms 1800000 -- ./script/windows-installer.test.ts

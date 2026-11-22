@@ -5,7 +5,8 @@ import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../version"
 import { Hash } from "@opencode/util/hash"
 import { Service } from "@opencode/client/effect/service"
 import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
-import { randomBytes } from "crypto"
+import { randomBytes, randomUUID } from "node:crypto"
+import { link, rm, writeFile } from "node:fs/promises"
 import path from "path"
 import { selfCommand } from "../util/process"
 import { RemoteTunnel } from "./remote-tunnel"
@@ -116,10 +117,30 @@ export const migrateRegistration = Effect.fnUntraced(function* (
 
 export const migrateConfig = Effect.fnUntraced(function* (legacy: string, file: string) {
   const fs = yield* FileSystem.FileSystem
+  if (yield* fs.exists(file)) return
   const text = yield* legacyText(legacy)
-  if (!text) return
-  if (Option.isNone(yield* decodeInfo(text).pipe(Effect.option))) return
-  yield* fs.writeFileString(file, text, { flag: "wx", mode: 0o600 }).pipe(Effect.ignore)
+  if (!text || Option.isNone(yield* decodeInfo(text).pipe(Effect.option))) return
+  yield* Effect.tryPromise(async () => {
+    const temporary = file + "." + randomUUID() + ".tmp"
+    await writeFile(temporary, text, { flag: "wx", mode: 0o600 })
+    try {
+      // Publish a complete snapshot only if the target is still missing. Readers and
+      // simultaneous startups cannot observe a partial JSON file or overwrite a newer one.
+      await link(temporary, file).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "EEXIST") throw error
+      })
+    } finally {
+      await rm(temporary, { force: true })
+    }
+  })
+})
+
+export const migrateChannelConfig = Effect.fnUntraced(function* (directory: string, channel = OPENCODE_CHANNEL) {
+  const target = path.join(directory, filename(channel))
+  const hashed = legacyFilename(channel)
+  // The packaged r10 CLI used its named prod configuration in preference to the earlier hash.
+  if (channel === "prod") yield* migrateConfig(path.join(directory, "service-prod.json"), target)
+  if (hashed) yield* migrateConfig(path.join(directory, hashed), target)
 })
 
 function configKey(key: string): Key {
@@ -145,11 +166,10 @@ const paths = Effect.gen(function* () {
   return {
     fs,
     file,
-    legacyConfigFile: legacy ? path.join(global.config, legacy) : undefined,
+    configDir: global.config,
     legacyRegistrationFiles: [
       ...(legacy ? [path.join(global.state, legacy)] : []),
-      // Panacode r9/r10 prod CLIs registered here; adopting it lets Desktop find (and replace) such a service still
-      // running in the background instead of failing to bind its port.
+      // A pre-proof r10 registration stays untouched. Only a verified service may migrate.
       ...(OPENCODE_CHANNEL === "prod" ? [path.join(global.state, "service-prod.json")] : []),
       ...(name !== "service.json" && OPENCODE_CHANNEL !== "local" ? [path.join(global.state, "service.json")] : []),
     ],
@@ -162,11 +182,20 @@ const paths = Effect.gen(function* () {
 // look for it in the wrong place, so the service keeps the state directory it was launched with.
 export function processEnv(env: Info["env"]) {
   if (env === undefined) return undefined
-  const { XDG_STATE_HOME: _state, PANACODE_SERVICE_PROOF_KEY: _proofKey, ...rest } = env
   // A saved service environment is Panacode's own. Drop upstream runtime overrides so a value
   // persisted by an older build cannot move the service back onto OpenCode's paths or credentials.
   return Object.fromEntries(
-    Object.entries(rest).filter(([key]) => !key.toUpperCase().startsWith(`${ProductIdentity.upstreamEnvPrefix}_`)),
+    Object.entries(env).filter(([key]) => {
+      // Windows process.env accepts all case variants. Only the spawning client can supply
+      // its state root, its per-launch service key, or its verified terminal handoff.
+      const name = key.toUpperCase()
+      return (
+        name !== "XDG_STATE_HOME" &&
+        name !== "PANACODE_SERVICE_PROOF_KEY" &&
+        name !== "PANACODE_PTY_HANDOFF" &&
+        !name.startsWith(`${ProductIdentity.upstreamEnvPrefix}_`)
+      )
+    }),
   )
 }
 
@@ -182,8 +211,8 @@ export const options = Effect.fnUntraced(function* (input: { readonly checkVersi
 })
 
 export const read = Effect.fn("cli.service-config.read")(function* () {
-  const { fs, configFile, legacyConfigFile } = yield* paths
-  if (legacyConfigFile) yield* migrateConfig(legacyConfigFile, configFile)
+  const { fs, configFile, configDir } = yield* paths
+  yield* migrateChannelConfig(configDir)
   const text = yield* fs.readFileString(configFile).pipe(Effect.option)
   if (Option.isNone(text)) return {} as Info
   const info = yield* decodeInfo(text.value).pipe(Effect.option)

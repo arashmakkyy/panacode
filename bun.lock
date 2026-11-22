@@ -363,6 +363,7 @@
         "@opencode/ui": "workspace:*",
         "@opencode/util": "workspace:*",
         "@panacode/ui": "workspace:*",
+        "@playwright/test": "catalog:",
         "@sentry/solid": "catalog:",
         "@solidjs/router": "catalog:",
         "@types/bun": "catalog:",

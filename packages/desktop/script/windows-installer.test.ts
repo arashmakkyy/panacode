@@ -132,6 +132,9 @@ ${options.footer ?? ""}
     )
   }
 
+  const processEnvSystemRoot = process.env.SystemRoot ?? "C:\\Windows"
+  const buildPins = new Map<string, string>()
+
   const install = async (exe: string, name: string, target?: string, args: string[] = []) => {
     const resultFile = path.join(dir, `result-${name}.txt`)
     await rm(resultFile, { force: true })
@@ -140,6 +143,35 @@ ${options.footer ?? ""}
       PANACODE_TEST_RESULT: resultFile,
     })
 
+    if (process.code === 73 && target && buildPins.has(exe)) {
+      const parent = path.dirname(target)
+      for (const entry of await readdir(parent, { withFileTypes: true })) {
+        if (!entry.isDirectory() || !/\.staging-\d+$/.test(entry.name)) continue
+        const helper = path.resolve(import.meta.dir, "../resources/windows/install-files.ps1")
+        const shell = path.join(processEnvSystemRoot, "SysWOW64/WindowsPowerShell/v1.0/powershell.exe")
+        const check = await run([
+          shell,
+          "-NoProfile",
+          "-NonInteractive",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          helper,
+          "-Action",
+          "Stage",
+          "-Root",
+          path.join(parent, entry.name),
+          "-Pin",
+          buildPins.get(exe)!,
+          "-AppId",
+          appId,
+          "-Executable",
+          executable,
+        ])
+        const category = /Panacode file verification: ([A-Za-z ]+)/.exec(check.stderr)?.[1] ?? "no category"
+        console.error(`Read-only NSIS stage check (${name}): ${check.code}, ${category}`)
+      }
+    }
     return { ...process, result: await result(name) }
   }
 
@@ -172,6 +204,7 @@ Function .onInit
   !insertmacro preInit
 FunctionEnd`,
     })
+    buildPins.set(exe, pin)
     return { root, pin, exe, suffix: ".update-" + payloadHash.slice(0, 16) }
   }
 
@@ -322,7 +355,7 @@ windows(
       await h.registry.set("QuietUninstallString", "old-quiet")
       await symlink(outside, target, "junction")
       const before = await digest(shared)
-      expect((await h.install(next.exe, "linked", shared)).code).toBe(5)
+      expect((await h.install(next.exe, "linked", shared)).code).toBe(55)
       expect(await names(outside)).toEqual(["sentinel"])
       expect((await h.registry.get("UninstallString")).stdout).toContain("old-uninstall")
       expect((await h.registry.get("QuietUninstallString")).stdout).toContain("old-quiet")
@@ -344,7 +377,7 @@ windows(
         if (name === "copied-payload") await cp(build.root, root, { recursive: true })
         else await writeFiles(root, { [executable]: "foreign" })
         const before = await digest(root)
-        expect((await h.install(build.exe, name, root)).code).toBe(5)
+        expect((await h.install(build.exe, name, root)).code).toBe(58)
         expect(await digest(root)).toBe(before)
         expect((await h.registry.get("InstallLocation")).code).not.toBe(0)
       }
@@ -366,7 +399,7 @@ windows(
       const build = await h.build("new", { ...standard, [executable]: await readFile(fixture) })
       const legacy = Bun.spawn([file, "-n", "60", "127.0.0.1"], { stdout: "ignore", stderr: "ignore" })
       try {
-        expect((await h.install(build.exe, "legacy-running", root)).code).toBe(5)
+        expect((await h.install(build.exe, "legacy-running", root)).code).toBe(61)
         expect(legacy.exitCode).toBeNull()
       } finally {
         legacy.kill()
@@ -459,7 +492,7 @@ windows(
       await writeInstallManifest({ appDir: root, appId, version, executable })
       const before = await digest(root)
       // _?= runs the uninstall section synchronously instead of returning from a launcher copy.
-      expect((await h.run([path.join(root, uninstaller), "/S", "_?=" + root])).code).toBe(5)
+      expect((await h.run([path.join(root, uninstaller), "/S", "_?=" + root])).code).toBe(59)
       expect(await digest(root)).toBe(before)
     }),
   180_000,
