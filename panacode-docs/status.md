@@ -1,7 +1,12 @@
 # وضعیت پروژه — Panacode
-آخرین به‌روزرسانی: 2026-11-21 (10:45 PT)
+آخرین به‌روزرسانی در ۲۰۲۶-۱۱-۲۱
 
-## تصویر فعلی
+## وضعیت شاخهٔ `isolation-fixes`
+
+دور اصلاح پس از `5cbce5da67` شامل مسیر startup ویندوز، احراز سرویس و PTY، مالکیت فایل‌های NSIS، کش و داده، و قراردادهای CI است. نتایج runهای قدیمی این صفحه به snapshot قبلی تعلق دارند. برای شواهد خودکار، هر دو workflow با نام‌های `panacode-isolation` و `panacode-windows` را روی SHA مورد بررسی ببینید. EXE ساخته‌شده از `90c282c11b` برای پذیرش این تغییرات مناسب نیست. Gate پذیرش تعاملی A–G همچنان باز است. [شرح تغییرات](./REVIEW-isolation-fixes.md)
+
+## وضعیت ثبت‌شده پیش از این دور
+
 - **بازبینی جداسازی (شاخهٔ `isolation-fixes`):** ۲۷ commit از `9618e4d5ac` تا code/test HEAD `eccc31771e` (۲ commit فقط مستندات) و یک commit مستندات روی آن در همین worktree؛ شاخه به `origin/isolation-fixes` push شده و base آن `panacode-isolation` است؛ PR، merge و انتشار انجام نشده. remote CI روی code/test HEAD `eccc31771e` در run [`44936316557`](https://github.com/arashmakkyy/panacode/actions/runs/44936316557) با هر ۶ job سبز است. هر یافتهٔ P0/P1/P2 با تست رفتاری که روی کد قدیم شکست می‌خورد، نوع واقعی فراخوان و اصلاح حداقلی پوشش داده شد. تست‌ها با Bun `1.4.4` از پوشهٔ هر package اجرا شدند. artifact کاندید (CLI + installer) از working tree معادل `90c282c11b` ساخته شد و رفع‌های بعدی را ندارد، و پذیرش A–G روی EXE نصب‌شده اجرا نشده است (T-019).
 - **کدنویسی بازطراحی متوقف است.** آخرین commit بازطراحی: `07b4ccaa8a` (feat(shortcut-recorder)) روی `panacode/redesign-v2` در `arashmakkyy/panacode`. رفع‌های D-016، D-017 و D-018 و بازبینی جداسازی هنوز در هیچ exe منتشرشده‌ای نیستند؛ بیلد بعدی (r11) باید پس از merge یا از همین شاخه ساخته شود (T-013). پورت Freeهای باقی‌مانده تمام نشده است (T-001).
 - **هر ۸ مرجع Arc منتقل و به state واقعی وصل شده‌اند** (کد commit شده؛ تأیید نهایی Arash هنوز نگرفته): Tool Call (`bc7350a7dd`)، Agent Approvals (`64afda0f07`)، Code Suggestion (`c547400640`)، AI Chat (`836bdc2d7f`)، AI Composer (`f409be2deb`، `77039b49c7`، `935d91ff84`)، Agent Run (`e1cd0362a5`)، Agent Orchestrator (`a3edd8ba63`)، MCP Servers (`975cc3c659`).

@@ -1,3 +1,4 @@
+import { nativeConfigPath } from "@opencode/util/product-path"
 export * as ConfigAgentPlugin from "./agent.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
@@ -137,7 +138,7 @@ function discover(fs: FSUtil.Interface, directory: string) {
     fs
       .scan(source.pattern, { cwd: directory, absolute: true, dot: true, symlink: true, ignore: FSUtil.ignoreGlobs })
       .pipe(
-        Effect.map((files) => files.toSorted().map((filepath) => ({ directory, filepath, primary: source.primary }))),
+        Effect.map((files) => files.filter((file) => nativeConfigPath(file)).toSorted().map((filepath) => ({ directory, filepath, primary: source.primary }))),
       ),
   ).pipe(
     Effect.map((files) => files.flat()),

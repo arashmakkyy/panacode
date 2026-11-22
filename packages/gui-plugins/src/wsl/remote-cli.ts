@@ -1,6 +1,7 @@
 // The part of the SSH plugin's remote CLI scripts that WSL uses. Plugins share only contracts, so
 // keep the two copies in step with packages/gui-plugins/src/ssh/remote-cli.ts.
 
+import { beginInstall, cachePaths, publishGeneration, selectGeneration } from "../remote-cache"
 import { ManagedCli } from "../managed-cli"
 
 export function quote(value: string) {
@@ -25,22 +26,11 @@ sha512_of() {
 }
 `
 
-function metadataValue(key: string) {
-  return `sed -n 's/.*"${key}":"\\([^"]*\\)".*/\\1/p' "$metadata"`
-}
-
-// Discovery executes no binary until the sidecar names Panacode and matches its digest.
-export function discoverScript() {
-  return `${digest}cli="$HOME/.panacode/bin/panacode"
-metadata="$HOME/.panacode/bin/panacode.artifact.json"
-if [ -f "$cli" ] && [ -f "$metadata" ] && [ ! -L "$cli" ] && [ ! -L "$metadata" ]; then
-  product=$(${metadataValue("product")})
-  stored=$(${metadataValue("sha256")})
-  actual=$(sha256_of "$cli") || actual=""
-  if [ "$product" = "panacode" ] && [ \${#stored} -eq 64 ] && [ "$stored" = "$actual" ]; then
-    printf '%s\\n' "$cli"
-  fi
-fi
+export function discoverScript(input: { version: string; target: string }) {
+  const version = requireVersion(input.version)
+  const target = ManagedCli.requireTarget(input.target)
+  return `${digest}${cachePaths("wsl", version)}${selectGeneration(version, target)}
+if [ -n "$cli" ]; then printf '%s\\n' "$cli"; fi
 `
 }
 
@@ -125,36 +115,10 @@ binary="$stage/package/bin/panacode"`
 
   return `set -eu
 umask 077
-${digest}root="$HOME/.panacode/bin"
-destination="$root/panacode"
-metadata="$root/panacode.artifact.json"
-if [ -L "$HOME/.panacode" ] || [ -L "$root" ]; then
-  echo "Refusing to install the Panacode CLI through a symlinked directory." >&2
-  exit 1
-fi
-mkdir -p "$root"
-if [ -L "$HOME/.panacode" ] || [ -L "$root" ] || [ -L "$destination" ] || [ -L "$metadata" ]; then
-  echo "Refusing to replace a symlinked Panacode CLI." >&2
-  exit 1
-fi
-lock="$root/.install.lock"
-if ! mkdir "$lock" 2>/dev/null; then
-  owner=$(cat "$lock/pid" 2>/dev/null || true)
-  if [ -n "$owner" ] && kill -0 "$owner" 2>/dev/null; then
-    echo "Another Panacode CLI install is already running." >&2
-    exit 1
-  fi
-  rm -rf "$lock"
-  mkdir "$lock" 2>/dev/null || { echo "Another Panacode CLI install is already running." >&2; exit 1; }
-fi
-printf '%s\\n' "$$" > "$lock/pid"
-stage=$(mktemp -d "$root/.install-XXXXXX")
-trap 'rm -rf "$stage" "$lock"' EXIT HUP INT TERM
-${source}
+${digest}${cachePaths("wsl", version)}${beginInstall}${source}
 chmod 755 "$binary"
 sha=$(sha256_of "$binary") || { echo "Could not hash the Panacode CLI." >&2; exit 1; }
 printf '{"product":"panacode","version":"%s","target":"%s","sha256":"%s"}\\n' ${quote(version)} ${quote(target)} "$sha" > "$stage/panacode.artifact.json"
-mv -f "$binary" "$destination"
-mv -f "$stage/panacode.artifact.json" "$metadata"
+${publishGeneration}
 `
 }

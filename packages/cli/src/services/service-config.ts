@@ -1,3 +1,4 @@
+import { migrateOwnedRegistration, registrationBytes } from "@opencode/client/service"
 import { Global } from "@opencode/util/global"
 import { ProductIdentity } from "@opencode/util/product-identity"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../version"
@@ -89,16 +90,20 @@ export function versionBelongsToChannel(
   return /^\d+(?:\.\d+)?$/.test(version.slice(prefix.length))
 }
 
+const legacyText = (file: string) => Effect.tryPromise(() => registrationBytes(file)).pipe(
+  Effect.map((bytes) => bytes?.toString("utf8")),
+  Effect.orElseSucceed(() => undefined),
+)
+
 export const migrateRegistration = Effect.fnUntraced(function* (
   legacy: string,
   file: string,
   channel = OPENCODE_CHANNEL,
   installedVersion = OPENCODE_VERSION,
 ) {
-  const fs = yield* FileSystem.FileSystem
-  const text = yield* fs.readFileString(legacy).pipe(Effect.option)
-  if (Option.isNone(text)) return
-  const registration = yield* decodeRegistration(text.value).pipe(Effect.option)
+  const text = yield* legacyText(legacy)
+  if (!text) return
+  const registration = yield* decodeRegistration(text).pipe(Effect.option)
   if (Option.isNone(registration)) return
   const info = registration.value
   // A version, filename, or location is not proof of ownership. Only a record that carries
@@ -106,15 +111,15 @@ export const migrateRegistration = Effect.fnUntraced(function* (
   // ambiguous legacy record stays where it is instead of being promoted.
   if (info.product !== "panacode" || info.id === undefined || info.password === undefined) return
   if (!versionBelongsToChannel(info.version, channel, installedVersion)) return
-  yield* fs.writeFileString(file, text.value, { flag: "wx", mode: 0o600 }).pipe(Effect.ignore)
+  yield* Effect.tryPromise(() => migrateOwnedRegistration(legacy, file, info, text)).pipe(Effect.ignore)
 })
 
 export const migrateConfig = Effect.fnUntraced(function* (legacy: string, file: string) {
   const fs = yield* FileSystem.FileSystem
-  const text = yield* fs.readFileString(legacy).pipe(Effect.option)
-  if (Option.isNone(text)) return
-  if (Option.isNone(yield* decodeInfo(text.value).pipe(Effect.option))) return
-  yield* fs.writeFileString(file, text.value, { flag: "wx", mode: 0o600 }).pipe(Effect.ignore)
+  const text = yield* legacyText(legacy)
+  if (!text) return
+  if (Option.isNone(yield* decodeInfo(text).pipe(Effect.option))) return
+  yield* fs.writeFileString(file, text, { flag: "wx", mode: 0o600 }).pipe(Effect.ignore)
 })
 
 function configKey(key: string): Key {
@@ -157,7 +162,7 @@ const paths = Effect.gen(function* () {
 // look for it in the wrong place, so the service keeps the state directory it was launched with.
 export function processEnv(env: Info["env"]) {
   if (env === undefined) return undefined
-  const { XDG_STATE_HOME: _state, ...rest } = env
+  const { XDG_STATE_HOME: _state, PANACODE_SERVICE_PROOF_KEY: _proofKey, ...rest } = env
   // A saved service environment is Panacode's own. Drop upstream runtime overrides so a value
   // persisted by an older build cannot move the service back onto OpenCode's paths or credentials.
   return Object.fromEntries(

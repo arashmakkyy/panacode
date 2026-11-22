@@ -1,3 +1,6 @@
+import { lstatSync } from "node:fs"
+import { upstreamRoots, within } from "@opencode/util/product-path"
+import { privateDirectory } from "@opencode/util/private-directory"
 import { confirm, intro, log, outro, spinner } from "@clack/prompts"
 import { Service } from "@opencode/client/effect/service"
 import { Global } from "@opencode/util/global"
@@ -6,7 +9,6 @@ import { Effect, FileSystem, Schedule } from "effect"
 import path from "node:path"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
-import { ServerConnection } from "../../services/server-connection"
 import { RetainedImage } from "../../services/retained-image"
 import { Updater } from "../../services/updater"
 import {
@@ -33,12 +35,13 @@ export default Runtime.handler(
     // Data, config, and state hold sessions, credentials, settings, and prompt history; uninstall only removes the cache.
     // All channels share the cache. Stop background services before deleting it.
     // Read registrations directly: ServiceConfig.options() can migrate files even during a dry run.
-    const services = (yield* fs.exists(global.state))
+    const state = yield* privateProductDirectory(fs, global.state)
+    const services = state.status === "safe"
       ? (yield* fs.readDirectory(global.state)).filter((name) => /^service(?:-.*)?\.json$/.test(name))
       : []
     const bin = path.dirname(process.execPath)
     const shell = method === "curl" ? yield* shellConfigs(global.home, bin) : []
-    const cache = yield* privateCache(fs, global.cache)
+    const cache = yield* privateProductDirectory(fs, global.cache)
 
     log.info(`Installation method: ${method ?? "unknown"}`)
     if (!ownership.owned) {
@@ -79,8 +82,7 @@ export default Runtime.handler(
       yield* Effect.forEach(services, (name) =>
         Effect.gen(function* () {
           const options = { file: path.join(global.state, name) }
-          yield* ServerConnection.shutdownPersistentPty(options).pipe(Effect.ignore)
-          yield* Service.stop(options)
+          yield* Service.stop({ ...options, pty: "shutdown" })
         }),
       ).pipe(
         Effect.tap(() => Effect.sync(() => progress.stop("Background services stopped"))),
@@ -91,13 +93,19 @@ export default Runtime.handler(
     // Links that keep an older OpenCode replaceable may still run; move them so the cache can go.
     const errors: string[] = []
     if (cache.status === "safe") {
+      const stillOwned = Effect.gen(function* () {
+        const current = yield* privateProductDirectory(fs, cache.path)
+        if (current.status !== "safe" || current.dev !== cache.dev || current.ino !== cache.ino)
+          return yield* Effect.fail(new Error("Cache ownership changed during uninstall"))
+      })
+      yield* stillOwned
       if (process.platform === "win32") yield* RetainedImage.relocate(cache.path, global.tmp)
       progress.start("Removing Cache...")
-      yield* fs.remove(cache.path, { recursive: true, force: true }).pipe(
+      yield* stillOwned.pipe(Effect.andThen(fs.remove(cache.path, { recursive: true, force: true })),
         // Windows reports a terminated service as gone before it releases its file handles,
         // so the first removal can race that teardown.
         Effect.retry({
-          while: (error) => process.platform === "win32" && error.reason._tag === "Busy",
+          while: (error) => process.platform === "win32" && "reason" in error && error.reason._tag === "Busy",
           schedule: Schedule.max([Schedule.spaced("250 millis"), Schedule.recurs(40)]),
         }),
         Effect.tap(() => Effect.sync(() => progress.stop("Removed Cache"))),
@@ -136,14 +144,20 @@ export default Runtime.handler(
   }, handlePromptErrors),
 )
 
-const privateCache = Effect.fnUntraced(function* (fs: FileSystem.FileSystem, directory: string) {
+const privateProductDirectory = Effect.fnUntraced(function* (fs: FileSystem.FileSystem, directory: string) {
   if (!(yield* fs.exists(directory))) return { status: "missing" as const }
   const info = yield* fs.lstat(directory).pipe(Effect.orElseSucceed(() => undefined))
   // A linked cache may be OpenCode's or a shared cache. Never delete or relocate through the alias.
-  if (!info || info.type === "SymbolicLink") return { status: "unsafe" as const, path: directory }
-  const resolved = yield* fs.realPath(directory).pipe(Effect.orElseSucceed(() => directory))
-  if (path.basename(resolved) !== ProductIdentity.slug) return { status: "unsafe" as const, path: directory }
-  return { status: "safe" as const, path: directory }
+  if (!info || info.type !== "Directory") return { status: "unsafe" as const, path: directory }
+  const resolved = yield* Effect.try(() => privateDirectory(directory)).pipe(Effect.orElseSucceed(() => undefined))
+  if (!resolved || path.basename(resolved) !== ProductIdentity.slug) return { status: "unsafe" as const, path: directory }
+  const owned = yield* Effect.try(() => {
+    const stat = lstatSync(resolved, { bigint: true })
+    if (process.platform !== "win32" && process.getuid && (stat.uid !== BigInt(process.getuid()) || (stat.mode & 0o022n) !== 0n)) return
+    if (upstreamRoots().some(root => within(root, resolved))) return
+    return { dev: stat.dev, ino: stat.ino }
+  }).pipe(Effect.orElseSucceed(() => undefined))
+  return owned ? { status: "safe" as const, path: resolved, ...owned } : { status: "unsafe" as const, path: directory }
 })
 
 const shellConfigs = Effect.fnUntraced(function* (home: string, bin: string) {

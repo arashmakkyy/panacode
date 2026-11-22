@@ -96,11 +96,11 @@ serviceTest(
     )
     await until(() => snapshot(home).then((state) => state.info))
 
-    await expect(cli(home, "service", "start")).rejects.toThrow("incompatible health protocol")
-    await expect(ensure(home)).rejects.toThrow("incompatible health protocol")
+    await expect(cli(home, "service", "start")).rejects.toThrow("no verified control channel")
+    await expect(ensure(home)).rejects.toThrow("no verified control channel")
     // Protocol compatibility is checked before version, so even a required version must not
     // replace or take over an endpoint whose health contract cannot be verified.
-    await expect(ensure(home, OPENCODE_VERSION)).rejects.toThrow("incompatible health protocol")
+    await expect(ensure(home, OPENCODE_VERSION)).rejects.toThrow("no verified control channel")
     expect(old.exitCode).toBe(null)
     // No contender was spawned, and the old owner still holds the registration and port.
     expect(await servers(home)).toEqual([])
@@ -158,7 +158,7 @@ serviceTest(
     await cli(home, "service", "start")
     const recovered = await steady(home)
     expect(recovered.pid).not.toBe(replacement.pid)
-    await stopped(home)
+    await stopped(home, 2)
   },
   120_000,
 )
@@ -187,12 +187,16 @@ async function serviceHome(options: { readonly failBoot?: boolean } = {}) {
   const port = await availablePort()
   await fs.mkdir(path.join(root, "config"), { recursive: true })
   await fs.writeFile(path.join(root, "config", "service-local.json"), JSON.stringify({ port }))
-  // A directory where the database file belongs makes boot fail after the server registers.
-  if (options.failBoot) await fs.mkdir(path.join(root, "database"))
+  // A private regular file passes the ownership check, then SQLite rejects its contents after registration.
+  const database = path.join(root, "data", "panacode", "corrupt.db")
+  if (options.failBoot) {
+    await fs.mkdir(path.dirname(database), { recursive: true })
+    await fs.writeFile(database, "not a SQLite database")
+  }
   // Servers spawned through this home's entry carry its path, so `servers()` sees only this home.
   const homeEntry = path.join(root, "opencode.ts")
   await fs.writeFile(homeEntry, `import ${JSON.stringify(entry)}\n`)
-  const overrides = options.failBoot ? { PANACODE_DB: path.join(root, "database") } : {}
+  const overrides = options.failBoot ? { PANACODE_DB: database } : {}
   const home = {
     root,
     port,
@@ -286,12 +290,14 @@ async function until<A>(read: () => Promise<A | undefined>, timeout = 30_000) {
 }
 
 /** Stopping leaves no server, no state files, and a free port. */
-async function stopped(home: Home) {
+async function stopped(home: Home, archived = 0) {
   await Effect.runPromise(Service.stop({ file: home.registration }).pipe(Effect.provide(NodeFileSystem.layer)))
   // Allow the OS a moment to reap exited processes; `stop` itself waits for the owner to exit.
   await until(async () => ((await servers(home)).length === 0 ? true : undefined), 2_000).catch(() => undefined)
   expect(await servers(home)).toEqual([])
-  expect(await fs.readdir(path.dirname(home.registration)).catch(() => [])).toEqual([])
+  const remaining = await fs.readdir(path.dirname(home.registration)).catch(() => [] as string[])
+  expect(remaining).toHaveLength(archived)
+  expect(remaining.every((name) => /^service-local\.json\.[a-f0-9-]{36}\.stale$/.test(name))).toBe(true)
   const server = Bun.serve({ hostname: "127.0.0.1", port: home.port, fetch: () => new Response() })
   await server.stop(true)
 }

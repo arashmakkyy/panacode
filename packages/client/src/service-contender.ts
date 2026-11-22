@@ -111,6 +111,7 @@ export function contenderPool(timing: EnsureTiming) {
       contenders.add(contender)
       lastSpawn = Date.now()
     },
+    pending: () => [...contenders].some((item) => !contenderFinished(item)),
     /** Whether this ensure call spawned the process that answered. */
     has(pid: number) {
       for (const item of contenders) if (item.child.pid === pid) return true
@@ -161,4 +162,17 @@ export function sanitizeServiceOutput(output: string) {
     .replace(/\u001b\[[0-9;]*m/g, "")
     .replace(/\bBasic\s+[A-Za-z0-9+/=]+/gi, "Basic [redacted]")
     .replace(/((?:password|token|secret|authorization|api[_-]?key)\s*[=:]\s*)\S+/gi, "$1[redacted]")
+}
+
+export function exitDiagnostic(error: unknown) {
+  const message = error instanceof Error ? error.message : "Background service startup failed"
+  const errorCode =
+    /EADDRINUSE|address already in use|service port [^\n]*already in use|failed to bind|cannot bind/i.test(message)
+      ? ("bind-failed" as const)
+      : /timed out|timeout|deadline/i.test(message)
+        ? ("startup-timeout" as const)
+        : /failed to start server|spawn|ENOENT/i.test(message)
+          ? ("spawn-failed" as const)
+          : ("exit" as const)
+  return { errorCode, reason: message.split("\n", 1)[0] }
 }

@@ -1,6 +1,9 @@
 import os from "os"
 import path from "path"
 
+export const hostFilesystem = false
+export const upstreamFallbackRoots = (_app: string): string[] => []
+
 // workerd has no home directory or XDG base dirs and only tmp is writable, so
 // every global path roots under one directory there. Nothing durable lives in
 // these: on workerd the database is on Durable Object storage.

@@ -1,5 +1,4 @@
 diff --git a/templates/nsis/include/extractAppPackage.nsh b/templates/nsis/include/extractAppPackage.nsh
-index f5470bf52e923dc47266cea4684c76ef78ced451..6c4a4c193a2ca1dc2413482606b9be5c1c2aa1a9 100644
 --- a/templates/nsis/include/extractAppPackage.nsh
 +++ b/templates/nsis/include/extractAppPackage.nsh
 @@ -1,4 +1,11 @@
@@ -16,7 +15,8 @@ index f5470bf52e923dc47266cea4684c76ef78ced451..6c4a4c193a2ca1dc2413482606b9be5c
    !endif
 @@ -13,6 +20,10 @@
    !endif
- 
+-
++
    !insertmacro decompress
 +
 +  !ifmacrodef customInstallStagedApp
@@ -24,10 +24,12 @@ index f5470bf52e923dc47266cea4684c76ef78ced451..6c4a4c193a2ca1dc2413482606b9be5c
 +  !endif
    !insertmacro custom_files_post_decompression
  !macroend
- 
+-
++
 @@ -90,6 +101,15 @@
  !macroend
- 
+-
++
  !macro extractUsing7za FILE
 +  # OpenCode: extract straight into an empty install directory. The copy through $PLUGINSDIR below
 +  # only protects files that a running old version still holds, and an empty directory has none,
@@ -42,10 +44,21 @@ index f5470bf52e923dc47266cea4684c76ef78ced451..6c4a4c193a2ca1dc2413482606b9be5c
    CreateDirectory "$PLUGINSDIR\7z-out"
    ClearErrors
 diff --git a/templates/nsis/include/installer.nsh b/templates/nsis/include/installer.nsh
-index 300ef3dd699d0f5a081b1934fcc22dbe12025bdb..6bc1c7f368208024c52aff9ae53f299ce4b632f3 100644
 --- a/templates/nsis/include/installer.nsh
 +++ b/templates/nsis/include/installer.nsh
-@@ -90,7 +90,21 @@
+@@ -7,6 +7,10 @@
+ !endif
+-
++
+ !macro installApplicationFiles
++  !ifdef PANACODE_MANUAL_INSTALL
++    # This hook prepares the signed uninstaller and all application files in a verified stage.
++    !insertmacro customInstallStagedApp
++  !else
+   !ifdef APP_BUILD_DIR
+     File /r "${APP_BUILD_DIR}\*.*"
+   !else
+@@ -90,7 +94,21 @@
        ${if} $installMode == "all"
          SetShellVarContext current
        ${endif}
@@ -68,3 +81,125 @@ index 300ef3dd699d0f5a081b1934fcc22dbe12025bdb..6bc1c7f368208024c52aff9ae53f299c
        ${if} $installMode == "all"
          SetShellVarContext all
        ${endif}
+@@ -98,6 +116,7 @@
+   !endif
+-
++
+   File "/oname=${UNINSTALL_FILENAME}" "${UNINSTALLER_OUT_FILE}"
++  !endif
+ !macroend
+-
++
+ !macro registryAddInstallInfo
+diff --git a/templates/nsis/installSection.nsh b/templates/nsis/installSection.nsh
+--- a/templates/nsis/installSection.nsh
++++ b/templates/nsis/installSection.nsh
+@@ -49,6 +49,7 @@
+   ${endIf}
+ ${endif}
+-
++
++!ifndef PANACODE_MANUAL_INSTALL
+ !insertmacro uninstallOldVersion SHELL_CONTEXT
+ !insertmacro handleUninstallResult SHELL_CONTEXT
+-
++
+@@ -56,11 +57,14 @@
+   !insertmacro uninstallOldVersion HKEY_CURRENT_USER
+   !insertmacro handleUninstallResult HKEY_CURRENT_USER
+ ${endIf}
++!endif
+-
++
+ SetOutPath $INSTDIR
+-
++
+-!ifdef UNINSTALLER_ICON
+-  File /oname=uninstallerIcon.ico "${UNINSTALLER_ICON}"
++!ifndef PANACODE_MANUAL_INSTALL
++  !ifdef UNINSTALLER_ICON
++    File /oname=uninstallerIcon.ico "${UNINSTALLER_ICON}"
++  !endif
+ !endif
+-
++
+ !insertmacro installApplicationFiles
+diff --git a/templates/nsis/uninstaller.nsh b/templates/nsis/uninstaller.nsh
+--- a/templates/nsis/uninstaller.nsh
++++ b/templates/nsis/uninstaller.nsh
+@@ -234,6 +234,9 @@
+     ${if} $installMode == "all"
+       SetShellVarContext current
+     ${endif}
++    !ifmacrodef customDeleteAppData
++      !insertmacro customDeleteAppData
++    !else
+     RMDir /r "$APPDATA\${APP_FILENAME}"
+     !ifdef APP_PRODUCT_FILENAME
+       RMDir /r "$APPDATA\${APP_PRODUCT_FILENAME}"
+@@ -241,6 +244,7 @@
+     # electron use package.json name for cache,indexdb etc.
+     !ifdef APP_PACKAGE_NAME
+       RMDir /r "$APPDATA\${APP_PACKAGE_NAME}"
++    !endif
+     !endif
+     ${if} $installMode == "all"
+       SetShellVarContext all
+diff --git a/templates/nsis/include/installUtil.nsh b/templates/nsis/include/installUtil.nsh
+--- a/templates/nsis/include/installUtil.nsh
++++ b/templates/nsis/include/installUtil.nsh
+@@ -16,6 +16,7 @@
+   CopyFiles /SILENT `${FROM}` `${TO}`
+ !macroend
+-
++
++!ifndef PANACODE_MANUAL_INSTALL
+ Function GetInQuotes
+   Exch $R0
+   Push $R1
+@@ -80,6 +81,8 @@
+     Pop $R1
+     Exch $R0
+ FunctionEnd
++
++!endif
+-
++
+ Var /GLOBAL isTryToKeepShortcuts
+-
++
+@@ -105,6 +108,7 @@
+   ${endif}
+ !macroend
+-
++
++!ifndef PANACODE_MANUAL_INSTALL
+ Function handleUninstallResult
+   Var /GLOBAL rootKey_uninstallResult
+   Exch $rootKey_uninstallResult
+@@ -246,3 +250,4 @@
+   Push "${ROOT_KEY}"
+   Call uninstallOldVersion
+ !macroend
++!endif
+diff --git a/out/targets/nsis/NsisTarget.js b/out/targets/nsis/NsisTarget.js
+--- a/out/targets/nsis/NsisTarget.js
++++ b/out/targets/nsis/NsisTarget.js
+@@ -156,6 +156,9 @@
+         }
+         await packager.info.emitArtifactBuildStarted({
+             targetPresentableName: this.name,
++            // The pre-archive hook must see the actual (--prepackaged or newly built) payload.
++            appOutDir: archs.size === 1 ? archs.values().next().value : undefined,
++            appInfo,
+             file: installerPath,
+             arch: primaryArch,
+         }, logFields);
+@@ -172,6 +175,7 @@
+             APP_DESCRIPTION: appInfo.description,
+             VERSION: appInfo.version,
+             PROJECT_DIR: packager.projectDir,
++            NSIS_OUTPUT_DIR: this.outDir,
+             BUILD_RESOURCES_DIR: packager.info.buildResourcesDir,
+             APP_PACKAGE_NAME: (0, targetUtil_1.getWindowsInstallationAppPackageName)(appInfo.name),
+         };

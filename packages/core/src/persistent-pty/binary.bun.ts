@@ -1,5 +1,7 @@
 import { chmod, lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises"
 import path from "node:path"
+import { privateDirectory as checkedDirectory } from "@opencode/util/private-directory"
+import { physicalPath, upstreamRoots, within } from "@opencode/util/product-path"
 import { assertOwner, dependencyBinary, digest, isMissing, verifiedBinary, type Asset } from "./binary.js"
 import asset from "./pty-binding.js"
 
@@ -25,7 +27,10 @@ export async function resolve(bin: string | undefined, asset: Asset | string | u
     return install(bin, asset)
   }
   const override = process.env.PANACODE_PTY_BIN
-  if (override) return dependencyBinary(override, "PANACODE_PTY_BIN")
+  if (override) {
+    const file = await dependencyBinary(override, "PANACODE_PTY_BIN")
+    return verifiedBinary(file, process.env.PANACODE_PTY_BIN_SHA256)
+  }
   if (typeof asset === "string") return dependencyBinary(asset, "Persistent PTY dependency binary")
   throw new Error(
     `No persistent PTY binary is available for ${process.platform}-${process.arch}; ` +
@@ -34,6 +39,15 @@ export async function resolve(bin: string | undefined, asset: Asset | string | u
 }
 
 async function install(bin: string, input: Asset) {
+  if (!path.isAbsolute(bin) || !/^[a-z0-9][a-z0-9.+-]*$/i.test(input.version) || !/^[a-f0-9]{64}$/.test(input.sha256))
+    throw new Error("Invalid embedded opencode-pty metadata or cache root")
+  if (upstreamRoots().some((foreign) => within(foreign, physicalPath(bin))))
+    throw new Error("Unsafe opencode-pty cache root")
+  try {
+    checkedDirectory(bin, true)
+  } catch (cause) {
+    throw new Error("Unsafe opencode-pty cache root", { cause })
+  }
   const root = path.join(bin, "opencode-pty")
   await privateDirectory(root)
   const directory = path.join(root, `${input.version}-${input.sha256.slice(0, 16)}`)
@@ -56,7 +70,7 @@ async function install(bin: string, input: Asset) {
     await chmod(temporary, 0o755)
     await rename(temporary, destination).catch(async (error) => {
       if (await cached(destination, input.sha256)) return
-      // `cached` removed a corrupt destination; one retry can now claim the name.
+      // A parallel reader can temporarily hold a destination on Windows. Retry the atomic rename.
       await rename(temporary, destination).catch(() => {
         throw error
       })
@@ -88,12 +102,11 @@ async function cached(file: string, expected: string) {
     if (isMissing(error)) return false
     throw error
   }
-  if (!info.isFile() || info.isSymbolicLink()) throw new Error(`Unsafe opencode-pty executable: ${file}`)
+  if (!info.isFile() || info.nlink !== 1 || info.isSymbolicLink()) throw new Error(`Unsafe opencode-pty executable: ${file}`)
   assertOwner(info, `opencode-pty executable ${file}`)
   if (digest(await readFile(file)) === expected) {
     await chmod(file, 0o755)
     return true
   }
-  await rm(file, { force: true })
   return false
 }

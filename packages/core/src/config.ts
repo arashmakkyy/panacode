@@ -10,6 +10,7 @@ import { Credential } from "./credential.js"
 import { Bus } from "./bus.js"
 import { Watcher } from "./filesystem/watcher.js"
 import { FSUtil } from "@opencode/util/fs-util"
+import { nativeConfigPath } from "@opencode/util/product-path"
 import { Global } from "@opencode/util/global"
 import { Location } from "./location.js"
 import { AbsolutePath } from "./schema.js"
@@ -171,6 +172,7 @@ export const layer = (options?: Options) =>
       })
 
       const loadFile = Effect.fnUntraced(function* (filepath: string) {
+        if (!nativeConfigPath(filepath)) return
         const text = yield* fs.readFileStringSafe(filepath)
         if (text === undefined) return
         const substituted = yield* ConfigVariable.substitute({ type: "path", path: filepath, text })
@@ -288,6 +290,7 @@ export const layer = (options?: Options) =>
       })
 
       const loadDirectory = Effect.fnUntraced(function* (directory: AbsolutePath) {
+        if (!nativeConfigPath(directory, true)) return []
         return [
           ...(yield* Effect.forEach(ConfigDiscovery.names, (file) => loadFile(path.join(directory, file))).pipe(
             Effect.map((configs) => configs.filter((config): config is Document => config !== undefined)),
@@ -498,6 +501,7 @@ export const layer = (options?: Options) =>
           const filepath =
             (yield* Effect.filter(candidates, fs.isFile)).at(-1) ??
             path.join(directory, ConfigDiscovery.names.at(-1) ?? "panacode.jsonc")
+          if (!nativeConfigPath(filepath)) return yield* Effect.fail(new FSUtil.FileSystemError({ method: "config.update", cause: new Error("Refusing a shared config path") }))
           const text = (yield* fs.readFileStringSafe(filepath)) ?? "{}\n"
           const updated = yield* Effect.try({
             try: () =>
@@ -521,8 +525,8 @@ export const layer = (options?: Options) =>
         }),
         compatibility: () =>
           Effect.all({
-            claude: Effect.filter(sources.claude, fs.isDir),
-            agents: Effect.filter(sources.agents, fs.isDir),
+            claude: Effect.filter(sources.claude.filter((root) => nativeConfigPath(root, true)), fs.isDir),
+            agents: Effect.filter(sources.agents.filter((root) => nativeConfigPath(root, true)), fs.isDir),
           }),
         changes: () => Stream.fromPubSub(updates),
         update,

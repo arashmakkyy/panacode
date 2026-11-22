@@ -123,7 +123,7 @@ export function createWslServersController(options: WslServersControllerOptions)
   }
 
   const inspectCli = async (distro: string) => {
-    const resolved = await runtime.resolveCli(distro)
+    const resolved = await runtime.resolveCli(distro, options.cli.version)
     const version = resolved ? await runtime.readCliVersion(resolved, distro) : null
 
     return cliCheck(t, distro, resolved, version, options.cli.version)

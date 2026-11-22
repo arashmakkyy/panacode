@@ -1,3 +1,5 @@
+import fs from "node:fs/promises"
+import { privateInput } from "@opencode/util/product-path"
 import path from "path"
 import { describe, expect, test } from "bun:test"
 import { Effect, ManagedRuntime } from "effect"
@@ -57,7 +59,7 @@ describe("per-product storage isolation", () => {
     )
 
     const panacode = productRuntime(panacodeData, `${ProductIdentity.slug}.db`)
-    const opencode = productRuntime(opencodeData, `${ProductIdentity.upstreamSlug}.db`)
+    const opencode = productRuntime(opencodeData, "upstream-fixture.db")
     try {
       expect(await credentials(panacode)).toEqual({
         openai: [],
@@ -72,6 +74,41 @@ describe("per-product storage isolation", () => {
     }
   })
 
+  test("skips foreign credential bytes even if auth.json is hard-linked into private data", async () => {
+    await using tmp = await tmpdir("panacode-foreign-auth-")
+    const data = path.join(tmp.path, "panacode")
+    await fs.mkdir(data)
+    const foreign = path.join(tmp.path, "foreign-auth.json")
+    await fs.writeFile(foreign, JSON.stringify({ openai: { type: "api", key: "foreign-fixture" } }))
+    await fs.link(foreign, path.join(data, "auth.json"))
+    const runtime = productRuntime(data, "panacode.db")
+    try {
+      expect(await credentials(runtime)).toEqual({ openai: [], anthropic: [] })
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
+  test("rejects legacy session input through a directory junction or shared sidecar", async () => {
+    await using tmp = await tmpdir("panacode-legacy-session-")
+    const foreign = path.join(tmp.path, "upstream")
+    const local = path.join(tmp.path, "panacode")
+    const alias = path.join(tmp.path, "alias")
+    await fs.mkdir(foreign)
+    await fs.mkdir(local)
+    const source = path.join(local, "opencode-next.db")
+    await fs.writeFile(source, "fixture")
+    await fs.writeFile(path.join(foreign, "opencode-next.db"), "foreign")
+    await fs.symlink(foreign, alias, process.platform === "win32" ? "junction" : "dir")
+    expect(privateInput(source, true)).toBeTrue()
+    expect(privateInput(path.join(alias, "opencode-next.db"), true)).toBeFalse()
+    for (const suffix of ["-wal", "-shm", "-journal"]) {
+      await fs.link(path.join(foreign, "opencode-next.db"), source + suffix)
+      expect(privateInput(source, true)).toBeFalse()
+      await fs.unlink(source + suffix)
+    }
+  })
+
   test("returns only the sessions stored in its own database", async () => {
     await using tmp = await tmpdir("panacode-session-isolation-")
     const panacodeData = path.join(tmp.path, ProductIdentity.slug)
@@ -79,7 +116,7 @@ describe("per-product storage isolation", () => {
     const panacodeSession = Session.ID.make("ses_panacode_fixed")
     const opencodeSession = Session.ID.make("ses_opencode_fixed")
     const panacode = productRuntime(panacodeData, `${ProductIdentity.slug}.db`)
-    const opencode = productRuntime(opencodeData, `${ProductIdentity.upstreamSlug}.db`)
+    const opencode = productRuntime(opencodeData, "upstream-fixture.db")
     try {
       await seedSession(panacode, {
         sessionID: panacodeSession,

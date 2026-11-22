@@ -1,9 +1,15 @@
+import {
+  newServiceChallenge,
+  serviceProofHeader,
+  serviceProofRequest,
+  verifyServiceProof,
+} from "@opencode/schema/service-proof"
 import { spawn, type ChildProcess } from "node:child_process"
 import { randomUUID } from "node:crypto"
 import { createServer } from "node:net"
 import { Predicate } from "effect"
 import type { MainContext } from "@opencode/plugin/gui/main"
-import { type WslCommandLine, type WslRuntime, shellEscape, wslArgs } from "./runtime"
+import { type WslCommandLine, type WslRuntime, shellEscape, system32, wslArgs } from "./runtime"
 
 export type WslSidecar = {
   stop: () => Promise<void>
@@ -15,6 +21,7 @@ export type WslSidecar = {
 export async function spawnWslSidecar(
   distro: string,
   opts: {
+    version: string
     runtime: WslRuntime
     t: MainContext["t"]
     packaged: boolean
@@ -25,13 +32,14 @@ export async function spawnWslSidecar(
   },
 ): Promise<WslSidecar> {
   const t = opts.t
-  const opencode = await opts.runtime.resolveCli(distro, { signal: opts.signal })
+  const opencode = await opts.runtime.resolveCli(distro, opts.version, { signal: opts.signal })
 
   if (!opencode) throw new Error(t("error.opencodeNotInstalled", { distro }))
 
   const port = await allocatePort(t)
   opts.signal.throwIfAborted()
   const password = randomUUID()
+  const proofKey = newServiceChallenge()
 
   const script = [
     "set -euo pipefail",
@@ -41,12 +49,13 @@ export async function spawnWslSidecar(
     "export WSLENV=",
     "export PANACODE_DISABLE_FILEWATCHER=true",
     "export PANACODE_CLIENT=desktop",
+    `export PANACODE_SERVICE_PROOF_KEY=${shellEscape(proofKey)}`,
     `export PANACODE_SERVER_PASSWORD=${shellEscape(password)}`,
     'export XDG_STATE_HOME="$HOME/.local/state"',
     `exec ${shellEscape(opencode)} --log-level ${opts.packaged ? "warn" : "info"} serve --hostname 0.0.0.0 --port ${port}`,
   ].join("\n")
 
-  const child = spawn("wsl", wslArgs(["bash", "-se"], distro), {
+  const child = spawn(system32("wsl.exe"), wslArgs(["bash", "-se"], distro), {
     stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true,
   })
@@ -86,7 +95,7 @@ export async function spawnWslSidecar(
   opts.signal.addEventListener("abort", abort, { once: true })
   const url = `http://127.0.0.1:${port}`
   const startup = new AbortController()
-  const health = pollWslHealth(() => checkHealth(url, password), startup.signal)
+  const health = pollWslHealth(() => checkHealth(url, proofKey), startup.signal)
   const timeoutMs = opts.healthTimeoutMs ?? 30_000
   let timeout: ReturnType<typeof setTimeout>
 
@@ -127,15 +136,11 @@ function stop(child: ChildProcess) {
   })
 }
 
-async function checkHealth(url: string, password: string) {
-  const auth = Buffer.from(`opencode:${password}`).toString("base64")
-
-  return fetch(new URL("/api/info", url), {
-    method: "GET",
-    headers: { authorization: `Basic ${auth}` },
-    signal: AbortSignal.timeout(3000),
-  }).then(
-    (res) => res.ok,
+export async function checkHealth(url: string, key: string) {
+  const nonce = newServiceChallenge()
+  return fetch(serviceProofRequest(url, nonce), { redirect: "error", signal: AbortSignal.timeout(3000) }).then(
+    (response) =>
+      response.status === 204 && verifyServiceProof(response.headers.get(serviceProofHeader), key, nonce) === "ready",
     () => false,
   )
 }

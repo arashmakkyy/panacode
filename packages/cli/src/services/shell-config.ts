@@ -113,6 +113,7 @@ export const shellPathShared = Effect.fnUntraced(function* (bin: string, current
 export const cleanShellFile = Effect.fnUntraced(function* (file: string, commands: readonly string[]) {
   const fs = yield* FileSystem.FileSystem
   const content = decode(yield* fs.readFile(file))
+  if (content === undefined) return false
   const cleaned = cleanShellConfig(content, commands)
   if (cleaned === content) return false
   if (decode(yield* fs.readFile(file)) !== content)
@@ -123,9 +124,9 @@ export const cleanShellFile = Effect.fnUntraced(function* (file: string, command
 
 // A BOM is part of the file, not whitespace. Bun's string reader drops it, so read bytes and keep
 // U+FEFF in the text; writing the same string restores the original EF BB BF prefix.
-const decoder = new TextDecoder("utf-8", { ignoreBOM: true })
+const decoder = new TextDecoder("utf-8", { ignoreBOM: true, fatal: true })
 function decode(bytes: Uint8Array) {
-  return decoder.decode(bytes)
+  try { return decoder.decode(bytes) } catch { return undefined }
 }
 
 function shellPathForms(bin: string) {

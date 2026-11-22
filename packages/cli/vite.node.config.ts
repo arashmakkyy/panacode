@@ -1,4 +1,5 @@
 import path from "node:path"
+import { readFileSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import { defineConfig, type Plugin, type UserConfig } from "vite"
@@ -126,12 +127,13 @@ const output = (entryFileNames: string, banner?: string) => ({
   banner,
 })
 
-function nodePrelude(input: NodeBuildInput) {
+export function nodePrelude(input: NodeBuildInput) {
   const nodePtySpawnHelper =
     input.target.platform === "darwin"
       ? `${input.target.nodePtyPackage}/prebuilds/darwin-${input.target.arch}/spawn-helper`
       : undefined
   const opencodePtyAsset = input.target.opencodePtyAsset
+  if (!input.ptySha256 || !/^[a-f0-9]{64}$/.test(input.ptySha256)) throw new Error("A pinned SEA PTY digest is required")
   const promiseModule = `const sdk = globalThis[Symbol.for("opencode.plugin.v2.promise")]
 if (!sdk) throw new Error("OpenCode Promise plugin SDK is unavailable")
 export const Agent = sdk.Agent
@@ -160,8 +162,7 @@ export const Error = sdk.Tool.Error
 `
   return `#!/usr/bin/env -S node ${nodeExecArgv.join(" ")}
 import __cjs_mod__ from "node:module"
-import { chmodSync as __ocChmod, existsSync as __ocExists, lstatSync as __ocLstat, mkdirSync as __ocMkdir, readFileSync as __ocReadFile, renameSync as __ocRename, rmSync as __ocRm, writeFileSync as __ocWrite } from "node:fs"
-import { createHash as __ocHash } from "node:crypto"
+${readFileSync(new URL("./script/node-sea-cache.mjs", import.meta.url), "utf8")}
 import { tmpdir as __ocTmpdir } from "node:os"
 import __ocPath from "node:path"
 import { getAssetKeys as __ocAssetKeys, getRawAsset as __ocRawAsset, isSea as __ocIsSea } from "node:sea"
@@ -197,47 +198,11 @@ __cjs_mod__.registerHooks({
       : __ocNextLoad(__ocUrl, __ocContext)
   },
 })
-const __ocUid = typeof process.getuid === "function" ? process.getuid() : undefined
-const __ocCacheRoot = __ocPath.join(__ocTmpdir(), \`opencode-node-\${__ocUid ?? "user"}\`)
-if (__ocIsSea()) {
-  try {
-    __ocMkdir(__ocCacheRoot, { mode: 0o700 })
-  } catch (__ocError) {
-    if (!__ocExists(__ocCacheRoot)) throw __ocError
-  }
-  const __ocCacheInfo = __ocLstat(__ocCacheRoot)
-  if (!__ocCacheInfo.isDirectory() || __ocCacheInfo.isSymbolicLink()) throw new Error("Unsafe Node asset cache path")
-  if (__ocUid !== undefined && __ocCacheInfo.uid !== __ocUid) throw new Error("Node asset cache is owned by another user")
-  if (__ocUid !== undefined) __ocChmod(__ocCacheRoot, 0o700)
-}
-const __ocAssetRoot = __ocIsSea()
-  ? __ocPath.join(__ocCacheRoot, ${JSON.stringify(`${input.assetHash}-${input.target.platform}-${input.target.arch}`)})
-  : __ocFileURLToPath(new URL("./assets/", import.meta.url))
 const __ocPersistentPty = ${JSON.stringify(opencodePtyAsset)}
-if (__ocIsSea()) {
-  const __ocPtySpawnHelper = ${JSON.stringify(nodePtySpawnHelper)}
-  for (const __ocKey of __ocAssetKeys()) {
-    if (__ocKey === ${JSON.stringify(appArchiveAsset)}) continue
-    const __ocTarget = __ocPath.join(__ocAssetRoot, __ocKey)
-    if (__ocKey === __ocPersistentPty && __ocExists(__ocTarget)) {
-      const __ocExpected = __ocHash("sha256").update(new Uint8Array(__ocRawAsset(__ocKey))).digest("hex")
-      const __ocActual = __ocHash("sha256").update(__ocReadFile(__ocTarget)).digest("hex")
-      if (__ocActual !== __ocExpected) __ocRm(__ocTarget, { force: true })
-    }
-    if (__ocExists(__ocTarget)) continue
-    __ocMkdir(__ocPath.dirname(__ocTarget), { recursive: true })
-    const __ocTemporary = \`${"${__ocTarget}"}.${"${process.pid}"}.${"${crypto.randomUUID()}"}.tmp\`
-    __ocWrite(__ocTemporary, new Uint8Array(__ocRawAsset(__ocKey)))
-    if ((__ocKey === __ocPtySpawnHelper || __ocKey === __ocPersistentPty) && process.platform !== "win32")
-      __ocChmod(__ocTemporary, 0o755)
-    try {
-      __ocRename(__ocTemporary, __ocTarget)
-    } catch (__ocError) {
-      __ocRm(__ocTemporary, { force: true })
-      if (!__ocExists(__ocTarget)) throw __ocError
-    }
-  }
-}
+const __ocAssetRoot = __ocIsSea()
+  ? installPanacodeSeaAssets(__ocTmpdir(), ${JSON.stringify(`${input.assetHash}-${input.target.platform}-${input.target.arch}`)},
+      { keys: __ocAssetKeys, get: __ocRawAsset }, ${JSON.stringify(appArchiveAsset)}, [__ocPersistentPty, ${JSON.stringify(nodePtySpawnHelper)}])
+  : __ocFileURLToPath(new URL("./assets/", import.meta.url))
 process.env.PANACODE_NODE_ASSETS_DIR = __ocAssetRoot
 process.env.OTUI_ASSET_ROOT = __ocAssetRoot
 process.env.PANACODE_NODE_PTY_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(input.target.nodePtyEntryAsset)})
@@ -245,10 +210,11 @@ process.env.PANACODE_PARCEL_WATCHER_PATH = __ocPath.join(__ocAssetRoot, ${JSON.s
 process.env.PANACODE_PHOTON_WASM_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(photonWasmAsset)})
 process.env.FFF_BINARY_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(input.target.fffAsset)})
 process.env.PANACODE_FFF_FFI_PATH = __ocPath.join(__ocAssetRoot, ${JSON.stringify(input.target.fffFfiAsset)})
-if (__ocPersistentPty) {
-  process.env.PANACODE_PTY_BIN = __ocPath.join(__ocAssetRoot, __ocPersistentPty)
-  ${input.ptySha256 ? `process.env.PANACODE_PTY_BIN_SHA256 = ${JSON.stringify(input.ptySha256)}` : ""}
-}
+Object.defineProperty(globalThis, "__PANACODE_PACKAGED_PTY", {
+  value: Object.freeze({ file: __ocPath.join(__ocAssetRoot, __ocPersistentPty), sha256: ${JSON.stringify(input.ptySha256)} })
+})
+process.env.PANACODE_PTY_BIN = globalThis.__PANACODE_PACKAGED_PTY.file
+process.env.PANACODE_PTY_BIN_SHA256 = globalThis.__PANACODE_PACKAGED_PTY.sha256
 try {
   globalThis.__PANACODE_FFF_FFI = require(process.env.PANACODE_FFF_FFI_PATH)
 } catch {}
@@ -308,9 +274,15 @@ export function mainConfig(input: NodeBuildInput): UserConfig {
   })
 }
 
-export default mainConfig({
-  version: process.env.OPENCODE_VERSION ?? "local",
-  channel: process.env.OPENCODE_CHANNEL ?? "local",
-  assetHash: "local",
-  target: nodeTarget(process.platform, process.arch),
+export default defineConfig(async () => {
+  const target = nodeTarget(process.platform, process.arch)
+  const { resolveOpencodePty } = await import("./script/opencode-pty")
+  const asset = await resolveOpencodePty(target)
+  return mainConfig({
+    version: process.env.OPENCODE_VERSION ?? "local",
+    channel: process.env.OPENCODE_CHANNEL ?? "local",
+    assetHash: "local",
+    ptySha256: asset?.sha256,
+    target,
+  })
 })

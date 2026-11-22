@@ -291,3 +291,13 @@ function findBash() {
   }
   return undefined
 }
+
+test("uninstall preserves a profile with legacy non-UTF-8 bytes", async () => {
+  await using fixture = await installFixture("legacy bytes")
+  const file = path.join(fixture.home, ".bashrc")
+  const bin = path.join(fixture.home, ".panacode", "bin")
+  const bytes = Buffer.concat([Buffer.from([0xff, 10]), Buffer.from(`# panacode\nexport PATH=${shellHome(bin)}:$PATH\n`)])
+  await writeFile(file, bytes)
+  expect(await clean(fixture, "bash", {}, bin)).toBe(false)
+  expect(Buffer.from(await readFile(file))).toEqual(bytes)
+})

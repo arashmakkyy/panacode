@@ -1,8 +1,11 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { validateRoutes } from "@opentunnel/client/effect"
 import { Service, type Info } from "@opencode/client/effect/service"
+import { registrationSnapshot } from "@opencode/client/service"
 import { Global } from "@opencode/util/global"
 import { OPENCODE_VERSION } from "../src/version"
+import { healthProof, testControl } from "../../client/test/fixture/control"
+import { serviceProofPath } from "@opencode/schema/service-proof"
 import { expect, test } from "bun:test"
 import { Deferred, Effect, FileSystem, Schedule, Schema } from "effect"
 import { NetAddress } from "effect/net"
@@ -360,9 +363,14 @@ test("registration migration requires Panacode ownership and never moves stable 
     await write(owned)
     await migrate()
     expect(await Bun.file(legacy).exists()).toBe(true)
-    expect(await Bun.file(target).json()).toMatchObject({ id: "old-preview" })
-
+    expect(await Bun.file(target).exists()).toBe(false)
+    const live = { ...owned, pid: process.pid, product: "panacode" as const }
+    await using channel = await testControl(() => live)
+    await write({ ...live, control: channel.control })
+    await migrate()
+    expect(await Bun.file(target).json()).toMatchObject({ id: live.id, control: channel.control })
     await fs.rm(target)
+
     await write({ ...owned, version: "1.2.3" })
     await migrate()
     expect(await Bun.file(target).exists()).toBe(false)
@@ -803,7 +811,8 @@ test("port contender recognizes an incumbent registered during the bind race", a
   using listener = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    fetch() {
+    fetch(request) {
+      if (new URL(request.url).pathname === serviceProofPath) return healthProof(request, channel.control.token, "incumbent", "starting")
       requests.count += 1
       if (requests.count === 2) recognizing.resolve()
       return Response.json(
@@ -819,6 +828,15 @@ test("port contender recognizes an incumbent registered during the bind race", a
       )
     },
   })
+  const identity = {
+      id: "incumbent",
+      product: "panacode" as const,
+      version: OPENCODE_VERSION,
+      url: `http://127.0.0.1:${listener.port}`,
+      pid: process.pid,
+      password: "incumbent",
+    }
+  await using channel = await testControl(() => identity)
   const registration = path.join(root, "state", "panacode", "service-local.json")
   const config = path.join(root, "config", "panacode", "service-local.json")
   await fs.mkdir(path.dirname(config), { recursive: true })
@@ -843,14 +861,7 @@ test("port contender recognizes an incumbent registered during the bind race", a
   try {
     expect(await Promise.race([recognizing.promise.then(() => true), Bun.sleep(20_000).then(() => false)])).toBe(true)
     await Bun.sleep(8_000)
-    const info = {
-      id: "incumbent",
-      product: "panacode",
-      version: OPENCODE_VERSION,
-      url: `http://127.0.0.1:${listener.port}`,
-      pid: process.pid,
-      password: "incumbent",
-    }
+    const info = { ...identity, control: channel.control }
     await fs.writeFile(registration, JSON.stringify(info))
 
     expect(await Promise.race([contender.exited, Bun.sleep(20_000).then(() => undefined)])).toBe(0)
@@ -873,6 +884,8 @@ test("service registration replaces a stale owner with the bound address", async
   try {
     const cleanup = await Effect.runPromise(
       ServiceRegistration.register({
+        controlToken: crypto.randomUUID(),
+        expectedRegistration: await registrationSnapshot(registration),
         address: NetAddress.inetAddressFromIpStringUnsafe("127.0.0.1", 4321),
         password: "secret",
         id: "owner",
@@ -910,8 +923,7 @@ test("service registration replaces a stale owner with the bound address", async
 test("a failed service stays registered and owns the selected port until stopped", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-failed-"))
   const port = await availablePort()
-  const database = path.join(root, "database")
-  await fs.mkdir(database)
+  const database = await corruptDatabase(root)
   await fs.mkdir(path.join(root, "config", "panacode"), { recursive: true })
   await fs.writeFile(path.join(root, "config", "panacode", "service-local.json"), JSON.stringify({ port }))
   const env = { ...serviceEnv(root), PANACODE_DB: database }
@@ -981,6 +993,7 @@ const registered = Effect.fnUntraced(function* () {
   const file = path.join(yield* fileSystem.makeTempDirectoryScoped(), "service-local.json")
   const stopped = yield* Deferred.make<void>()
   const cleanup = yield* ServiceRegistration.register({
+        controlToken: crypto.randomUUID(),
     address: NetAddress.inetAddressFromIpStringUnsafe("127.0.0.1", 4321),
     password: "secret",
     id: "owner",
@@ -1016,15 +1029,23 @@ function serviceEnv(root: string) {
   }
 }
 
+async function corruptDatabase(root: string) {
+  const directory = path.join(root, "data", "panacode")
+  await fs.mkdir(directory, { recursive: true })
+  const file = path.join(directory, "corrupt.db")
+  await fs.writeFile(file, "not a SQLite database")
+  return file
+}
+
 async function startManagedService(prefix: string, failBoot = false) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), prefix))
   const port = await availablePort()
   const registration = path.join(root, "state", "panacode", "service-local.json")
   await fs.mkdir(path.join(root, "config", "panacode"), { recursive: true })
-  if (failBoot) await fs.mkdir(path.join(root, "database"))
+  const database = failBoot ? await corruptDatabase(root) : undefined
   await fs.writeFile(path.join(root, "config", "panacode", "service-local.json"), JSON.stringify({ port }))
   const owner = Bun.spawn([process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"], {
-    env: failBoot ? { ...serviceEnv(root), PANACODE_DB: path.join(root, "database") } : serviceEnv(root),
+    env: database ? { ...serviceEnv(root), PANACODE_DB: database } : serviceEnv(root),
     stderr: "pipe",
     stdout: "ignore",
   })

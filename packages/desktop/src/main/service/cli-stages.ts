@@ -1,30 +1,32 @@
-import { Effect, FileSystem, Path } from "effect"
+import { lstat, readdir, rmdir, unlink } from "node:fs/promises"
+import path from "node:path"
+import { Effect } from "effect"
+import { privateDirectory } from "@opencode/util/private-directory"
+import { fileDigest } from "./stage-cli"
 
-// Each version and architecture stages its own copy of the CLI, and only the current one (plus any adopted
-// beta server still running) is kept: a downgrade stages its copy anew. Windows refuses to delete an executable
-// that has not exited yet, so a failed removal is logged and retried on the next launch.
+// Only remove the known executable from a content-addressed Panacode stage.
+// Legacy stages and unrelated files have no receipt for ownership.
 export const cleanStages = Effect.fn("DesktopCli.cleanStages")(function* (
   binary: string,
   options?: { readonly keep?: ReadonlyArray<string> },
 ) {
-  const fs = yield* FileSystem.FileSystem
-  const path = yield* Path.Path
-  const current = path.dirname(binary)
-  const root = path.dirname(current)
-  const keep = new Set([path.basename(current), ...(options?.keep ?? [])])
-  const entries = yield* fs.readDirectory(root)
-  yield* Effect.forEach(
-    entries,
-    Effect.fnUntraced(function* (entry) {
-      if (keep.has(entry)) return
-      const target = path.join(root, entry)
-      const stat = yield* fs.stat(target).pipe(Effect.orElseSucceed(() => undefined))
-
-      if (stat?.type !== "Directory") return
-      yield* fs
-        .remove(target, { recursive: true, force: true })
-        .pipe(Effect.catch((error) => Effect.logError("failed to clean staged v2 CLI", { path: target, error })))
-    }),
-    { concurrency: "unbounded" },
-  )
+  yield* Effect.tryPromise(async () => {
+    const directory = path.dirname(binary)
+    const root = privateDirectory(path.dirname(directory))
+    const current = path.basename(directory)
+    const name = path.basename(binary)
+    if (!/^panacode-cli(?:\.exe)?$/.test(name)) return
+    for (const entry of await readdir(root, { withFileTypes: true })) {
+      const match = /^(.+-(?:x64|arm64))-([0-9a-f]{64})$/.exec(entry.name)
+      if (!match || entry.name === current || options?.keep?.includes(match[1]!) || !entry.isDirectory()) continue
+      const stage = privateDirectory(path.join(root, entry.name))
+      const files = await readdir(stage)
+      if (files.length !== 1 || files[0] !== name) continue
+      const file = path.join(stage, name)
+      const info = await lstat(file)
+      if (!info.isFile() || info.nlink !== 1 || (await fileDigest(file)) !== match[2]) continue
+      await unlink(file)
+      await rmdir(stage)
+    }
+  }).pipe(Effect.catch(() => Effect.logDebug("Could not clean a staged Panacode CLI")))
 })

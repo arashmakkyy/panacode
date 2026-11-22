@@ -1,3 +1,4 @@
+import { privateDirectory } from "@opencode/util/private-directory"
 export * as DesktopLogging from "./logging"
 
 import log from "electron-log/main.js"
@@ -8,7 +9,6 @@ import {
   Effect,
   Exit,
   FiberSet,
-  FileSystem,
   Layer,
   Logger,
   Path,
@@ -28,6 +28,7 @@ import {
 } from "./logging-machine"
 import {
   cleanupRunDirectories,
+  createRunDirectory,
   configureDiagnostics,
   recordDiagnostic,
   writeSupportArchive,
@@ -50,9 +51,8 @@ export class Service extends Context.Service<Service, Interface>()("opencode/des
 const serviceLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
-    yield* initLogging(fs, path).pipe(Effect.orDie)
+    yield* initLogging(path).pipe(Effect.orDie)
     configureDiagnostics(path.join(run, "diagnostics.jsonl"))
     recordDiagnostic({ event: "app.start", version: VERSION, channel: CHANNEL, status: "started" })
     // Old run directories go away in the background; listing them is not worth a wait at startup.
@@ -176,7 +176,7 @@ const serviceLayer = Layer.effect(
       startNetwork: Effect.sync(() => dispatch({ type: "network.requested" })),
       // Starting crashpad spawns its handler process, ~60 ms on the main thread, so the first window
       // and its IPC port come first.
-      startCrashReporter: initCrashReporter(fs, path).pipe(
+      startCrashReporter: initCrashReporter(path).pipe(
         Effect.tap(() => Effect.sync(() => (marks.crash = Date.now()))),
         Effect.catch((error) => Effect.logWarning("failed to start crash reporter", { error })),
       ),
@@ -237,9 +237,10 @@ const nativeLoggerLayer = Layer.merge(
 
 export const layer = serviceLayer.pipe(Layer.provideMerge(nativeLoggerLayer))
 
-function initLogging(fs: FileSystem.FileSystem, path: Path.Path) {
+function initLogging(path: Path.Path) {
   return Effect.gen(function* () {
-    yield* initRunDirectory(fs, path)
+    root = path.join(app.getPath("userData"), "logs")
+    run = yield* Effect.tryPromise(() => createRunDirectory(root, stamp()))
     yield* Effect.sync(() => {
       log.transports.file.maxSize = 5 * 1024 * 1024
       log.transports.file.resolvePathFn = (_vars, message) =>
@@ -253,10 +254,10 @@ function initLogging(fs: FileSystem.FileSystem, path: Path.Path) {
   })
 }
 
-function initCrashReporter(fs: FileSystem.FileSystem, path: Path.Path) {
+function initCrashReporter(path: Path.Path) {
   return Effect.gen(function* () {
     const dir = path.join(app.getPath("userData"), "Crashpad")
-    yield* fs.makeDirectory(dir, { recursive: true })
+    yield* Effect.try(() => privateDirectory(dir, true))
     yield* Effect.sync(() => {
       app.setPath("crashDumps", dir)
       crashReporter.start({ uploadToServer: false, compress: true })
@@ -284,13 +285,6 @@ function writeDebugArchive(path: Path.Path, netLogPath: string | undefined) {
 
     return output
   })
-}
-
-function initRunDirectory(fs: FileSystem.FileSystem, path: Path.Path) {
-  root = path.join(app.getPath("userData"), "logs")
-  run = path.join(root, stamp())
-
-  return fs.makeDirectory(run, { recursive: true })
 }
 
 function stamp() {

@@ -1,5 +1,6 @@
-import { chmod, copyFile, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises"
-import { createHash } from "node:crypto"
+import { chmod, copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises"
+import { createReadStream } from "node:fs"
+import { createHash, randomUUID } from "node:crypto"
 import { basename, dirname, join, relative } from "node:path"
 import { Option, Schema } from "effect"
 import { ProductIdentity } from "@opencode/util/product-identity"
@@ -231,9 +232,9 @@ async function prepareCli(dest: string) {
 }
 
 async function sha256File(file: string) {
-  return createHash("sha256")
-    .update(await readFile(file))
-    .digest("hex")
+  const hash = createHash("sha256")
+  for await (const chunk of createReadStream(file)) hash.update(chunk)
+  return hash.digest("hex")
 }
 
 /**
@@ -255,37 +256,47 @@ export async function writeInstallManifest(input: {
 
   const files = await collectInstallFiles(input.appDir)
 
-  const entries = await Promise.all(
-    files.map(async (file) => {
-      // NSIS consumes Windows relative paths, so normalize separators when the build host is POSIX.
-      const name = relative(input.appDir, file).replaceAll("/", "\\")
-
-      if (name === INSTALL_MANIFEST) return undefined
-
-      if (!/^[\x20-\x7e]+$/.test(name))
-        throw new Error(`The Windows install manifest cannot record the non-ASCII path ${name}`)
-
-      return { name, size: (await stat(file)).size }
-    }),
-  )
-
+  const entries: string[] = []
+  const names = new Set<string>()
+  // Hash sequentially so large Electron resources never exhaust the packager's handles or memory.
+  for (const file of files.sort()) {
+    const name = relative(input.appDir, file).replaceAll("/", "\\")
+    if (name === INSTALL_MANIFEST) continue
+    if (!/^[\x20-\x7e]+$/.test(name))
+      throw new Error(`The Windows install manifest cannot record the non-ASCII path ${name}`)
+    if (
+      name
+        .split("\\")
+        .some((part) => !part || /[<>:"/|?*]|[. ]$|^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)/i.test(part))
+    )
+      throw new Error(`Invalid Windows payload path: ${name}`)
+    const key = name.toLowerCase()
+    if (names.has(key)) throw new Error(`Duplicate Windows payload path: ${name}`)
+    names.add(key)
+    entries.push(`${await sha256File(file)}\t${name}`)
+  }
+  if (!names.has(input.executable.toLowerCase())) throw new Error("Windows payload is missing its executable")
   const manifest = [
     INSTALL_MANIFEST_HEADER,
     `app=${input.appId}`,
     `version=${input.version}`,
     `exe=${input.executable}`,
-    ...entries
-      .filter((entry): entry is { readonly name: string; readonly size: number } => entry !== undefined)
-      .sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0))
-      .map((entry) => `${entry.size}\n${entry.name}`),
+    ...entries,
+    "",
   ].join("\n")
-
-  await writeFile(join(input.appDir, INSTALL_MANIFEST), `${manifest}\n`)
+  const temp = join(input.appDir, INSTALL_MANIFEST + "." + randomUUID())
+  try {
+    await writeFile(temp, manifest, { flag: "wx" })
+    await rename(temp, join(input.appDir, INSTALL_MANIFEST))
+  } finally {
+    await rm(temp, { force: true })
+  }
+  return createHash("sha256").update(manifest).digest("hex")
 }
 
 export const INSTALL_MANIFEST = ".panacode-install"
 
-export const INSTALL_MANIFEST_HEADER = "panacode-install 1"
+export const INSTALL_MANIFEST_HEADER = "panacode-install 2"
 
 // Reparse points are not owned by the package, and following one would record files outside appDir.
 async function collectInstallFiles(dir: string): Promise<string[]> {
@@ -293,7 +304,8 @@ async function collectInstallFiles(dir: string): Promise<string[]> {
 
   const nested = await Promise.all(
     entries.map(async (entry) => {
-      if (entry.isSymbolicLink()) return []
+      if (entry.isSymbolicLink())
+        throw new Error(`Windows payload may not contain a symbolic link or junction: ${entry.name}`)
 
       const file = join(dir, entry.name)
 

@@ -110,9 +110,9 @@ function run(script: string, fixture: { home: string; bin: string }, stdin?: Uin
 }
 
 function paths(home: string) {
-  const directory = path.join(home, ".panacode", "desktop-ssh", version)
+  const directory = path.join(home, ".panacode", "desktop-ssh-v2", version)
 
-  return { directory, binary: path.join(directory, "panacode"), metadata: path.join(directory, "panacode.artifact.json") }
+  return { directory, binary: path.join(directory, "panacode." + createHash("sha256").update("#!/bin/sh\nexit 0\n").digest("hex")), metadata: path.join(directory, "panacode.artifact.json") }
 }
 
 async function install(source: "download" | "relay", file: string, fixture: { home: string; bin: string }, digest?: Uint8Array) {
@@ -242,7 +242,7 @@ test.skipIf(!shellTools)(
 )
 
 test.skipIf(!shellTools)(
-  "SSH refuses a second installer while a live lock is held and recovers from a stale one",
+  "concurrent SSH publishers leave a complete usable generation",
   async () => {
     await using fixture = await cache("lock")
     const archive = await archiveFixture(fixture.root)
@@ -255,18 +255,18 @@ test.skipIf(!shellTools)(
       source: { type: "download", artifact: artifact(fileUrl(archive.archive), archive.bytes) },
     })
 
-    const live = run(
-      `mkdir -p "$HOME/.panacode/desktop-ssh/.install.lock"\nprintf '%s\\n' "$$" > "$HOME/.panacode/desktop-ssh/.install.lock/pid"\n${script}`,
-      fixture,
-    )
-
-    expect(live.code).not.toBe(0)
-    expect(live.stderr).toContain("Another Panacode CLI install is already running.")
+    const parallel = run(`(
+${script}
+) &
+first=$!
+(
+${script}
+) &
+second=$!
+wait "$first" && wait "$second"`, fixture)
+    expect(parallel.code, parallel.stderr).toBe(0)
     expect(await readFile(binary)).toEqual(healthy)
-
-    await writeFile(path.join(fixture.home, ".panacode", "desktop-ssh", ".install.lock", "pid"), "999999")
-    expect(run(script, fixture).code).toBe(0)
-    expect(await readFile(binary)).toEqual(healthy)
+    expect(run(discoverScript({ version, target }), fixture).stdout).toContain("OPENCODE_SSH_CLI=ready")
   },
   120_000,
 )

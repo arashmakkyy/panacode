@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { expect, test } from "bun:test"
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
@@ -320,7 +321,7 @@ test("a partial previous staging is overwritten before it can be verified", asyn
   }
 })
 
-test("the Windows install manifest records only owned files with exact sizes", async () => {
+test("the Windows install manifest records content digests for owned files", async () => {
   const root = await tempDir()
   const app = path.join(root, "app")
   const outside = path.join(root, "outside")
@@ -333,7 +334,6 @@ test("the Windows install manifest records only owned files with exact sizes", a
     await writeFile(path.join(app, "resources", "empty.bin"), "")
     await writeFile(path.join(app, INSTALL_MANIFEST), "stale manifest")
     await writeFile(path.join(outside, "foreign.txt"), "foreign")
-    await symlink(outside, path.join(app, "linked"), process.platform === "win32" ? "junction" : "dir")
 
     await writeInstallManifest({
       appDir: app,
@@ -348,9 +348,9 @@ test("the Windows install manifest records only owned files with exact sizes", a
         "app=ai.panacode.desktop",
         "version=2.3.0",
         "exe=Panacode.exe",
-        "3\nPanacode.exe",
-        "0\nresources\\empty.bin",
-        "4\nresources\\nested\\app.asar",
+        `${createHash("sha256").update("exe").digest("hex")}\tPanacode.exe`,
+        `${createHash("sha256").update("").digest("hex")}\tresources\\empty.bin`,
+        `${createHash("sha256").update("asar").digest("hex")}\tresources\\nested\\app.asar`,
       ].join("\n") + "\n",
     )
 
@@ -362,6 +362,12 @@ test("the Windows install manifest records only owned files with exact sizes", a
     })
     expect(await readFile(path.join(app, INSTALL_MANIFEST), "utf8")).not.toContain("stale manifest")
     expect(await readFile(path.join(app, INSTALL_MANIFEST), "utf8")).not.toContain("foreign.txt")
+    const beforeLink = await readFile(path.join(app, INSTALL_MANIFEST))
+    await symlink(outside, path.join(app, "linked"), process.platform === "win32" ? "junction" : "dir")
+    await expect(
+      writeInstallManifest({ appDir: app, appId: "ai.panacode.desktop", version: "2.3.0", executable: "Panacode.exe" }),
+    ).rejects.toThrow(/symbolic link or junction/)
+    expect(await readFile(path.join(app, INSTALL_MANIFEST))).toEqual(beforeLink)
   } finally {
     await rm(root, { recursive: true, force: true })
   }
@@ -384,7 +390,7 @@ test("the install manifest writer runs in electron-builder's Node runtime", asyn
     const script = [
       'const path = require("node:path")',
       'const { createRequire } = require("node:module")',
-      'const root = process.cwd()',
+      "const root = process.cwd()",
       'const requireFromDesktop = createRequire(path.join(root, "packages/desktop/package.json"))',
       'const electronBuilder = requireFromDesktop.resolve("electron-builder/package.json")',
       'const appBuilder = require.resolve("app-builder-lib/package.json", { paths: [path.dirname(electronBuilder)] })',
@@ -400,7 +406,9 @@ test("the install manifest writer runs in electron-builder's Node runtime", asyn
     })
     if (result.exitCode !== 0) throw new Error(result.stderr.toString())
 
-    expect(await readFile(path.join(app, INSTALL_MANIFEST), "utf8")).toContain("3\nPanacode.exe")
+    expect(await readFile(path.join(app, INSTALL_MANIFEST), "utf8")).toContain(
+      `${createHash("sha256").update("exe").digest("hex")}\tPanacode.exe`,
+    )
   } finally {
     await rm(root, { recursive: true, force: true })
   }

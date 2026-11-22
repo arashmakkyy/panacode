@@ -1,3 +1,9 @@
+import {
+  newServiceChallenge,
+  serviceProofHeader,
+  serviceProofRequest,
+  verifyServiceProof,
+} from "@opencode/schema/service-proof"
 import { NodeSocketServer } from "@effect/platform-node"
 import {
   Cause,
@@ -7,13 +13,11 @@ import {
   Exit,
   Fiber,
   FileSystem,
-  Option,
   Path,
   Predicate,
   PubSub,
   Ref,
   Schedule,
-  Schema,
   Scope,
   Stream,
 } from "effect"
@@ -56,6 +60,7 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
   const responders = new Map<number, (prompt: string, value: string) => Effect.Effect<void>>()
   const timers = new Map<number, Fiber.Fiber<void>>()
   const waiters = new Map<number, Deferred.Deferred<SshHttp | null>>()
+  const proofKeys = new Map<number, string>()
   const issued = { waiter: 0 }
 
   const dispatch = (event: SshMainEvent): Effect.Effect<void> =>
@@ -99,7 +104,7 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
     }
 
     if (effect.type === "health.probe")
-      return checkHealth(effect.http).pipe(
+      return checkHealth(effect.http, proofKeys.get(effect.attempt)).pipe(
         Effect.provideService(HttpClient.HttpClient, httpClient),
         Effect.flatMap((healthy) =>
           dispatch({ type: "health.probed", id: effect.id, attempt: effect.attempt, waiter: effect.waiter, healthy }),
@@ -221,6 +226,8 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
         Effect.provideService(HttpClient.HttpClient, httpClient),
       )
 
+      proofKeys.set(attempt, remote.proofKey)
+      yield* Effect.addFinalizer(() => Effect.sync(() => proofKeys.delete(attempt)))
       const port = yield* freePort
       const http = { url: `http://127.0.0.1:${port}`, password: remote.password, instance: remote.instance }
 
@@ -253,7 +260,7 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
         )
       })
 
-      yield* waitReady(http, () => selectSshAuthenticating(current.machine, id, attempt)).pipe(
+      yield* waitReady(http, remote.proofKey, () => selectSshAuthenticating(current.machine, id, attempt)).pipe(
         Effect.provideService(HttpClient.HttpClient, httpClient),
         Effect.catch(() =>
           Ref.get(detail).pipe(Effect.flatMap((detail) => Effect.fail(new SshFailure("service", detail)))),
@@ -319,7 +326,7 @@ const freePort = Effect.gen(function* () {
   return server.address.port
 }).pipe(Effect.scoped)
 
-const waitReady = Effect.fn("Ssh.waitReady")(function* (http: SshHttp, authenticating: () => boolean) {
+const waitReady = Effect.fn("Ssh.waitReady")(function* (http: SshHttp, key: string, authenticating: () => boolean) {
   const clock = { deadline: (yield* Clock.currentTimeMillis) + 30_000 }
   yield* Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis
@@ -328,33 +335,21 @@ const waitReady = Effect.fn("Ssh.waitReady")(function* (http: SshHttp, authentic
 
     if (now >= clock.deadline) return yield* Effect.fail(new SshFailure("service"))
 
-    return yield* checkHealth(http)
+    return yield* checkHealth(http, key)
   }).pipe(Effect.repeat({ until: (ready) => ready, schedule: Schedule.spaced(100) }))
 })
 
-const Info = Schema.Struct({ product: Schema.String, instance: Schema.String })
-
-const checkHealth = Effect.fn("Ssh.checkHealth")(function* (http: SshHttp) {
+const checkHealth = Effect.fn("Ssh.checkHealth")(function* (http: SshHttp, key?: string) {
+  if (!key) return false
   const client = yield* HttpClient.HttpClient
-
-  return yield* client
-    .get(`${http.url}/api/info`, {
-      headers: { authorization: `Basic ${Buffer.from(`opencode:${http.password}`).toString("base64")}` },
-    })
-    .pipe(
-      Effect.timeout(2000),
-      Effect.flatMap((response) => {
-        if (response.status < 200 || response.status >= 300) return Effect.succeed(false)
-
-        return response.json.pipe(
-          Effect.map((body) => {
-            const info = Schema.decodeUnknownOption(Info)(body)
-
-            return Option.isSome(info) && info.value.product === "panacode" && info.value.instance === http.instance
-          }),
-          Effect.orElseSucceed(() => false),
-        )
-      }),
-      Effect.orElseSucceed(() => false),
-    )
+  const nonce = newServiceChallenge()
+  return yield* client.get(serviceProofRequest(http.url, nonce, http.instance)).pipe(
+    Effect.timeout(2000),
+    Effect.map(
+      (response) =>
+        response.status === 204 &&
+        verifyServiceProof(response.headers[serviceProofHeader], key, nonce, http.instance) === "ready",
+    ),
+    Effect.orElseSucceed(() => false),
+  )
 })

@@ -133,15 +133,14 @@ for (const item of targets) {
     arch: item.arch,
     ...(item.os === "linux" ? { libc: item.abi ?? "glibc" } : {}),
   })
+  if (!opencodePty) throw new Error(`Missing packaged PTY asset for ${item.os}-${item.arch}`)
   const opencodePtyPlugin: BunPlugin = {
     name: "opencode-pty-binary",
     setup(build) {
       build.onLoad({ filter: /persistent-pty[/\\]pty-binding\.ts$/ }, () => ({
         loader: "js",
-        contents: opencodePty
-          ? `import file from ${JSON.stringify(opencodePty.source)} with { type: "file" }
-export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sha256: ${JSON.stringify(opencodePty.sha256)} }`
-          : "export default undefined",
+        contents: `import file from ${JSON.stringify(opencodePty.source)} with { type: "file" }
+export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sha256: ${JSON.stringify(opencodePty.sha256)} }`,
       }))
     },
   }

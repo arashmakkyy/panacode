@@ -5,6 +5,12 @@ import { createRequire } from "node:module"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
+import type { Packager } from "app-builder-lib"
+import { AppInfo } from "app-builder-lib/out/appInfo"
+import {
+  getWindowsInstallationAppPackageName,
+  getWindowsInstallationDirName,
+} from "app-builder-lib/out/targets/targetUtil"
 import type { Configuration } from "electron-builder"
 import { getConfig } from "./electron-builder.config"
 import { CLI_BINARIES, nodePtyPackage } from "./script/utils"
@@ -82,6 +88,23 @@ test.each(channels)("channel identity for $channel", ({ channel, appId, productN
   expect(config.deb?.fpm).not.toContain("--rpm-rpmbuild-define=_build_id_links none")
 })
 
+test.each(channels)(
+  "Windows package, installer cache and data names for $channel",
+  ({ channel, appId, productName }) => {
+    const config = load(channel, "windows-x64")
+    const metadata = { version: "2.3.0", name: "@opencode/desktop", ...config.extraMetadata }
+    // AppInfo uses the effective metadata after the packager merges extraMetadata.
+    const info = new AppInfo({ metadata, config } as Packager, null)
+    expect(info.name).toBe(appId)
+    expect(info.productFilename).toBe(productName)
+    expect(info.updaterCacheDirName).toBe(appId + "-updater")
+    expect(getWindowsInstallationDirName(info, false)).toBe(appId)
+    expect(getWindowsInstallationAppPackageName(info.name)).toBe(appId)
+    expect(config.nsis?.packElevateHelper).toBe(false)
+    expect(config.nsis?.preCompressedFileExtensions).toEqual([])
+  },
+)
+
 test.each(channels)("macOS bundle for $channel", ({ channel }) => {
   const config = load(channel)
   expect(config.mac?.icon).toBe(channel === "prod" ? "resources/icons/icon.icon" : "resources/icons/icon.icns")
@@ -120,7 +143,17 @@ test("shared packaging defaults", async () => {
   expect(await Bun.file(include).exists()).toBe(true)
   expect(config.files).toContain("!resources/panacode-cli*")
   expect(config.extraResources).toEqual([
-    { from: "resources/", to: "", filter: ["panacode-cli", "panacode-cli.exe", "panacode-cli.version"] },
+    {
+      from: "resources/",
+      to: "",
+      filter: [
+        "panacode-cli",
+        "panacode-cli.exe",
+        "panacode-cli.version",
+        "panacode-cli.provenance.json",
+        "panacode-cli.exe.provenance.json",
+      ],
+    },
   ])
 })
 

@@ -1,6 +1,4 @@
-import { readFileSync } from "node:fs"
-import { Option, Schema } from "effect"
-import type { Endpoint } from "@opencode/client/service"
+import type { Endpoint, Info } from "@opencode/client/service"
 
 /** Everything that must match before a speculative probe may be adopted. */
 export type SidecarProbeKey = {
@@ -20,7 +18,7 @@ export type SidecarProbeTake =
 
 type ProbeResult = {
   readonly endpoint?: Endpoint
-  readonly identity?: string
+  readonly info?: Info
 }
 
 type Probe = {
@@ -37,12 +35,7 @@ let probe: Probe | undefined
 
 export function startSidecarProbe(input: { readonly key: SidecarProbeKey }) {
   const result = discover(input.key).then(
-    (endpoint): ProbeResult => {
-      if (!endpoint) return {}
-      const identity = registrationIdentity(input.key.file)
-
-      return identity === undefined ? { endpoint } : { endpoint, identity }
-    },
+    (found) => found ?? {},
     () => ({}),
   )
 
@@ -68,9 +61,10 @@ export async function takeSidecarProbe(key: SidecarProbeKey): Promise<SidecarPro
 
   if (result.endpoint === undefined) return { status: "miss" }
 
-  if (result.identity === undefined) return { status: "discarded", reason: "identity-unavailable" }
+  if (result.info === undefined) return { status: "discarded", reason: "identity-unavailable" }
 
-  if (registrationIdentity(key.file) !== result.identity)
+  const { currentOwner } = await import("@opencode/client/service")
+  if (!(await currentOwner(key.file, result.info).catch(() => false)))
     return { status: "discarded", reason: "identity-changed" }
 
   return { status: "adopted", endpoint: result.endpoint }
@@ -79,7 +73,7 @@ export async function takeSidecarProbe(key: SidecarProbeKey): Promise<SidecarPro
 async function discover(key: SidecarProbeKey) {
   const { Service } = await import("@opencode/client/service")
 
-  return Service.discover({ file: key.file, version: key.version })
+  return Service.discoverInstance({ file: key.file, version: key.version })
 }
 
 function sameKey(left: SidecarProbeKey, right: SidecarProbeKey) {
@@ -89,29 +83,4 @@ function sameKey(left: SidecarProbeKey, right: SidecarProbeKey) {
     left.version === right.version &&
     left.local === right.local
   )
-}
-
-// The endpoint alone is not proof of identity: another process may have replaced the registration
-// with the same file and version while the probe was in flight. Reading the same fields the client
-// already validated is enough to detect that race without duplicating its ownership rules.
-const Registration = Schema.fromJsonString(
-  Schema.Struct({
-    product: Schema.Literal("panacode"),
-    id: Schema.NonEmptyString,
-    url: Schema.String,
-    pid: Schema.Int,
-    version: Schema.optional(Schema.String),
-  }),
-)
-
-function registrationIdentity(file: string) {
-  try {
-    const registration = Option.getOrUndefined(Schema.decodeUnknownOption(Registration)(readFileSync(file, "utf8")))
-
-    if (registration === undefined) return undefined
-
-    return [registration.id, String(registration.pid), registration.url, registration.version ?? ""].join("\0")
-  } catch {
-    return undefined
-  }
 }

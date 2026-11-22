@@ -28,7 +28,11 @@ async function waitForHeartbeat(file: string) {
 }
 
 async function beats(file: string) {
-  return (await Bun.file(file).text().catch(() => ""))
+  return (
+    await Bun.file(file)
+      .text()
+      .catch(() => "")
+  )
     .split("\n")
     .filter((line) => line.length > 0).length
 }
@@ -93,7 +97,7 @@ test("a registration that cannot prove ownership never stops or replaces a forei
 
     expect(await discover({ file: registration })).toBeUndefined()
     await expect(ensure({ file: registration, version: "test", command: replacement })).rejects.toThrow(
-      "rejected the service credential",
+      "different instance",
     )
     await expect(stop({ file: registration })).rejects.toThrow("different instance")
 
@@ -169,7 +173,9 @@ test("a control channel that never answers leaves the registered process running
       }),
     )
 
-    await expect(stop({ file: registration })).rejects.toThrow("Timed out waiting for the local service control channel")
+    await expect(stop({ file: registration })).rejects.toThrow(
+      "Timed out waiting for the local service control channel",
+    )
     expect(() => process.kill(witness.pid, 0)).not.toThrow()
     expect(await Bun.file(registration).exists()).toBe(true)
   } finally {

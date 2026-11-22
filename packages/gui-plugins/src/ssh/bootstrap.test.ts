@@ -4,7 +4,7 @@ import { HttpClient, HttpClientResponse } from "effect/http"
 import { ChildProcessSpawner } from "effect/process"
 import { ExitCode, make as makeSpawner, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
 import { createHash } from "node:crypto"
-import { binaryPath, bootstrap, parseRegistration } from "./bootstrap"
+import { startScript, bootstrap, parseRegistration } from "./bootstrap"
 import { parseTarget } from "./command"
 import { ManagedCli } from "../managed-cli"
 import { RemoteCli } from "./remote-cli"
@@ -28,6 +28,7 @@ const metadata = {
 }
 
 type RegistrationFixture = {
+  proofKey: string
   product: string
   id: string
   url: string
@@ -42,6 +43,7 @@ function registration(overrides: Partial<RegistrationFixture> = {}): Registratio
     product: "panacode",
     url: "http://127.0.0.1:4321",
     password: "secret",
+    proofKey: "a".repeat(64),
     version,
     pid: 42,
     ...overrides,
@@ -60,18 +62,18 @@ test("registration parsing requires the Panacode product, an instance id and the
   const valid = registration()
   const text = status(valid.url) + frame(valid)
   expect(parseRegistration(text)).toMatchObject(valid)
-  expect(parseRegistration(status("stopped") + frame(valid))).toBeUndefined()
-  expect(parseRegistration(status("http://127.0.0.1:9999") + frame(valid))).toBeUndefined()
+  expect(parseRegistration(frame({ ...valid, proofKey: "" }))).toBeUndefined()
+  expect(parseRegistration(status(valid.url))).toBeUndefined()
   expect(parseRegistration(status(valid.url) + frame({ ...valid, product: "opencode" }))).toBeUndefined()
   expect(parseRegistration(status(valid.url) + frame({ ...valid, id: "" }))).toBeUndefined()
   expect(parseRegistration(status(valid.url) + "OPENCODE_SSH_REGISTRATION_BEGIN\ninvalid\nOPENCODE_SSH_REGISTRATION_END\n")).toBeUndefined()
 
   const ambiguous = status(valid.url) + frame({ ...valid, product: "other" }) + frame(valid)
-  expect(parseRegistration(ambiguous)).toMatchObject(valid)
+  expect(parseRegistration(ambiguous)).toBeUndefined()
 })
 
 test("rejects unsafe versions and platforms in remote installation paths", () => {
-  expect(() => binaryPath('2.0.0"; whoami')).toThrow()
+  expect(() => startScript({ version: '2.0.0"; whoami', target })).toThrow()
   expect(RemoteCli.requireVersion(version)).toBe(version)
   expect(ManagedCli.tarballUrl(target, version)).toBe(tarball)
   expect(() => RemoteCli.installScript({ version: '2.0.0"; whoami', source: { type: "archive", artifact: artifact(), sha256: "0" } })).toThrow()
@@ -192,6 +194,7 @@ test("SSH downloads the registry artifact and starts the private cache", async (
     host: "127.0.0.1",
     port: 4321,
     password: "secret",
+    proofKey: "a".repeat(64),
     instance: "instance-1",
   })
   expect(calls).toHaveLength(4)
@@ -202,7 +205,8 @@ test("SSH downloads the registry artifact and starts the private cache", async (
   expect(install).toContain(tarball)
   expect(install).toContain("sha512_of")
   const start = new TextDecoder().decode(calls[3]!.stdin)
-  expect(start).toContain(`$HOME/.panacode/desktop-ssh/${version}/panacode`)
+  expect(start).toContain("$HOME/.panacode/desktop-ssh-v2")
+  expect(start).toContain("sha256_of")
   expect(start).toContain("service start")
   expect(start).not.toContain("dev/install")
 })

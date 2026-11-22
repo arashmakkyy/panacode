@@ -1,3 +1,6 @@
+import { createServer } from "node:http"
+import { newServiceChallenge, serviceProofHeader, signServiceProof } from "@opencode/schema/service-proof"
+import { checkHealth } from "./sidecar"
 import { expect, test } from "bun:test"
 import { createHash } from "node:crypto"
 import { existsSync } from "node:fs"
@@ -122,9 +125,9 @@ test.skipIf(!shellTools)(
     const result = runShell(installScript({ version, target, source: { kind: "local", binary: output, sha256: built.sha256 } }), shell)
     expect(result.code, result.stderr).toBe(0)
 
-    const installed = path.join(shell.home, ".panacode", "bin", "panacode")
+    const installed = path.join(shell.home, ".panacode", "desktop-wsl-v2", version, "panacode." + built.sha256)
     expect(new Uint8Array(await readFile(installed))).toEqual(await readFile(output))
-    expect(JSON.parse(await readFile(path.join(shell.home, ".panacode", "bin", "panacode.artifact.json"), "utf8"))).toMatchObject({
+    expect(JSON.parse(await readFile(path.join(shell.home, ".panacode", "desktop-wsl-v2", version, "panacode.artifact.json"), "utf8"))).toMatchObject({
       product: "panacode",
       version,
       target,
@@ -133,9 +136,9 @@ test.skipIf(!shellTools)(
     expect(existsSync(shell.counter)).toBe(false)
     expect(await profileHashes(shell.home)).toEqual(before)
 
-    const discovered = runShell(discoverScript(), shell)
+    const discovered = runShell(discoverScript({ version, target }), shell)
     expect(discovered.code, discovered.stderr).toBe(0)
-    expect(discovered.stdout.trim().endsWith("/.panacode/bin/panacode")).toBe(true)
+    expect(discovered.stdout.trim().endsWith("/panacode." + built.sha256)).toBe(true)
   },
   120_000,
 )
@@ -149,7 +152,7 @@ test.skipIf(!shellTools)(
     const built = await stageLocalCli({ directory: dist.directory, target, version, output })
     const good = installScript({ version, target, source: { kind: "local", binary: output, sha256: built.sha256 } })
     expect(runShell(good, shell).code).toBe(0)
-    const installed = path.join(shell.home, ".panacode", "bin", "panacode")
+    const installed = path.join(shell.home, ".panacode", "desktop-wsl-v2", version, "panacode." + built.sha256)
     const bytes = await readFile(installed)
 
     const badDigest = runShell(
@@ -168,18 +171,16 @@ test.skipIf(!shellTools)(
     expect(missing.code).not.toBe(0)
     expect(await readFile(installed)).toEqual(bytes)
 
-    const liveLock = runShell(
-      `mkdir -p "$HOME/.panacode/bin/.install.lock"\nprintf '%s\\n' "$$" > "$HOME/.panacode/bin/.install.lock/pid"\n${good}`,
-      shell,
-    )
-
-    expect(liveLock.code).not.toBe(0)
-    expect(liveLock.stderr).toContain("Another Panacode CLI install is already running.")
-    expect(await readFile(installed)).toEqual(bytes)
-
-    const stale = path.join(shell.home, ".panacode", "bin", ".install.lock")
-    await writeFile(path.join(stale, "pid"), "999999")
-    expect(runShell(good, shell).code).toBe(0)
+    const concurrent = runShell(`(
+${good}
+) &
+first=$!
+(
+${good}
+) &
+second=$!
+wait "$first" && wait "$second"`, shell)
+    expect(concurrent.code, concurrent.stderr).toBe(0)
     expect(await readFile(installed)).toEqual(bytes)
   },
   120_000,
@@ -194,11 +195,13 @@ test.skipIf(!shellTools)(
     const built = await stageLocalCli({ directory: dist.directory, target, version, output })
     expect(runShell(installScript({ version, target, source: { kind: "local", binary: output, sha256: built.sha256 } }), shell).code).toBe(0)
 
-    const metadata = path.join(shell.home, ".panacode", "bin", "panacode.artifact.json")
+    const metadata = path.join(shell.home, ".panacode", "desktop-wsl-v2", version, "panacode.artifact.json")
     const sidecar = Schema.decodeUnknownSync(Sidecar)(await readFile(metadata, "utf8"))
-    const discovered = () => runShell(discoverScript(), shell).stdout.trim()
+    const discovered = () => runShell(discoverScript({ version, target }), shell).stdout.trim()
 
-    expect(discovered().endsWith("/.panacode/bin/panacode")).toBe(true)
+    expect(runShell(discoverScript({ version: version + "-other", target }), shell).stdout.trim()).toBe("")
+    expect(runShell(discoverScript({ version, target: "linux-arm64" }), shell).stdout.trim()).toBe("")
+    expect(discovered().endsWith("/panacode." + built.sha256)).toBe(true)
 
     await writeFile(metadata, JSON.stringify({ product: "opencode", version, target, sha256: sidecar.sha256 }))
     expect(discovered()).toBe("")
@@ -210,9 +213,18 @@ test.skipIf(!shellTools)(
     expect(discovered()).toBe("")
 
     await writeFile(metadata, JSON.stringify({ product: "panacode", version, target, sha256: sidecar.sha256 }))
-    const installed = path.join(shell.home, ".panacode", "bin", "panacode")
+    const installed = path.join(shell.home, ".panacode", "desktop-wsl-v2", version, "panacode." + built.sha256)
     await writeFile(installed, Buffer.concat([await readFile(installed), Buffer.from("x")]))
     expect(discovered()).toBe("")
+    if (process.platform !== "win32") {
+      await writeFile(installed, await readFile(output))
+      expect(discovered()).toContain(built.sha256)
+      const shared = runShell('chmod 777 "$HOME/.panacode"', shell)
+      expect(shared.code).toBe(0)
+      expect(discovered()).toBe("")
+      expect(runShell(installScript({ version, target, source: { kind: "local", binary: output, sha256: built.sha256 } }), shell).code).not.toBe(0)
+      expect(await readFile(installed)).toEqual(await readFile(output))
+    }
   },
   120_000,
 )
@@ -322,3 +334,33 @@ function findBash() {
 
   return undefined
 }
+
+test("WSL accepts a ready proof from its launch key without sending either credential", async () => {
+  const key = newServiceChallenge()
+  const received: Array<string | undefined> = []
+  let ready = false
+  const server = createServer((request, response) => {
+    // This package preloads a DOM for renderer tests. Permit that origin to read
+    // the proof header from this loopback fixture, as Electron main can.
+    response.setHeader("access-control-allow-origin", "*")
+    response.setHeader("access-control-expose-headers", serviceProofHeader)
+    received.push(request.headers.authorization)
+    const nonce = new URL(request.url!, "http://localhost").searchParams.get("challenge")!
+    if (ready) response.setHeader(serviceProofHeader, signServiceProof(key, nonce, undefined, "ready"))
+    response.writeHead(ready ? 204 : 200).end()
+  })
+  try {
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+    const address = server.address()
+    if (!address || typeof address === "string") throw new Error("Missing listener")
+    const origin = `http://127.0.0.1:${address.port}`
+    expect(await checkHealth(origin, key)).toBe(false)
+    ready = true
+    expect(await checkHealth(origin, newServiceChallenge())).toBe(false)
+    expect(await checkHealth(origin, key)).toBe(true)
+    expect(received).toEqual([undefined, undefined, undefined])
+  } finally {
+    server.closeAllConnections()
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+  }
+})

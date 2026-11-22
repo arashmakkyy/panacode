@@ -10,7 +10,8 @@ import { ProductIdentity } from "@opencode/util/product-identity"
 import { DesktopPaths } from "../paths"
 import { BUNDLED_CLI_VERSION_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
-import { parseCliVersion, stageName } from "./cli-version"
+import { parseCliVersion } from "./cli-version"
+import { fileDigest, packagedIdentity, stageCli } from "./stage-cli"
 import { DesktopCliState } from "./desktop-cli-state"
 
 const execFileAsync = promisify(execFile)
@@ -93,13 +94,23 @@ const resolveBundledCli = Effect.fn("DesktopCli.resolveBundled")(function* (isol
     : path.join(paths.developmentResourcesRoot, isolated ? developmentExecutableName() : executableName())
 
   if (!existsSync(bundled))
-    return yield* Effect.fail(
-      new Error("The bundled Panacode CLI is missing. Reinstall Panacode to restore it."),
-    )
+    return yield* Effect.fail(new Error("The bundled Panacode CLI is missing. Reinstall Panacode to restore it."))
 
   yield* Effect.logInfo("v2 CLI executable resolved", { bundled, packaged: app.isPackaged })
-  const version = yield* bundledVersion(bundled)
-  const binary = app.isPackaged || isolated ? yield* installCli(bundled, version) : bundled
+  const identity = app.isPackaged ? yield* Effect.tryPromise(() => packagedIdentity(bundled)) : undefined
+  const version = identity?.version ?? (yield* bundledVersion(bundled))
+  const binary =
+    app.isPackaged || isolated
+      ? yield* Effect.tryPromise(async () =>
+          stageCli(
+            bundled,
+            app.getPath("userData"),
+            executableName(),
+            version,
+            identity?.digest ?? (await fileDigest(bundled)),
+          ),
+        )
+      : bundled
 
   return { version, binary, command: [binary] }
 })
@@ -152,33 +163,6 @@ const VersionCache = Schema.Struct({ path: Schema.String, identity: Schema.Strin
 const ExecFailure = Schema.Struct({ stdout: Schema.optional(Schema.String), stderr: Schema.optional(Schema.String) })
 
 const ExecCode = Schema.Struct({ code: Schema.Union([Schema.Number, Schema.String]) })
-
-const installCli = Effect.fn("DesktopCli.install")(function* (source: string, version: string) {
-  const fs = yield* FileSystem.FileSystem
-  const path = yield* Path.Path
-  // x64 and ARM64 installers share userData on Windows ARM64, so a same-version switch must not reuse the other copy.
-  const stage = stageName(version)
-  const directory = path.join(app.getPath("userData"), "cli", stage)
-  const destination = path.join(directory, executableName())
-
-  if (existsSync(destination)) {
-    yield* Effect.logInfo("v2 CLI staged executable reused", { path: destination, version })
-
-    return destination
-  }
-
-  const temp = destination + `.${process.pid}.tmp`
-  yield* fs.makeDirectory(directory, { recursive: true })
-  yield* fs.copyFile(source, temp)
-
-  if (process.platform !== "win32") yield* fs.chmod(temp, 0o755)
-  yield* fs
-    .rename(temp, destination)
-    .pipe(Effect.catch((error) => fs.remove(temp, { force: true }).pipe(Effect.andThen(Effect.fail(error)))))
-  yield* Effect.logInfo("v2 CLI executable staged", { source, path: destination, version })
-
-  return destination
-})
 
 const run = Effect.fn("DesktopCli.run")(function* (binary: string, args: string[]) {
   yield* Effect.logInfo("v2 CLI command started", { binary, args })

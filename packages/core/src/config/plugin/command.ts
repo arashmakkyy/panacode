@@ -1,3 +1,4 @@
+import { nativeConfigPath } from "@opencode/util/product-path"
 export * as ConfigCommandPlugin from "./command.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
@@ -123,7 +124,7 @@ function loadDirectory(fs: FSUtil.Interface, directory: string) {
     const files = yield* fs
       .scan("{command,commands}/**/*.md", { cwd: directory, absolute: true, dot: true, symlink: true })
       .pipe(Effect.orElseSucceed(() => [] as string[]))
-    return yield* Effect.forEach(files.toSorted(), (filepath) =>
+    return yield* Effect.forEach(files.filter((file) => nativeConfigPath(file)).toSorted(), (filepath) =>
       fs.readFileStringSafe(filepath).pipe(
         Effect.flatMap((content) => (content === undefined ? Effect.undefined : decode(directory, filepath, content))),
         Effect.orElseSucceed(() => undefined),

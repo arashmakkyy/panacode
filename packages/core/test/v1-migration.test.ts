@@ -1060,7 +1060,7 @@ describe("V1Migration database workflow", () => {
     )
   })
 
-  test("imports previous V2 databases missing newer nullable columns", async () => {
+  test.each(["private", "shared"] as const)("checks %s previous V2 session inputs before importing them", async (ownership) => {
     await using tmp = await tmpdir()
     const filename = path.join(tmp.path, "opencode-next.db")
     const sqlite = await import("bun:sqlite")
@@ -1093,11 +1093,17 @@ describe("V1Migration database workflow", () => {
       ) VALUES ('ses_next', 'next-project', 'next', '/tmp/next', 'Imported', '2', 10, 20);
     `)
     source.close()
+    if (ownership === "shared") await fs.link(filename, path.join(tmp.path, "other-product.db"))
 
     await database(
       Effect.gen(function* () {
         const database = yield* Database.Service
         expect(yield* V1Migration.run({ nextDatabasePath: filename })).toEqual({ status: "completed" })
+        if (ownership === "shared") {
+          expect(yield* database.db.get(sql`SELECT id FROM session_v2 WHERE id = 'ses_next'`)).toBeUndefined()
+          expect(yield* database.db.get(sql`SELECT id FROM project WHERE id = 'next-project'`)).toBeUndefined()
+          return
+        }
         expect(
           yield* database.db.get(sql`SELECT fork_boundary, time_suspended FROM session_v2 WHERE id = 'ses_next'`),
         ).toEqual({ fork_boundary: null, time_suspended: null })

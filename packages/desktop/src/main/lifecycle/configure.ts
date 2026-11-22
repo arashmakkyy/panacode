@@ -1,5 +1,5 @@
+import { privateDirectory } from "@opencode/util/private-directory"
 import { randomUUID } from "node:crypto"
-import { mkdirSync, rmSync } from "node:fs"
 import { enableCompileCache } from "node:module"
 import { homedir, tmpdir } from "node:os"
 import path from "node:path"
@@ -8,7 +8,7 @@ import { debugBuild, memoryLogInterval } from "@opencode/gui-plugins/debug/optio
 import { APP_ID, APP_NAME, CHANNEL } from "../constants"
 import { remoteDebuggingPort } from "../diagnostics/options"
 
-const testOnboarding = process.env.PANACODE_TEST_ONBOARDING === "1"
+const testOnboarding = !app.isPackaged && process.env.PANACODE_TEST_ONBOARDING === "1"
 
 const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
 
@@ -44,7 +44,7 @@ export function configureApplication() {
     app.commandLine.appendSwitch("enable-precise-memory-info")
 
   const testRoot = createTestRoot()
-  app.setPath("userData", testRoot ? path.join(testRoot, "desktop") : path.join(app.getPath("appData"), APP_ID))
+  app.setPath("userData", privateDirectory(testRoot ? path.join(testRoot, "desktop") : path.join(app.getPath("appData"), APP_ID), true))
 
   if (testRoot) {
     app.setPath("sessionData", path.join(testRoot, "session"))
@@ -53,7 +53,7 @@ export function configureApplication() {
   }
 
   // V8 bytecode for the main bundle survives between launches, like the renderer's code cache.
-  enableCompileCache(path.join(app.getPath("userData"), "compile-cache"))
+  enableCompileCache(privateDirectory(path.join(app.getPath("userData"), "compile-cache"), true))
 }
 
 export function acquireApplicationLock() {
@@ -64,16 +64,15 @@ export function acquireApplicationLock() {
 }
 
 function createTestRoot() {
+  if (app.isPackaged) return
   const root = testOnboarding
     ? path.join(tmpdir(), `opencode-onboarding-${randomUUID()}`)
     : process.env.PANACODE_DESKTOP_TEST_ROOT
 
   if (!root) return undefined
 
-  if (testOnboarding) rmSync(root, { recursive: true, force: true })
-
   for (const dir of ["data", "config", "cache", "state", "desktop", "session", "documents"])
-    mkdirSync(path.join(root, dir), { recursive: true })
+    privateDirectory(path.join(root, dir), true)
 
   if (testOnboarding) process.env.PANACODE_DB = ":memory:"
 

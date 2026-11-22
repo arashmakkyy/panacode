@@ -33,6 +33,7 @@ export type EnsureDiagnostic = {
   readonly pid?: number
   readonly state?: "waiting" | "ready" | "failed"
   /** Bounded, redacted first cause of an exit or timeout. */
+  readonly errorCode?: "bind-failed" | "startup-timeout" | "spawn-failed" | "exit"
   readonly reason?: string
 }
 
@@ -52,8 +53,10 @@ export type EnsureOptions = DiscoverOptions & {
 export type StopOptions = {
   /** Absolute registration file path. Defaults to the XDG state directory. */
   readonly file?: string
+  /** Generation selected by the caller when stop follows a prior discovery. */
+  readonly expected?: Info
   /** How to handle persistent terminals before stopping the service. */
-  readonly pty?: "clear" | "handoff"
+  readonly pty?: "clear" | "handoff" | "shutdown"
 }
 
 /** Contents of the local service registration file. */

@@ -4,6 +4,7 @@ import { EffectDrizzleSqlite } from "./drizzle.js"
 import { sqliteLayer, supportsForeignKeyToggle, supportsTuningPragmas } from "#sqlite"
 import { Context, Effect, Layer, Schema, Semaphore } from "effect"
 import type { SqlClient } from "effect/sql"
+import { assertIsolatedSqlite } from "@opencode/util/product-path"
 import { Global } from "@opencode/util/global"
 import { closeSync, existsSync, openSync } from "node:fs"
 import { chmod } from "node:fs/promises"
@@ -79,6 +80,7 @@ export function layer(options: Options = { path: ":memory:" }) {
       const filename = options.path ?? ":memory:"
       if (filename === ":memory:") return provide(filename)
       const file = isAbsolute(filename) ? filename : join((yield* Global.Service).data, filename)
+      yield* Effect.sync(() => assertIsolatedSqlite(file))
       yield* Effect.promise(() => restrictToOwner(file))
       return provide(file)
     }),

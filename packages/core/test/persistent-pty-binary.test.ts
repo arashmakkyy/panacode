@@ -87,6 +87,28 @@ describe("Bun persistent PTY resolver", () => {
     }
   })
 
+  test("refuses redirected cache ancestors and hard-linked destinations", async () => {
+    const { root, cache, bytes, sha256 } = await fixture()
+    try {
+      const source = path.join(root, "source")
+      await fs.writeFile(source, bytes)
+      const foreign = path.join(root, "foreign")
+      await fs.mkdir(foreign)
+      const link = path.join(root, "alias")
+      await fs.symlink(foreign, link, process.platform === "win32" ? "junction" : "dir")
+      const asset = { path: source, version: "1.0.0", sha256 }
+      await expect(resolveBun(path.join(link, "bin"), asset)).rejects.toThrow("Unsafe")
+      expect(await fs.readdir(foreign)).toEqual([])
+      const installed = await resolveBun(cache, asset)
+      await fs.unlink(installed)
+      await fs.link(source, installed)
+      await expect(resolveBun(cache, asset)).rejects.toThrow("Unsafe")
+      expect(await fs.readFile(source)).toEqual(bytes)
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  })
+
   test("a packed build ignores PANACODE_PTY_BIN and does not execute a PATH lookalike", async () => {
     const { root, cache, bytes, sha256 } = await fixture()
     try {
@@ -121,6 +143,9 @@ describe("Bun persistent PTY resolver", () => {
       await expect(resolveBun(cache, root)).rejects.toThrow("Unsafe")
 
       process.env.PANACODE_PTY_BIN = dependency
+      delete process.env.PANACODE_PTY_BIN_SHA256
+      await expect(resolveBun(cache, undefined)).rejects.toThrow("digest is required")
+      process.env.PANACODE_PTY_BIN_SHA256 = createHash("sha256").update(bytes).digest("hex")
       expect(await resolveBun(cache, undefined)).toBe(path.resolve(dependency))
     } finally {
       await fs.rm(root, { recursive: true, force: true })
@@ -161,7 +186,7 @@ describe("Node persistent PTY resolver", () => {
 
       await expect(resolveNode(undefined, undefined)).rejects.toThrow("No persistent PTY binary is available")
       await expect(resolveNode("opencode-pty", undefined)).rejects.toThrow("must be an absolute path")
-      expect(await resolveNode(file, undefined)).toBe(path.resolve(file))
+      await expect(resolveNode(file, undefined)).rejects.toThrow("digest is required")
       expect(await resolveNode(file, sha256)).toBe(path.resolve(file))
       await expect(resolveNode(file, "0".repeat(64))).rejects.toThrow("checksum mismatch")
       await expect(resolveNode(path.join(root, "missing"), undefined)).rejects.toThrow("does not exist")

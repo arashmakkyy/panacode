@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process"
-import { existsSync } from "node:fs"
 import { join } from "node:path"
 import { Option, Schema } from "effect"
 import type { MainContext } from "@opencode/plugin/gui/main"
@@ -74,11 +73,11 @@ export function shellEscape(value: string) {
 
 /** WSL commands; `t` resolves the plugin's copy for errors the user sees. */
 export function createWslRuntime(t: MainContext["t"]) {
-  const runWsl = (args: string[], opts: RunWslOptions = {}) => runCommand("wsl", args, opts)
+  const runWsl = (args: string[], opts: RunWslOptions = {}) => runCommand(system32("wsl.exe"), args, opts)
 
   const runPowerShell = (command: string, opts: RunWslOptions = {}) =>
     runCommand(
-      "powershell.exe",
+      system32("WindowsPowerShell/v1.0/powershell.exe"),
       ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command],
       opts,
     )
@@ -314,7 +313,7 @@ export function createWslRuntime(t: MainContext["t"]) {
     async installRuntimeElevated(opts?: RunWslOptions) {
       const script = [
         "$ErrorActionPreference = 'Stop'",
-        "$process = Start-Process -FilePath 'wsl.exe' -Verb RunAs -ArgumentList @('--install','--no-distribution') -Wait -PassThru",
+        "$process = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32/wsl.exe') -Verb RunAs -ArgumentList @('--install','--no-distribution') -Wait -PassThru",
         "if ($null -ne $process.ExitCode) { exit $process.ExitCode }",
       ].join("; ")
 
@@ -384,8 +383,9 @@ export function createWslRuntime(t: MainContext["t"]) {
       }
     },
 
-    async resolveCli(distro: string, opts?: RunWslOptions) {
-      return firstLine((await runWslSh(discoverScript(), distro, opts)).stdout)
+    async resolveCli(distro: string, version: string, opts?: RunWslOptions) {
+      const target = await probeCliTarget(distro, opts)
+      return firstLine((await runWslSh(discoverScript({version, target}), distro, opts)).stdout)
     },
 
     async readCliVersion(command: string, distro: string, opts?: RunWslOptions) {
@@ -469,13 +469,8 @@ function firstLine(value: string) {
   )
 }
 
-function system32(command: string) {
-  const root = process.env.SystemRoot ?? process.env.windir
-
-  if (!root) return command
-  const resolved = join(root, "System32", command)
-
-  return existsSync(resolved) ? resolved : command
+export function system32(command: string) {
+  return join(process.env.SystemRoot ?? process.env.windir ?? "C:\\Windows", "System32", command)
 }
 
 function withTimeout(opts: RunWslOptions | undefined, timeoutMs: number): RunWslOptions {

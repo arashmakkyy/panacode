@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test"
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises"
+import { link, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import type { Info } from "../src/service"
-import { removeOwned } from "../src/service-file"
+import { publishRegistration, registrationSnapshot, removeOwned, withRegistrationLock } from "../src/service-file"
 
 const registration = (id: string, pid: number): Info => ({
   id,
@@ -42,7 +42,7 @@ test("a stale owner never removes a registration written by a newer service", as
   expect(await readdir(root.path)).toEqual(["service.json"])
 })
 
-test("a quarantined record that is not ours is put back instead of deleted", async () => {
+test("a corrupt record remains continuously available during stale cleanup", async () => {
   await using root = await fixtureRoot()
   const file = path.join(root.path, "service.json")
   const owner = registration("owner-a", 1001)
@@ -59,28 +59,95 @@ test("a missing registration is a no-op", async () => {
   expect(await readdir(root.path)).toEqual([])
 })
 
-test("a replacement written while the old owner is cleaning up survives", async () => {
+test("old cleanup queued behind a publisher never removes the live generation or handoff", async () => {
   await using root = await fixtureRoot()
-  const stale = registration("owner-a", 1001)
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const file = path.join(root.path, `service-${attempt}.json`)
-    const newer = registration(`owner-b-${attempt}`, 1002 + attempt)
-    await writeFile(file, JSON.stringify(stale))
+  const file = path.join(root.path, "service.json")
+  const ticket = file + ".pty-handoff"
+  const old = registration("owner-a", 1001)
+  const next = registration("owner-b", 1002)
+  await publishRegistration(file, JSON.stringify(old))
+  await writeFile(ticket, "new terminal ticket")
+  const published = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const change = withRegistrationLock(file, async () => {
+    await writeFile(file, JSON.stringify(next))
+    published.resolve()
+    await release.promise
+  })
+  await published.promise
+  const cleanup = removeOwned(file, old)
+  for (let i = 0; i < 20; i++) expect(JSON.parse(await readFile(file, "utf8")).id).toBe(next.id)
+  release.resolve()
+  await change
+  expect(await cleanup).toBe(false)
+  expect(JSON.parse(await readFile(file, "utf8")).id).toBe(next.id)
+  expect(await readFile(ticket, "utf8")).toBe("new terminal ticket")
+})
 
-    const removal = removeOwned(file, stale)
-    // The live path disappears when removeOwned quarantines the old record. A writer that wins the
-    // race after that point must keep its registration.
-    for (let poll = 0; poll < 100; poll++) {
-      if (!(await Bun.file(file).exists())) break
-      await Bun.sleep(0)
-    }
-    await writeFile(file, JSON.stringify(newer))
+test("a stale restart selection never clears the new terminal ticket or contacts the new owner", async () => {
+  await using root = await fixtureRoot()
+  const file = path.join(root.path, "service.json")
+  const old = registration("old", 1001),
+    next = registration("new", 1002)
+  await publishRegistration(file, JSON.stringify(next))
+  await writeFile(file + ".pty-handoff", "next ticket")
+  const { stop } = await import("../src/promise/service")
+  await stop({ file, expected: old, pty: "handoff" })
+  expect(JSON.parse(await readFile(file, "utf8")).id).toBe(next.id)
+  expect(await readFile(file + ".pty-handoff", "utf8")).toBe("next ticket")
+})
 
-    await removal
-    expect(await Bun.file(file).json()).toMatchObject({ id: newer.id, pid: newer.pid })
-    await rm(file, { force: true })
-  }
-  expect(await readdir(root.path)).toEqual([])
+test("a directly started contender never overwrites a newer or live registration", async () => {
+  await using root = await fixtureRoot()
+  const file = path.join(root.path, "service.json")
+  const old = registration("old", 2_147_483_647),
+    live = registration("live", process.pid)
+  await writeFile(file, JSON.stringify(old))
+  const previous = await registrationSnapshot(file)
+  await writeFile(file, JSON.stringify(live))
+  const next = JSON.stringify(registration("candidate", process.pid + 1))
+  await expect(publishRegistration(file, next, previous)).rejects.toThrow("newer")
+  await expect(publishRegistration(file, next, await registrationSnapshot(file))).rejects.toThrow(
+    "may still have an owner",
+  )
+  expect(await readFile(file, "utf8")).toBe(JSON.stringify(live))
+  expect(await readdir(root.path)).toEqual(["service.json"])
+})
+
+test("a foreign registration remains in place, while a captured dead Panacode generation can recover", async () => {
+  await using root = await fixtureRoot()
+  const file = path.join(root.path, "service.json")
+  const old = registration("old", 2_147_483_647)
+  const next = JSON.stringify(registration("next", process.pid))
+  await writeFile(file, JSON.stringify({ ...old, product: "opencode" }))
+  await expect(publishRegistration(file, next, await registrationSnapshot(file))).rejects.toThrow(
+    "may still have an owner",
+  )
+  expect(JSON.parse(await readFile(file, "utf8")).product).toBe("opencode")
+  await writeFile(file, JSON.stringify(old))
+  await publishRegistration(file, next, await registrationSnapshot(file))
+  expect(await readFile(file, "utf8")).toBe(next)
+  const archived = (await readdir(root.path)).filter((name) => name.endsWith(".stale"))
+  expect(archived).toHaveLength(1)
+  expect(await readFile(path.join(root.path, archived[0]!), "utf8")).toBe(JSON.stringify(old))
+})
+
+test("linked state files and handoff sidecars are rejected before reading or publication", async () => {
+  await using root = await fixtureRoot()
+  const file = path.join(root.path, "service.json")
+  const foreign = path.join(root.path, "foreign")
+  const original = JSON.stringify(registration("foreign", 1001))
+  await writeFile(foreign, original)
+  await link(foreign, file)
+  await expect(registrationSnapshot(file)).rejects.toThrow("Unsafe")
+  await expect(publishRegistration(file, JSON.stringify(registration("candidate", process.pid)))).rejects.toThrow(
+    "Unsafe",
+  )
+  await rm(file)
+  await link(foreign, file + ".pty-handoff")
+  const { environment } = await import("../src/pty-handoff")
+  await expect(environment(file)).rejects.toThrow("Unsafe")
+  expect(await readFile(foreign, "utf8")).toBe(original)
 })
 
 async function fixtureRoot() {

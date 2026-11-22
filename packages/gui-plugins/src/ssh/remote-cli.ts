@@ -2,6 +2,7 @@ export * as RemoteCli from "./remote-cli"
 
 import { Effect, Schema } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
+import { beginInstall, cachePaths, publishGeneration, selectGeneration } from "../remote-cache"
 import { ManagedCli } from "../managed-cli"
 
 export class Failure extends Schema.TaggedError<Failure>()("RemoteCliFailure", {
@@ -41,35 +42,11 @@ sha512_of() {
 }
 `
 
-function metadataValue(key: string) {
-  return `sed -n 's/.*"${key}":"\\([^"]*\\)".*/\\1/p' "$metadata"`
-}
-
-/**
- * Finds the private cache only when its sidecar names Panacode for this version
- * and target, and the binary still matches the recorded digest. It sets `cli` for
- * the caller's registration script; no cached binary is executed before this.
- */
 export function discoverScript(input: { version: string; target: string }) {
   const version = requireVersion(input.version)
   const target = ManagedCli.requireTarget(input.target)
-
-  return `${digest}cli=""
-root="$HOME/.panacode/desktop-ssh"
-release="$root"/${quote(version)}
-destination="$release/panacode"
-metadata="$release/panacode.artifact.json"
-if [ ! -L "$HOME/.panacode" ] && [ ! -L "$root" ] && [ ! -L "$release" ] && [ -f "$destination" ] && [ -f "$metadata" ] && [ ! -L "$destination" ] && [ ! -L "$metadata" ]; then
-  product=$(${metadataValue("product")})
-  cached_version=$(${metadataValue("version")})
-  cached_target=$(${metadataValue("target")})
-  stored=$(${metadataValue("sha256")})
-  actual=$(sha256_of "$destination") || actual=""
-  if [ "$product" = "panacode" ] && [ "$cached_version" = ${quote(version)} ] && [ "$cached_target" = ${quote(target)} ] && [ \${#stored} -eq 64 ] && [ "$stored" = "$actual" ]; then
-    cli="$destination"
-    printf 'OPENCODE_SSH_CLI=ready\\n'
-  fi
-fi
+  return `${digest}${cachePaths("ssh", version)}${selectGeneration(version, target)}
+if [ -n "$cli" ]; then printf 'OPENCODE_SSH_CLI=ready\\n'; fi
 `
 }
 
@@ -142,33 +119,7 @@ test "$actual" = ${quote(input.source.sha256)}`
 
   return `set -eu
 umask 077
-${digest}root="$HOME/.panacode/desktop-ssh"
-release="$root"/${quote(version)}
-destination="$release/panacode"
-metadata="$release/panacode.artifact.json"
-if [ -L "$HOME/.panacode" ] || [ -L "$root" ]; then
-  echo "Refusing to install the Panacode CLI through a symlinked directory." >&2
-  exit 1
-fi
-mkdir -p "$release"
-if [ -L "$HOME/.panacode" ] || [ -L "$root" ] || [ -L "$release" ] || [ -L "$destination" ] || [ -L "$metadata" ]; then
-  echo "Refusing to replace a symlinked Panacode CLI." >&2
-  exit 1
-fi
-lock="$root/.install.lock"
-if ! mkdir "$lock" 2>/dev/null; then
-  owner=$(cat "$lock/pid" 2>/dev/null || true)
-  if [ -n "$owner" ] && kill -0 "$owner" 2>/dev/null; then
-    echo "Another Panacode CLI install is already running." >&2
-    exit 1
-  fi
-  rm -rf "$lock"
-  mkdir "$lock" 2>/dev/null || { echo "Another Panacode CLI install is already running." >&2; exit 1; }
-fi
-printf '%s\\n' "$$" > "$lock/pid"
-stage=$(mktemp -d "$release/.install-XXXXXX")
-trap 'rm -rf "$stage" "$lock"' EXIT HUP INT TERM
-${source}
+${digest}${cachePaths("ssh", version)}${beginInstall}${source}
 tar -xzf "$archive" -C "$stage" package/bin/panacode
 test -d "$stage/package"
 test ! -L "$stage/package"
@@ -179,8 +130,8 @@ test ! -L "$stage/package/bin/panacode"
 chmod 755 "$stage/package/bin/panacode"
 sha=$(sha256_of "$stage/package/bin/panacode") || { echo "Could not hash the Panacode CLI." >&2; exit 1; }
 printf '{"product":"panacode","version":"%s","target":"%s","sha256":"%s"}\\n' ${quote(version)} ${quote(target)} "$sha" > "$stage/panacode.artifact.json"
-mv -f "$stage/package/bin/panacode" "$destination"
-mv -f "$stage/panacode.artifact.json" "$metadata"
+binary="$stage/package/bin/panacode"
+${publishGeneration}
 `
 }
 

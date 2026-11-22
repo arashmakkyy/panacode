@@ -1,3 +1,4 @@
+import { newServiceChallenge, serviceProofHeader, serviceProofRequest, verifyServiceProof } from "@opencode/schema/service-proof"
 import { expect } from "bun:test"
 import { randomUUID } from "node:crypto"
 import { Effect } from "effect"
@@ -8,13 +9,15 @@ import { ServerProcess } from "../src/process"
 it.live("authenticates API requests behind the frontend transform while allowing browser preflight", () =>
   Effect.gen(function* () {
     const fallback = "fallback".repeat(256)
+    const proofKey = newServiceChallenge()
     const server = yield* ServerProcess.start<never, never>(
       {
         hostname: "127.0.0.1",
         port: 0,
         password: "secret",
+        serviceProofKey: proofKey,
         cors: ["http://192.168.1.10:3001", "https://example.com"],
-        app: { version: "test-version" },
+        app: { version: "test-version", instance: "test-service" },
         database: { path: ":memory:" },
       },
       undefined,
@@ -27,6 +30,15 @@ it.live("authenticates API requests behind the frontend transform while allowing
           return HttpServerResponse.raw(fallback, { contentType: "text/plain" })
         }),
     )
+    const origin = HttpServer.formatAddress(server.address)
+    const challenge = newServiceChallenge()
+    const proof = yield* Effect.promise(() => fetch(serviceProofRequest(origin, challenge, "test-service")))
+    expect(proof.status).toBe(204)
+    expect(verifyServiceProof(proof.headers.get(serviceProofHeader), proofKey, challenge, "test-service")).toBe("ready")
+    expect(verifyServiceProof(proof.headers.get(serviceProofHeader), "other", challenge, "test-service")).toBeUndefined()
+    expect(verifyServiceProof(proof.headers.get(serviceProofHeader), proofKey, newServiceChallenge(), "test-service")).toBeUndefined()
+    const mismatch = yield* Effect.promise(() => fetch(serviceProofRequest(origin, challenge, "different-instance")))
+    expect(mismatch.headers.get(serviceProofHeader)).toBeNull()
     const response = yield* Effect.promise(() =>
       fetch(new URL("/api/info", HttpServer.formatAddress(server.address)), {
         method: "OPTIONS",

@@ -12,7 +12,7 @@ import { EventSequenceTable } from "../event/sql.js"
 import { eq, sql } from "drizzle-orm"
 import { Global } from "@opencode/util/global"
 import { FSUtil } from "@opencode/util/fs-util"
-import { existsSync } from "node:fs"
+import { privateInput } from "@opencode/util/product-path"
 import path from "node:path"
 import type { Database as SQLiteDatabase } from "bun:sqlite"
 import { Agent } from "@opencode/schema/agent"
@@ -813,7 +813,7 @@ function openNextDatabase(sourcePath: string) {
 }
 
 function countNextSessions(sourcePath: string | undefined) {
-  if (!sourcePath || !existsSync(sourcePath)) return Effect.succeed(0)
+  if (!sourcePath || !privateInput(sourcePath, true)) return Effect.succeed(0)
   return Effect.scoped(
     Effect.gen(function* () {
       const source = yield* openNextDatabase(sourcePath)
@@ -828,7 +828,7 @@ function importNextDatabase(
   sourcePath: string | undefined,
   onProgress: (completed: number) => void,
 ): Effect.Effect<void, unknown> {
-  if (!sourcePath || !existsSync(sourcePath)) return Effect.void
+  if (!sourcePath || !privateInput(sourcePath, true)) return Effect.void
   return Effect.scoped(
     Effect.gen(function* () {
       const source = yield* openNextDatabase(sourcePath)

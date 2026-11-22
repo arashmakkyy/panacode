@@ -4,18 +4,11 @@ import { ManagedCli } from "../managed-cli"
 import { parseTarget, quote, runSsh, sshArgs, SshFailure } from "./command"
 import { RemoteCli } from "./remote-cli"
 
-// The registration is the service's complete private discovery contract; no remote
-// Python/Node runtime is needed. It is read only through a CLI whose sidecar and digest
-// were verified, so an unrelated executable cannot answer for Panacode.
-const registrationScript = `status=$("$cli" service status) || exit 0
-if [ "$status" = stopped ]; then exit 0; fi
-printf 'OPENCODE_SSH_STATUS=%s\\n' "$status"
-for file in "\${XDG_STATE_HOME:-$HOME/.local/state}"/panacode/service*.json; do
-  if [ ! -f "$file" ]; then continue; fi
-  printf 'OPENCODE_SSH_REGISTRATION_BEGIN\\n'
-  cat "$file"
-  printf '\\nOPENCODE_SSH_REGISTRATION_END\\n'
-done
+// Only the selected, live registration may provide a connection. Frame the private
+// output before running the command so error reporting can redact partial output.
+const registrationScript = `printf 'OPENCODE_SSH_REGISTRATION_BEGIN\\n'
+"$cli" service status --connection-json
+printf 'OPENCODE_SSH_REGISTRATION_END\\n'
 `
 
 export function discoverScript(input: { version: string; target: string }) {
@@ -25,9 +18,10 @@ if [ -z "$cli" ]; then exit 0; fi
 ${registrationScript}`
 }
 
-export function startScript(input: { version: string; replace?: boolean }) {
+export function startScript(input: { version: string; target: string; replace?: boolean }) {
   return `set -eu
-cli="${binaryPath(input.version)}"
+${RemoteCli.discoverScript(input)}
+[ -n "$cli" ] || exit 1
 "$cli" service ${input.replace ? "restart" : "start"}
 ${registrationScript}`
 }
@@ -37,40 +31,25 @@ const Registration = Schema.fromJsonString(
     id: Schema.NonEmptyString,
     product: Schema.Literal("panacode"),
     url: Schema.String,
-    password: Schema.String,
+    password: Schema.NonEmptyString,
+    proofKey: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
     version: Schema.String,
     pid: Schema.Int.check(Schema.isGreaterThan(0)),
   }),
 )
 
 export function parseRegistration(output: string) {
-  const status = output
-    .split(/\r?\n/)
-    .findLast((line) => line.startsWith("OPENCODE_SSH_STATUS="))
-    ?.slice("OPENCODE_SSH_STATUS=".length)
-
-  if (!status) return undefined
-
-  for (const match of output.matchAll(
-    /OPENCODE_SSH_REGISTRATION_BEGIN\r?\n([\s\S]*?)\r?\nOPENCODE_SSH_REGISTRATION_END/g,
-  )) {
-    const result = Schema.decodeUnknownOption(Registration)(match[1])
-
-    if (Option.isSome(result) && result.value.url === status) return result.value
-  }
-
-  return undefined
+  const frames = [...output.matchAll(/OPENCODE_SSH_REGISTRATION_BEGIN\r?\n([\s\S]*?)\r?\nOPENCODE_SSH_REGISTRATION_END/g)]
+  if (frames.length !== 1) return
+  const result = Schema.decodeUnknownOption(Registration)(frames[0]?.[1])
+  return Option.getOrUndefined(result)
 }
 
 function cachedCli(output: string) {
   return output.split(/\r?\n/).includes("OPENCODE_SSH_CLI=ready")
 }
 
-export function binaryPath(version: string) {
-  return `$HOME/.panacode/desktop-ssh/${RemoteCli.requireVersion(version)}/panacode`
-}
-
-function connectionAddress(address: string, password: string, instance: string) {
+function connectionAddress(address: string, password: string, instance: string, proofKey: string) {
   const url = new URL(address)
 
   if (url.protocol !== "http:" || !["127.0.0.1", "localhost", "0.0.0.0", "[::]", "[::1]"].includes(url.hostname))
@@ -81,6 +60,7 @@ function connectionAddress(address: string, password: string, instance: string) 
     port: Number(url.port || 80),
     password,
     instance,
+    proofKey,
   }
 }
 
@@ -118,7 +98,7 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
 
   if (registered && (input.development || registered.version === input.version))
     return yield* Effect.try({
-      try: () => connectionAddress(registered.url, registered.password, registered.id),
+      try: () => connectionAddress(registered.url, registered.password, registered.id, registered.proofKey),
       catch: SshFailure.from,
     })
 
@@ -176,7 +156,7 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
   }
 
   const start = yield* Effect.try({
-    try: () => startScript({ version: input.version, replace: input.replace }),
+    try: () => startScript({ version: input.version, target, replace: input.replace }),
     catch: SshFailure.from,
   })
 
@@ -188,7 +168,7 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
     return yield* Effect.fail(new SshFailure("version", registration.version))
 
   return yield* Effect.try({
-    try: () => connectionAddress(registration.url, registration.password, registration.id),
+    try: () => connectionAddress(registration.url, registration.password, registration.id, registration.proofKey),
     catch: SshFailure.from,
   })
 })

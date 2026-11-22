@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test"
 import type { Info } from "../src/service"
-import { localEndpoint, parseRegistration, probeResult } from "../src/service-probe"
+import { healthProof, testControl } from "./fixture/control"
+import { homedir } from "node:os"
+import { join } from "node:path"
+import { fallback, localEndpoint, parseRegistration, probeResult } from "../src/service-probe"
 
 function registration(url: string, input: Partial<Info> = {}): Info {
   return {
@@ -11,18 +14,6 @@ function registration(url: string, input: Partial<Info> = {}): Info {
     pid: process.pid,
     password: "secret",
     control: { path: "unused-in-health", token: "control-secret" },
-    ...input,
-  }
-}
-
-function health(info: Info, input: Record<string, unknown> = {}) {
-  return {
-    version: info.version,
-    instance: info.id,
-    pid: info.pid,
-    product: "panacode",
-    urls: [info.url],
-    paths: { tmp: "/tmp/panacode" },
     ...input,
   }
 }
@@ -70,83 +61,66 @@ test("a managed record without product or instance identity is not upgraded into
   }
 })
 
-test("health must name the registered instance, process, version, and product", async () => {
-  let info = registration("http://127.0.0.1:1/")
-  const server = Bun.serve({
+test("both the private channel and the HTTP listener must prove this generation before discovery", async () => {
+  let state: "ready" | "starting" | "failed" = "ready"
+  let badProof = false
+  const headers: (string | null)[] = []
+  using listener = Bun.serve({
     port: 0,
-    fetch: () => Response.json(health(info)),
+    fetch(request) {
+      headers.push(request.headers.get("authorization"))
+      return healthProof(request, badProof ? "different-key" : channel.control.token, "instance-a", state)
+    },
   })
-  info = registration(server.url.href)
-  try {
-    const ready = await probeResult(info)
-    expect(ready.service).toMatchObject({ version: "2.0.0", state: "ready", compatible: true })
+  const owner = registration(listener.url.href)
+  await using channel = await testControl(() => owner)
+  const target = { ...owner, control: channel.control }
+  for (const [reported, expected] of [
+    ["starting", "waiting"],
+    ["failed", "failed"],
+    ["ready", "ready"],
+  ] as const) {
+    state = reported
+    expect((await probeResult(target)).service).toMatchObject({ state: expected, version: "2.0.0" })
+  }
+  badProof = true
+  expect((await probeResult(target)).service?.error).toBeString()
+  using foreign = Bun.serve({
+    port: 0,
+    fetch(request) {
+      headers.push(request.headers.get("authorization"))
+      return new Response(null, { status: 204 })
+    },
+  })
+  expect((await probeResult({ ...target, url: foreign.url.href })).service?.error).toBeString()
+  expect(headers.length).toBe(5)
+  expect(headers.every((value) => value === null)).toBe(true)
+})
 
-    for (const wrong of [
-      { instance: "instance-b" },
-      { instance: undefined },
-      { pid: process.pid + 1 },
-      { version: "1.0.0" },
-      { product: "opencode" },
-    ]) {
-      const isolated = Bun.serve({ port: 0, fetch: () => Response.json(health(info, wrong)) })
-      try {
-        const rejected = await probeResult({ ...info, url: isolated.url.href })
-        expect(rejected.service?.state).toBe("failed")
-        expect(rejected.service?.error).toBeString()
-      } finally {
-        isolated.stop(true)
-      }
+test("an unverifiable registration never sends a Basic credential, even to a responsive port", async () => {
+  const seen: Array<string | null> = []
+  using server = Bun.serve({
+    port: 0,
+    fetch(request) {
+      seen.push(request.headers.get("authorization"))
+      return Response.json({ product: "panacode", pid: process.pid, version: "2.0.0", instance: "instance-a" })
+    },
+  })
+  const result = await probeResult(registration(server.url.href, { control: undefined }))
+  expect(result.service?.error).toBeString()
+  expect(seen).toEqual([null])
+})
+
+test("an empty or relative XDG state root cannot select a registration in cwd", () => {
+  const original = process.env.XDG_STATE_HOME
+  try {
+    for (const value of ["", "./state"]) {
+      process.env.XDG_STATE_HOME = value
+      expect(fallback()).toBe(join(homedir(), ".local", "state", "panacode", "service.json"))
     }
   } finally {
-    server.stop(true)
-  }
-})
-
-test("authentication failures, redirects, and invalid payloads are definite failures", async () => {
-  const responses: Array<[string, () => Response]> = [
-    ["unauthorized", () => new Response(null, { status: 401 })],
-    ["forbidden", () => new Response(null, { status: 403 })],
-    ["redirect", () => new Response(null, { status: 302, headers: { location: "http://127.0.0.1:1/" } })],
-    ["invalid", () => new Response("not json", { status: 200 })],
-  ]
-  for (const [, reply] of responses) {
-    const server = Bun.serve({ port: 0, fetch: reply })
-    try {
-      const result = await probeResult(registration(server.url.href))
-      expect(result.service?.state).toBe("failed")
-      expect(result.service?.error).toBeString()
-    } finally {
-      server.stop(true)
-    }
-  }
-})
-
-test("a missing health endpoint is incompatible and is not a ready service", async () => {
-  const server = Bun.serve({ port: 0, fetch: () => new Response(null, { status: 404 }) })
-  try {
-    const result = await probeResult(registration(server.url.href))
-    expect(result.service).toMatchObject({ state: "ready", compatible: false })
-  } finally {
-    server.stop(true)
-  }
-})
-
-test("starting and failed health states keep the same instance identity", async () => {
-  const info = registration("http://127.0.0.1:1/")
-  const starting = Bun.serve({ port: 0, fetch: () => Response.json(health(info), { status: 503 }) })
-  const failed = Bun.serve({ port: 0, fetch: () => Response.json(health(info), { status: 500 }) })
-  try {
-    expect((await probeResult({ ...info, url: starting.url.href })).service).toMatchObject({
-      state: "waiting",
-      compatible: true,
-    })
-    expect((await probeResult({ ...info, url: failed.url.href })).service).toMatchObject({
-      state: "failed",
-      compatible: true,
-    })
-  } finally {
-    starting.stop(true)
-    failed.stop(true)
+    if (original === undefined) delete process.env.XDG_STATE_HOME
+    else process.env.XDG_STATE_HOME = original
   }
 })
 

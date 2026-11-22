@@ -1,3 +1,5 @@
+import { healthProof, testControl } from "../../../../client/test/fixture/control"
+import { serviceProofPath } from "@opencode/schema/service-proof"
 import { expect, test } from "bun:test"
 import { randomUUID } from "node:crypto"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
@@ -54,13 +56,27 @@ test("discards a probe when the registration is no longer owned", async () => {
   const started = startSidecarProbe({ key })
   await started
 
-  const foreign = Object.fromEntries(
-    Object.entries(service.registration()).filter(([key]) => key !== "product"),
-  )
+  const foreign = Object.fromEntries(Object.entries(service.registration()).filter(([key]) => key !== "product"))
 
   await writeFile(service.file, JSON.stringify(foreign))
 
   expect(await takeSidecarProbe(key)).toEqual({ status: "discarded", reason: "identity-changed" })
+})
+
+test("an endpoint cannot acquire a newer registration identity during an in-flight discovery", async () => {
+  const observed = Promise.withResolvers<void>()
+  const resume = Promise.withResolvers<void>()
+  await using service = await probeFixture(async () => {
+    observed.resolve()
+    await resume.promise
+  })
+  const key = service.key()
+  const probing = startSidecarProbe({ key })
+  await observed.promise
+  await writeFile(service.file, JSON.stringify({ ...service.registration(), id: randomUUID() }))
+  resume.resolve()
+  await probing
+  expect(await takeSidecarProbe(key)).toEqual({ status: "miss" })
 })
 
 test("misses when no service is registered", async () => {
@@ -72,7 +88,7 @@ test("misses when no service is registered", async () => {
   expect(await takeSidecarProbe(key)).toEqual({ status: "miss" })
 })
 
-async function probeFixture() {
+async function probeFixture(onRequest?: () => Promise<void>) {
   const directory = await mkdtemp(join(tmpdir(), "panacode-sidecar-probe-"))
   const file = join(directory, "service.json")
   const password = randomUUID()
@@ -82,18 +98,18 @@ async function probeFixture() {
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    fetch(request) {
+    async fetch(request) {
       requests++
+      await onRequest?.()
 
-      if (new URL(request.url).pathname !== "/api/info") return new Response("not found", { status: 404 })
-
-      return Response.json({ version, instance: id, pid: process.pid, product: "panacode" })
+      if (new URL(request.url).pathname !== serviceProofPath) return new Response("not found", { status: 404 })
+      return healthProof(request, channel.control.token, id)
     },
   })
 
   const url = `http://127.0.0.1:${server.port}`
 
-  const registration = () => ({
+  const identity = () => ({
     id,
     product: "panacode" as const,
     version,
@@ -102,6 +118,8 @@ async function probeFixture() {
     password,
   })
 
+  const channel = await testControl(identity)
+  const registration = () => ({ ...identity(), control: channel.control })
   await writeFile(file, JSON.stringify(registration()))
 
   return {
@@ -113,6 +131,7 @@ async function probeFixture() {
     key: () => ({ stateRoot: directory, file, version, local: false }),
     requests: () => requests,
     async [Symbol.asyncDispose]() {
+      await channel[Symbol.asyncDispose]()
       server.stop(true)
       await rm(directory, { recursive: true, force: true })
     },

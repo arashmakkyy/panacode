@@ -2,6 +2,9 @@ import os from "os"
 import path from "path"
 
 const home = os.homedir()
+export const hostFilesystem = true
+
+export const upstreamFallbackRoots = (app: string) => home ? [".local/share", ".local/state", ".cache", ".config"].map((base) => path.join(home, base, app)) : []
 
 // XDG base directories must be absolute. A relative value is ignored here so the CLI and Desktop
 // resolve the same state directory instead of one honoring it and the other falling back.

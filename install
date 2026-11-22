@@ -70,7 +70,24 @@ while [[ $# -gt 0 ]]; do
 done
 
 INSTALL_DIR=$HOME/.panacode/bin
+# A user may have linked either directory to the official CLI installation.
+if [[ -L "$HOME/.panacode" || -L "$INSTALL_DIR" ]]; then
+    echo "Panacode installation directory is redirected." >&2
+    exit 1
+fi
 mkdir -p "$INSTALL_DIR"
+stage_dir=$(mktemp -d "$INSTALL_DIR/.install.XXXXXXXX")
+trap 'rm -rf "$stage_dir"' EXIT
+publish_binary() {
+    local source="$1" destination="$INSTALL_DIR/$2"
+    if [[ ! -f "$source" || -L "$source" || -L "$destination" || ( -e "$destination" && ! -f "$destination" ) ]]; then
+        echo "Panacode installation requires regular files." >&2
+        exit 1
+    fi
+    cp "$source" "$stage_dir/new-cli"
+    chmod 755 "$stage_dir/new-cli"
+    mv -f "$stage_dir/new-cli" "$destination"
+}
 
 # If --binary is provided, skip all download/detection logic
 if [ -n "$binary_path" ]; then
@@ -230,18 +247,6 @@ print_message() {
     echo -e "${color}${message}${NC}"
 }
 
-check_version() {
-    if command -v "$APP" >/dev/null 2>&1; then
-
-        ## Check the installed version
-        installed_version=$("$APP" --version 2>/dev/null || echo "")
-        installed_version="${installed_version##* }"
-        installed_version="${installed_version#v}"
-
-        print_message info "${MUTED}Installed version: ${NC}$installed_version."
-    fi
-}
-
 print_progress() {
     local bytes="$1"
     local length="$2"
@@ -305,8 +310,7 @@ download_with_progress() {
 
 download_and_install() {
     print_message info "\n${MUTED}Installing ${NC}$APP ${MUTED}version: ${NC}$specific_version"
-    local tmp_dir="${TMPDIR:-/tmp}/panacode_install_$$"
-    mkdir -p "$tmp_dir"
+    local tmp_dir="$stage_dir"
 
     if [[ "$os" == "windows" ]] || ! [ -t 2 ] || ! download_with_progress "$url" "$tmp_dir/$filename"; then
         # Fallback to standard curl on Windows, non-TTY environments, or if custom progress fails
@@ -321,14 +325,12 @@ download_and_install() {
         fi
     fi
 
-    tar -xzf "$tmp_dir/$filename" -C "$tmp_dir"
+    tar -xzf "$tmp_dir/$filename" -C "$tmp_dir" "package/bin/$binary_name"
     local installed_binary="$APP"
     if [ "$os" = "windows" ]; then
         installed_binary="$APP.exe"
     fi
-    mv "$tmp_dir/package/bin/$binary_name" "$INSTALL_DIR/$installed_binary"
-    chmod 755 "$INSTALL_DIR/$installed_binary"
-    rm -rf "$tmp_dir"
+    publish_binary "$tmp_dir/package/bin/$binary_name" "$installed_binary"
 }
 
 install_from_binary() {
@@ -337,14 +339,12 @@ install_from_binary() {
     case "$(uname -s)" in
         MINGW*|MSYS*|CYGWIN*) installed_binary="$APP.exe" ;;
     esac
-    cp "$binary_path" "$INSTALL_DIR/$installed_binary"
-    chmod 755 "$INSTALL_DIR/$installed_binary"
+    publish_binary "$binary_path" "$installed_binary"
 }
 
 if [ -n "$binary_path" ]; then
     install_from_binary
 else
-    check_version
     download_and_install
 fi
 

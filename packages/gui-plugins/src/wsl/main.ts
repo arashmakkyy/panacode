@@ -65,6 +65,7 @@ const setup: Plugin.MainSetup = (ctx) => {
       log("info", "spawning wsl sidecar", { distro })
 
       return spawnWslSidecar(distro, {
+        version: cli.version,
         runtime,
         t,
         packaged,

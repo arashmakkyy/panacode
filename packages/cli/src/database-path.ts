@@ -1,11 +1,8 @@
 import fs from "node:fs"
-import os from "node:os"
+import { createHash } from "node:crypto"
 import path from "node:path"
-import { roots } from "@opencode/util/global-roots"
-import { ProductIdentity } from "@opencode/util/product-identity"
+import { assertIsolatedSqlite, physicalPath, sqliteSuffixes, upstreamRoots, within } from "@opencode/util/product-path"
 import { OPENCODE_CHANNEL } from "./version"
-
-const sidecars = ["", "-wal", "-shm", "-journal"] as const
 
 /**
  * Resolve the Panacode database path.
@@ -19,7 +16,7 @@ const sidecars = ["", "-wal", "-shm", "-journal"] as const
  * where SQLite will write. A one-shot check cannot defend against a concurrent link swap between
  * this function and the driver's open; that limitation is part of the filesystem API.
  */
-export function databasePath(data: string) {
+export function databasePath(data: string, claimExternal = false) {
   const configured = process.env.PANACODE_DB
   const filename =
     configured ??
@@ -30,112 +27,88 @@ export function databasePath(data: string) {
       : `panacode-${OPENCODE_CHANNEL.replace(/[^a-zA-Z0-9._-]/g, "-")}.db`)
   if (filename === ":memory:") return filename
   const resolved = path.resolve(data, filename)
-  refuseForeignDatabase(resolved)
-  return resolved
-}
-
-function refuseForeignDatabase(file: string) {
   try {
-    assertPrivate(file)
+    const privateData = physicalPath(data)
+    const physical = physicalPath(resolved)
+    const external = !within(privateData, physical)
+    assertIsolatedSqlite(resolved, external)
+    if (external) {
+      checkExternalDatabase(privateData, physical, claimExternal)
+      assertIsolatedSqlite(resolved)
+    }
   } catch (error) {
     if (error instanceof Refusal) throw error
     throw refusal("the database path cannot be verified safely")
   }
+  return resolved
 }
 
-function assertPrivate(file: string) {
-  const protectedRoots = opencodeRoots().map(canonical)
-  for (const suffix of sidecars) {
-    const candidate = `${file}${suffix}`
-    const target = canonical(candidate)
-    if (protectedRoots.some((root) => contained(root, target))) {
-      throw refusal("that path belongs to another application's data")
+// Older Panacode and OpenCode databases have indistinguishable schemas. Keep external ownership
+// receipts inside global.data. A receipt names a specific file identity *and* destination. Publish
+// the receipt before linking a fresh empty inode to its final name so a crash cannot strand the
+// official path without proof. Never open an extra SQLite descriptor: closing it releases locks.
+function checkExternalDatabase(data: string, physical: string, claim: boolean) {
+  if (upstreamRoots().some((root) => within(root, data))) throw refusal("the product data directory is shared")
+  const directory = path.join(data, "database-owners")
+  if (path.relative(directory, physicalPath(directory)) !== "") throw refusal("unsafe ownership directory")
+  const parent = path.dirname(physical)
+  const receipt = (info: fs.BigIntStats) => {
+    const identity = [
+      process.platform === "win32" ? physical.toLowerCase() : physical,
+      ...[info.dev, info.ino, info.birthtimeNs].map(String),
+    ]
+    return path.join(directory, createHash("sha256").update(JSON.stringify(identity)).digest("hex"))
+  }
+  const verify = (existing: fs.BigIntStats) => {
+    const marker = receipt(existing)
+    const info = fs.lstatSync(marker, { throwIfNoEntry: false })
+    if (!info?.isFile() || info.nlink !== 1 || info.size !== 36)
+      throw refusal("ownership of the existing external database is unknown")
+    if (existing.nlink === 1n) return
+    const id = fs.readFileSync(marker, "utf8")
+    if (!/^[a-f0-9-]{36}$/.test(id)) throw refusal("invalid ownership record")
+    const temporary = path.join(parent, `.panacode-db-${id}.tmp`)
+    const stage = fs.lstatSync(temporary, { bigint: true, throwIfNoEntry: false })
+    if (!stage && fs.lstatSync(physical, { bigint: true }).nlink === 1n) return
+    if (!stage || !stage.isFile() || stage.dev !== existing.dev || stage.ino !== existing.ino || existing.nlink !== 2n)
+      throw refusal("the external database has shared links")
+    // Complete the only remaining step if a creator was interrupted after linking its file.
+    fs.rmSync(temporary, { force: true })
+  }
+  const existing = fs.lstatSync(physical, { bigint: true, throwIfNoEntry: false })
+  if (existing) return verify(existing)
+  if (!claim) return
+  if (sqliteSuffixes.slice(1).some((suffix) => fs.lstatSync(physical + suffix, { throwIfNoEntry: false })))
+    throw refusal("there are pre-existing external database sidecars")
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 })
+  fs.mkdirSync(parent, { recursive: true, mode: 0o700 })
+  const id = crypto.randomUUID()
+  const stage = path.join(parent, `.panacode-db-${id}.tmp`)
+  const fd = fs.openSync(stage, "wx", 0o600)
+  const marker = (() => {
+    try {
+      return receipt(fs.fstatSync(fd, { bigint: true }))
+    } finally {
+      fs.closeSync(fd)
     }
-    refuseSharedFile(candidate)
-  }
-}
-
-// Every private root this checkout can use, plus the pre-XDG fallbacks. An inherited OPENCODE_DB is
-// not read; these are locations, not environment overrides.
-function opencodeRoots() {
-  const root = roots(ProductIdentity.upstreamSlug)
-  const home = os.homedir()
-  const fallback = home
-    ? [
-        path.join(home, ".local", "share", ProductIdentity.upstreamSlug),
-        path.join(home, ".local", "state", ProductIdentity.upstreamSlug),
-        path.join(home, ".cache", ProductIdentity.upstreamSlug),
-        path.join(home, ".config", ProductIdentity.upstreamSlug),
-      ]
-    : []
-  return [root.data, root.cache, root.config, root.state, root.tmp, ...fallback]
-}
-
-// SQLite follows links for the database and for -wal/-shm/-journal. Resolve the nearest existing
-// parent so a missing file under an alias is judged by where it would actually be created. A broken
-// link is refused instead of being confused with an ordinary missing name.
-function canonical(input: string) {
-  let current = path.resolve(input)
-  const missing: string[] = []
-
-  for (;;) {
-    const entry = lstat(current)
-    if (entry !== undefined) {
-      try {
-        return path.join(fs.realpathSync.native(current), ...missing)
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT" && entry.isSymbolicLink()) {
-          throw refusal("a link in the database path is broken")
-        }
-        throw error
-      }
+  })()
+  try {
+    fs.writeFileSync(marker, id, { flag: "wx", mode: 0o600, flush: true })
+    try {
+      fs.linkSync(stage, physical)
+    } catch (error) {
+      fs.rmSync(marker, { force: true })
+      if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error
+      verify(fs.lstatSync(physical, { bigint: true }))
     }
-    const parent = path.dirname(current)
-    if (parent === current) return path.join(current, ...missing)
-    missing.unshift(path.basename(current))
-    current = parent
+  } finally {
+    fs.rmSync(stage, { force: true })
   }
-}
-
-// On Windows a junction is reported as a symbolic link by lstat and resolved by realpath.
-function lstat(file: string) {
-  try {
-    return fs.lstatSync(file)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined
-    throw error
-  }
-}
-
-// A hard link gives the same file another name, so a private path can still be OpenCode's bytes.
-// A regular file with more than one link cannot prove its owner; fail closed. Directories are not
-// databases and keep their ordinary link count.
-function refuseSharedFile(file: string) {
-  let stats: fs.Stats
-  try {
-    stats = fs.statSync(file)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return
-    throw error
-  }
-  if (stats.isFile() && stats.nlink > 1) {
-    throw refusal("a database file or sidecar has multiple hard links, so its ownership cannot be proven")
-  }
-}
-
-// Segment-boundary containment: "..notes" is a legal child name, while "../opencode-backup" is a
-// sibling. path.relative handles Windows case folding, drives and UNC roots.
-function contained(root: string, file: string) {
-  const relative = path.relative(root, file)
-  if (relative === "") return true
-  if (path.isAbsolute(relative)) return false
-  return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !relative.startsWith("../")
+  verify(fs.lstatSync(physical, { bigint: true }))
 }
 
 class Refusal extends Error {}
 
 function refusal(reason: string) {
-  return new Refusal(
-    `Refusing PANACODE_DB: ${reason}. Set PANACODE_DB to a private Panacode path or unset it.`,
-  )
+  return new Refusal(`Refusing PANACODE_DB: ${reason}. Set PANACODE_DB to a private Panacode path or unset it.`)
 }

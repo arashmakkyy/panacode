@@ -15,12 +15,10 @@ const name = cli.os === "win32" ? `${ProductIdentity.cli}-cli.exe` : `${ProductI
 
 const binary = path.join(resources, name)
 
-const staged = path.join(dir, "resources", name)
-
 const bundled = await verifyPackagedCli({
   binary,
   versionFile: versionFile(binary),
-  provenanceFile: provenanceFile(staged),
+  provenanceFile: provenanceFile(binary),
   target: cli,
 })
 

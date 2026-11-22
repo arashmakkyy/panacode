@@ -1,3 +1,4 @@
+import { nativeConfigPath } from "@opencode/util/product-path"
 export * as SkillScan from "./skill-scan.js"
 
 import { FSUtil } from "@opencode/util/fs-util"
@@ -13,6 +14,7 @@ export const scan = Effect.fn("SkillScan.scan")(function* (root: string) {
   const files: string[] = []
   const queue = [{ directory: root, depth: 0 }]
   for (const item of queue) {
+    if (!nativeConfigPath(item.directory, true)) continue
     const entries = yield* fs.readDirectoryEntries(item.directory).pipe(Effect.orElseSucceed(() => []))
     const children = yield* Effect.forEach(
       entries.filter((entry) => !entry.name.startsWith(".") && !FSUtil.ignoredDirectories.includes(entry.name)),
@@ -42,5 +44,5 @@ export const scan = Effect.fn("SkillScan.scan")(function* (root: string) {
           .map((child) => ({ directory: child.path, depth: item.depth + 1 })),
       )
   }
-  return files.toSorted()
+  return files.filter((file) => nativeConfigPath(file)).toSorted()
 })

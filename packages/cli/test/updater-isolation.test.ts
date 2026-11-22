@@ -21,6 +21,7 @@ function fixture(
     readonly resolved?: string
     /** null means no package manifest at all. */
     readonly manifest?: { readonly name: string; readonly bin?: Record<string, string> | null } | null
+    readonly code?: number
     readonly stdout?: (argv: readonly string[]) => string
   } = {},
 ) {
@@ -102,7 +103,7 @@ function fixture(
               commands.push(argv)
               return {
                 command: command.command,
-                exitCode: 0,
+                exitCode: input.code ?? 0,
                 stdout: Buffer.from(input.stdout?.(argv) ?? ""),
                 stderr: Buffer.alloc(0),
                 stdoutTruncated: false,
@@ -352,5 +353,13 @@ it.live("a supported curl install is a positive owner and keeps removal manual",
     expect(test.updater.removal("curl")).toBeUndefined()
     expect(test.commands).toEqual([])
     expect(test.links).toEqual([])
+  }),
+)
+
+it.live("a failed package-manager listing cannot authorize uninstall", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture({ code: 1, stdout: () => "panacode@2.3.0" })
+    expect((yield* test.updater.ownership()).owned).toBe(false)
+    expect(test.updater.removal("npm")).toBeUndefined()
   }),
 )

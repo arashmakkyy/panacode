@@ -5,6 +5,7 @@ import { Effect, Option, Schema } from "effect"
 import { Credential } from "@opencode/schema/credential"
 import { Integration } from "@opencode/schema/integration"
 import { NonNegativeInt } from "@opencode/schema/schema"
+import { privateInput } from "@opencode/util/product-path"
 import { Global } from "@opencode/util/global"
 import type { DatabaseMigration } from "../migration.js"
 
@@ -45,6 +46,7 @@ export default migration
 
 export function importLegacyCredentials(tx: Parameters<DatabaseMigration.Migration["up"]>[0], filepath: string) {
   return Effect.gen(function* () {
+    if (!privateInput(filepath)) return
     const content = yield* Effect.promise(() => readFile(filepath, "utf8").catch(() => undefined))
     if (content === undefined) return
     const input = Option.getOrUndefined(decodeJson(content))

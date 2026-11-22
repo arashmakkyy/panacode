@@ -1,4 +1,4 @@
-import { copyFile, readdir, stat } from "node:fs/promises"
+import { copyFile, readdir, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -81,9 +81,13 @@ const getBase = (appId: string): Configuration => {
     // https://developer.gnome.org/documentation/guidelines/maintainer/integrating.html
     // https://www.electron.build/docs/linux/
     // Release builds take their version from OPENCODE_VERSION instead of rewriting package.json.
-    extraMetadata: process.env.OPENCODE_VERSION
-      ? { desktopName, version: process.env.OPENCODE_VERSION }
-      : { desktopName },
+    extraMetadata: {
+      desktopName,
+      // This name feeds electron-builder's installer cache and --delete-app-data directories.
+      // Keep the workspace dependency name in package.json independent of installed Windows identity.
+      ...(target.os === "win32" ? { name: appId } : {}),
+      ...(process.env.OPENCODE_VERSION ? { version: process.env.OPENCODE_VERSION } : {}),
+    },
     files: [
       "out/**/*",
       "resources/**/*",
@@ -111,7 +115,13 @@ const getBase = (appId: string): Configuration => {
       {
         from: "resources/",
         to: "",
-        filter: [`${ProductIdentity.cli}-cli`, `${ProductIdentity.cli}-cli.exe`, `${ProductIdentity.cli}-cli.version`],
+        filter: [
+          `${ProductIdentity.cli}-cli`,
+          `${ProductIdentity.cli}-cli.exe`,
+          `${ProductIdentity.cli}-cli.version`,
+          `${ProductIdentity.cli}-cli.provenance.json`,
+          `${ProductIdentity.cli}-cli.exe.provenance.json`,
+        ],
       },
     ],
     afterPack: async (context) => {
@@ -145,7 +155,7 @@ const getBase = (appId: string): Configuration => {
       const bundled = await verifyPackagedCli({
         binary: cli,
         versionFile: version,
-        provenanceFile: provenanceFile(staged),
+        provenanceFile: provenanceFile(cli),
         target,
       })
 
@@ -181,14 +191,24 @@ const getBase = (appId: string): Configuration => {
             if (await NativeArch.isNative(file)) await NativeArch.verify(file, arch)
           }),
       )
-
-      // The NSIS include proves install ownership from this manifest before it deletes or stages anything.
-      await writeInstallManifest({
-        appDir: context.appOutDir,
-        appId: context.packager.appInfo.id,
-        version: context.packager.appInfo.version,
-        executable: `${context.packager.appInfo.productFilename}.exe`,
+    },
+    // This event fires before archiving, after fuses and signing, also for --prepackaged.
+    artifactBuildStarted: async (event) => {
+      if (event.targetPresentableName !== "nsis") return
+      // The pinned builder exposes the final payload path and metadata on its NSIS pre-archive event.
+      const { appOutDir, appInfo } = event as typeof event & {
+        appOutDir?: string
+        appInfo?: { id: string; version: string; productFilename: string }
+      }
+      if (!appOutDir || !appInfo || event.arch == null || target.os !== "win32")
+        throw new Error("Expected a single Windows payload for this installer")
+      const sha256 = await writeInstallManifest({
+        appDir: appOutDir,
+        appId: appInfo.id,
+        version: appInfo.version,
+        executable: `${appInfo.productFilename}.exe`,
       })
+      await writeFile(path.join(path.dirname(event.file), `${appInfo.id}-${Arch[event.arch]}.manifest.sha256`), sha256)
     },
     mac: {
       category: "public.app-category.developer-tools",
@@ -218,7 +238,12 @@ const getBase = (appId: string): Configuration => {
     nsis: {
       include: path.join(packageDir, "resources", "windows", "installer.nsh"),
       oneClick: true,
+      // All files must be in the independently verified payload, including media assets.
+      preCompressedFileExtensions: [],
       perMachine: false,
+      // Per-user installation does not elevate. electron-builder normally adds elevate.exe
+      // after artifactBuildStarted, which would invalidate the already-pinned payload.
+      packElevateHelper: false,
       installerIcon: `resources/icons/icon.ico`,
       installerHeaderIcon: `resources/icons/icon.ico`,
     },
@@ -245,14 +270,14 @@ const getBase = (appId: string): Configuration => {
 export function getConfig() {
   const channel = resolveChannel()
   const appId = APP_IDS[channel]
-  const base = getBase(appId)
+  const productName = { dev: "Panacode Dev", beta: "Panacode Beta", prod: "Panacode" }[channel]
+  const base = { ...getBase(appId), productName }
 
   switch (channel) {
     case "dev": {
       return {
         ...base,
         appId,
-        productName: "Panacode Dev",
         deb: { fpm: [...previewCompressionFpm("deb"), metainfoFpm(appId)] },
         rpm: {
           packageName: "panacode-dev",
@@ -265,7 +290,6 @@ export function getConfig() {
       return {
         ...base,
         appId,
-        productName: "Panacode Beta",
         protocols: { name: "Panacode Beta", schemes: ["panacode"] },
         deb: { fpm: [...previewCompressionFpm("deb"), metainfoFpm(appId)] },
         rpm: {
@@ -279,7 +303,6 @@ export function getConfig() {
       return {
         ...base,
         appId,
-        productName: "Panacode",
         protocols: { name: "Panacode", schemes: ["panacode"] },
         // An Icon Composer package compiles to Assets.car, which macOS 26 and later draw the app icon from
         // (Dock, Finder, system dialogs and the system icon styles). Older macOS keeps using the ICNS.

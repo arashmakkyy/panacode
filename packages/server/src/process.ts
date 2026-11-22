@@ -2,8 +2,10 @@ export * as ServerProcess from "./process"
 
 import { NodeHttpServer } from "@effect/platform-node"
 import { Bus } from "@opencode/core/bus"
+import { PersistentPty } from "@opencode/core/persistent-pty"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { Schedule } from "@opencode/core/schedule"
+import { serviceProofPath, serviceProofHeader, signServiceProof } from "@opencode/schema/service-proof"
 import { InstallationEvent } from "@opencode/schema/installation-event"
 import { hasPtyConnectTicketURL } from "@opencode/protocol/groups/pty"
 import { hasPersistentPtyConnectTicketURL } from "@opencode/protocol/groups/persistent-pty"
@@ -29,6 +31,7 @@ export interface Lifecycle<E = never, R = never> {
   readonly onListen: (
     address: NetAddress.SocketAddress,
     shutdown: Effect.Effect<void>,
+    terminals: (action: "pty-handoff" | "pty-shutdown") => Promise<unknown>,
   ) => Effect.Effect<Effect.Effect<void>, E, R>
 }
 
@@ -77,6 +80,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
     options.app?.instance,
     urls,
     Global.Path.tmp,
+    options.serviceProofKey,
   )
   // Request fibers may continue inbound trace context, but must not inherit the server startup parent.
   yield* bound.http
@@ -89,8 +93,15 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
       errorResponseLogger,
     )
     .pipe(Effect.provide(NodeHttpServer.layerHttpServices), withoutParentSpan)
+  let terminals: PersistentPty.Interface | undefined
+  const controlTerminals = async (action: "pty-handoff" | "pty-shutdown") => {
+    if (!terminals) throw new Error("Persistent terminals are not ready")
+    if (action === "pty-handoff") return Effect.runPromise(terminals.handoff())
+    await Effect.runPromise(terminals.shutdown())
+    return null
+  }
   if (lifecycle)
-    yield* lifecycle.onListen(bound.http.address, shutdown.open.pipe(Effect.asVoid)).pipe(
+    yield* lifecycle.onListen(bound.http.address, shutdown.open.pipe(Effect.asVoid), controlTerminals).pipe(
       Effect.flatMap((cleanup) =>
         Effect.addFinalizer(() => Scope.close(bound.scope, Exit.void).pipe(Effect.andThen(cleanup))),
       ),
@@ -127,6 +138,7 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
     // Schedules fire from any server process (`service`, `opencode serve`, or `--standalone`); the table holds all their state.
     yield* Effect.forkIn(Context.get(context, Schedule.Service).run, applicationScope)
     yield* Ref.set(application, Option.some(Context.get(context, HttpRouter.HttpRouter).asHttpEffect()))
+    terminals = Context.get(context, PersistentPty.Service)
     yield* status.ready
     const bus = Context.get(context, Bus.Service)
     return {
@@ -196,12 +208,23 @@ function dispatch(
   instance: string | undefined,
   urls: () => ReadonlyArray<string>,
   tmp: string,
+  proofKey?: string,
 ): App {
   const auth = ServerAuth.Config.of({ password: Option.some(password), username: "opencode" })
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest
     const url = new URL(request.url, "http://localhost")
     const state = yield* status.current
+    if (request.method === "GET" && url.pathname === serviceProofPath) {
+      const challenge = url.searchParams.get("challenge") ?? ""
+      const wanted = url.searchParams.get("instance") ?? undefined
+      if (!proofKey || !/^[a-f0-9]{64}$/.test(challenge) || (wanted !== undefined && wanted !== instance))
+        return HttpServerResponse.empty({ status: 404 })
+      return HttpServerResponse.empty({ status: 204, headers: {
+        "cache-control": "no-store",
+        [serviceProofHeader]: signServiceProof(proofKey, challenge, wanted, state.type),
+      } })
+    }
     const app = yield* Ref.get(application)
     const ready = state.type === "ready" && Option.isSome(app)
     if (request.method === "GET" && url.pathname === "/api/info" && !ready) {

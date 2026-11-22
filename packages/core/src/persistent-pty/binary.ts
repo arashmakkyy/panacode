@@ -27,8 +27,10 @@ export async function dependencyBinary(file: string, label: string) {
   return resolved
 }
 
-export async function verifiedBinary(file: string, expected: string) {
+export async function verifiedBinary(file: string, expected: string | undefined) {
   const resolved = await dependencyBinary(file, "persistent PTY binary")
+  if (!expected || !/^[a-f0-9]{64}$/.test(expected)) throw new Error("A persistent PTY SHA-256 digest is required")
+  if ((await lstat(resolved)).nlink !== 1) throw new Error("Unsafe linked persistent PTY binary")
   if (digest(await readFile(resolved)) !== expected)
     throw new Error(`Persistent PTY binary checksum mismatch: ${resolved}`)
   return resolved

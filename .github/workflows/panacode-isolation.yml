@@ -49,6 +49,9 @@ jobs:
       - name: Verify pinned Bun
         run: test "$(bun --version)" = "$(node -p 'require("./package.json").packageManager.split("@")[1]')"
 
+      - name: Test the CI runner contract
+        run: bun script/panacode-test-contract.ts --cwd script --min-pass 1 -- ./panacode-test-contract.test.ts
+
       - name: Runtime isolation guard
         run: bun script/panacode-isolation-check.ts
 
@@ -59,6 +62,8 @@ jobs:
         run: bun script/panacode-brand-scan.ts
 
   quality:
+    env:
+      TURBO_TELEMETRY_DISABLED: "1"
     name: root quality (ubuntu-latest)
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -74,37 +79,8 @@ jobs:
       - name: Verify pinned Bun
         run: test "$(bun --version)" = "$(node -p 'require("./package.json").packageManager.split("@")[1]')"
 
-      - name: Typecheck every package
-        run: bun run typecheck
-
-      - name: Lint
-        run: bunx oxlint
-
-      - name: GUI plugin AST rules
-        run: bunx ast-grep scan -c script/ast-grep/gui-plugins/sgconfig.yml
-
-      - name: Generated SDK docs are current
-        run: bun script/sdk-docs.ts
-
-      # `bun run check` is lint + typecheck. Both parts gate above; check-greys has 172
-      # pre-existing findings in services/site at the base commit. Record that baseline
-      # explicitly instead of hiding it or letting it block every unrelated change.
-      - name: Root check baseline (known site grey findings, non-gating)
-        timeout-minutes: 45
-        run: |
-          set +e
-          bun run check > root-check.log 2>&1
-          status=$?
-          set -e
-          cat root-check.log
-          {
-            echo "### Root \`bun run check\` baseline"
-            echo ""
-            echo "- exit status: \`$status\`"
-            echo "- known pre-existing failure: \`script/check-greys.ts\` reports 172 findings in \`services/site\` at the base commit"
-            echo "- typecheck, oxlint, AST rules and SDK docs gate in the steps above"
-          } >> "$GITHUB_STEP_SUMMARY"
-          exit 0
+      - name: Gate root lint, SDK docs and typecheck
+        run: bun run check
 
   linux-core:
     name: linux core, desktop and gui (ubuntu-latest)
@@ -121,6 +97,14 @@ jobs:
 
       - name: Verify pinned Bun
         run: test "$(bun --version)" = "$(node -p 'require("./package.json").packageManager.split("@")[1]')"
+
+      - name: Set up Node for the production SEA smoke test
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "26.4.0"
+
+      - name: Run a real Node single-executable application
+        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 1 --test-timeout 120000 -- ./test/panacode-sea.test.ts
 
       - name: Product environment and global roots
         run: bun script/panacode-test-contract.ts --cwd packages/util --min-pass 7 -- ./test/product-env.test.ts ./test/global-roots.test.ts
@@ -194,11 +178,11 @@ jobs:
         run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 55 --max-skip 1 --test-timeout 30000 -- ./test/updater-isolation.test.ts ./test/env.test.ts ./test/shell-config.test.ts ./test/install-shell.test.ts ./test/uninstall.test.ts ./test/service-witness.test.ts
 
       - name: Database path foreign-root and alias guard
-        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 18 --max-skip 2 -- ./test/database-path.test.ts
+        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 18 --max-skip 2 --test-timeout 30000 --require-pass "the real server refuses a foreign PANACODE_DB before writing" -- ./test/database-path.test.ts
 
       - name: Real service lifecycle
         timeout-minutes: 20
-        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 7 --max-skip 0 --test-timeout 120000 --timeout-ms 900000 -- ./test/service-lifecycle.test.ts
+        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 7 --max-skip 0 --test-timeout 120000 --timeout-ms 900000 --require-pass "concurrent CLI and client starts converge on one server" -- ./test/service-lifecycle.test.ts
 
       - name: Service, debug and upgrade contracts
         timeout-minutes: 20
@@ -225,10 +209,10 @@ jobs:
       # and disposal only signals processes that still match both.
       - name: Real service lifecycle (Windows service processes)
         timeout-minutes: 20
-        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 7 --max-skip 0 --test-timeout 120000 --timeout-ms 900000 -- ./test/service-lifecycle.test.ts
+        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 7 --max-skip 0 --test-timeout 120000 --timeout-ms 900000 --require-pass "concurrent CLI and client starts converge on one server" -- ./test/service-lifecycle.test.ts
 
       - name: Database path junction, alias and sidecar guard
-        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 19 --max-skip 1 -- ./test/database-path.test.ts
+        run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 19 --max-skip 1 --test-timeout 30000 --require-pass "the real server refuses a foreign PANACODE_DB before writing" -- ./test/database-path.test.ts
 
       - name: Live foreign PID and PTY witness
         run: bun script/panacode-test-contract.ts --cwd packages/cli --min-pass 2 --max-skip 0 -- ./test/service-witness.test.ts

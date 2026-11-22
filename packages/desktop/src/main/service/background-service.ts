@@ -9,7 +9,7 @@ import { BackgroundServiceMachine } from "./background-service-machine"
 import { cleanStages } from "./cli-stages"
 import { keptStages, serviceVersion, shouldRetryEnsure } from "./cli-version"
 import { DesktopCli } from "./desktop-cli"
-import { diagnosticErrorCode, recordDiagnostic } from "../native/support-archive"
+import { recordServiceBoot, recordDiagnostic } from "../native/support-archive"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { takeSidecarProbe } from "./sidecar-probe"
 import { withEnsureTiming } from "@opencode/client/service"
@@ -97,13 +97,7 @@ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: Background
         runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion }))
       },
       onDiagnostic: (diagnostic: EnsureDiagnostic) => {
-        recordDiagnostic({
-          event: "service.boot",
-          stage: diagnostic.stage,
-          durationMs: diagnostic.elapsed,
-          status: diagnostic.state,
-          errorCode: diagnostic.stage === "exit" ? diagnosticErrorCode(diagnostic.reason) : undefined,
-        })
+        recordServiceBoot(diagnostic)
         runFork(Effect.logInfo("v2 CLI background service boot", diagnostic))
       },
     }

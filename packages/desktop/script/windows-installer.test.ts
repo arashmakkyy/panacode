@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { createHash } from "node:crypto"
-import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises"
+import { copyFile, cp, mkdir, mkdtemp, readFile, readdir, rm, symlink } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { INSTALL_MANIFEST, writeInstallManifest } from "./utils"
@@ -9,19 +9,13 @@ const windows = test.skipIf(process.platform !== "win32")
 
 const appId = "ai.panacode.desktop"
 
-const appFilename = "@opencodedesktop"
+const legacyDirectory = "@opencodedesktop"
 
 const executable = "Panacode.exe"
 
 const uninstaller = "Uninstall Panacode.exe"
 
 const version = "2.3.0"
-
-const payloadHash = "0123456789ABCDEF0123456789ABCDEF"
-
-const stageSuffix = payloadHash.slice(0, 16)
-
-const updateStage = `update-${stageSuffix}`
 
 type Files = Record<string, string | Uint8Array>
 
@@ -63,7 +57,7 @@ async function harness() {
   const compile = async (
     name: string,
     body: string,
-    options: { payload?: string; payloadHash?: string; payloadSize?: number; footer?: string } = {},
+    options: { payload?: string; payloadHash?: string; pin?: string; footer?: string } = {},
   ) => {
     const script = path.join(dir, `${name}.nsi`)
     const exe = path.join(dir, `${name}.exe`)
@@ -85,7 +79,9 @@ LangString appClosing \${LANG_ENGLISH} "closing"
 LangString appCannotBeClosed \${LANG_ENGLISH} "cannot close"
 !define SHELL_CONTEXT HKCU
 !define APP_ID "${appId}"
-!define APP_FILENAME "${appFilename}"
+!define APP_FILENAME "${appId}"
+!define BUILD_RESOURCES_DIR "${path.resolve(import.meta.dir, "../resources")}"
+!define PANACODE_BUILD_SHA256 "${options.pin ?? "0".repeat(64)}"
 !define APP_EXECUTABLE_FILENAME "${executable}"
 !define UNINSTALL_FILENAME "${uninstaller}"
 !define SHORTCUT_NAME "${shortcutName}"
@@ -93,8 +89,8 @@ LangString appCannotBeClosed \${LANG_ENGLISH} "cannot close"
 !define INSTALL_REGISTRY_KEY "${registryKey}"
 !define UNINSTALL_REGISTRY_KEY "${registryKey}"
 !define APP_64 "${options.payload ?? path.join(dir, "unused.7z")}"
-!define APP_64_HASH "${options.payloadHash ?? payloadHash}"
-!define APP_64_UNPACKED_SIZE ${options.payloadSize ?? 1}
+!define APP_64_HASH "${options.payloadHash ?? "0".repeat(64)}"
+!define APP_64_UNPACKED_SIZE 1
 !include "${config.nsis?.include}"
 Section
 ${body}
@@ -153,10 +149,30 @@ ${options.footer ?? ""}
     const result = await run([sevenZip, "a", "-t7z", "-mx=0", output, "*"], {}, payload)
     expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0)
 
-    const hash = createHash("sha256").update(await readFile(output)).digest("hex")
-    const size = (await list(payload)).reduce((total, file) => total + file.size, 0)
+    const hash = createHash("sha256")
+      .update(await readFile(output))
+      .digest("hex")
+    return hash
+  }
 
-    return { hash, size: Math.ceil(size / 1024) }
+  const build = async (name: string, files: Files) => {
+    const root = path.join(dir, name + "-payload")
+    await writeFiles(root, files)
+    const pin = await writeInstallManifest({ appDir: root, appId, version, executable })
+    const payload = path.join(dir, name + ".7z")
+    const payloadHash = await archive(root, payload)
+    const exe = await compile(name, installBody, {
+      pin,
+      payload,
+      payloadHash,
+      footer: `Section "Uninstall"
+  !insertmacro customRemoveFiles
+SectionEnd
+Function .onInit
+  !insertmacro preInit
+FunctionEnd`,
+    })
+    return { root, pin, exe, suffix: ".update-" + payloadHash.slice(0, 16) }
   }
 
   return {
@@ -167,9 +183,9 @@ ${options.footer ?? ""}
     compile,
     install,
     registry,
-    archive,
+    build,
     cleanup: async () => {
-      await registry.clear()
+      if (process.platform === "win32") await registry.clear()
       await rm(dir, { recursive: true, force: true })
     },
   }
@@ -183,11 +199,6 @@ async function writeFiles(root: string, files: Files) {
       await Bun.write(file, content)
     }),
   )
-}
-
-async function writeOwned(root: string, files: Files) {
-  await writeFiles(root, files)
-  await writeInstallManifest({ appDir: root, appId, version, executable })
 }
 
 async function list(root: string) {
@@ -208,9 +219,7 @@ async function names(root: string) {
 }
 
 async function entries(root: string) {
-  return (await readdir(root, { withFileTypes: true }).catch(() => []))
-    .map((entry) => entry.name)
-    .toSorted()
+  return (await readdir(root, { withFileTypes: true }).catch(() => [])).map((entry) => entry.name).toSorted()
 }
 
 async function digest(root: string) {
@@ -224,10 +233,6 @@ async function digest(root: string) {
   }
 
   return hash.digest("hex")
-}
-
-async function content(root: string, name: string) {
-  return readFile(path.join(root, name))
 }
 
 // A NSIS uninstaller relaunches itself from a temporary copy, so the process that Bun started can
@@ -252,766 +257,223 @@ async function settle(read: () => Promise<string[]>, expected: readonly string[]
   return read()
 }
 
-// The include's result contract: each test body ends with this trailer when it needs to report $INSTDIR.
-const report = `
-  ReadEnvStr $2 "PANACODE_TEST_RESULT"
-  \${If} $2 != ""
-    FileOpen $3 "$2" w
-    FileWrite $3 "INSTDIR=$INSTDIR$\\r$\\n"
-    FileWrite $3 "SHARED=$panacodeShared$\\r$\\n"
-    FileWrite $3 "SHAREDOWNED=$panacodeSharedOwned$\\r$\\n"
-    FileWrite $3 "VERIFIED=$panacodeVerified$\\r$\\n"
-    FileWrite $3 "RESULT=$R0$\\r$\\n"
-    FileClose $3
-  \${EndIf}`
-
-const initBody = `  !insertmacro customInit
-${report}`
-
-const installBody = `  !insertmacro customInit
+const installBody = `
+  !insertmacro customInit
+  !insertmacro customCheckAppRunning
+  !insertmacro customInstallStagedApp
+  WriteRegStr HKCU "\${INSTALL_REGISTRY_KEY}" InstallLocation "$INSTDIR"
+  WriteRegStr HKCU "\${UNINSTALL_REGISTRY_KEY}" UninstallString '"$INSTDIR\\${uninstaller}"'
   !insertmacro customInstall
-${report}`
+`
 
-// The installer's decisions are table rows: one compile, many fixtures. A refusal exits 5 before
-// writing a result, so every refusal case also proves that the foreign tree stayed untouched.
-const initCases = [
-  { name: "fresh-shared-name", target: "@opencodedesktop", expected: "ai.panacode.desktop", code: 0 },
-  { name: "fresh-custom", target: "custom", expected: "custom", code: 0 },
-  {
-    name: "owned-install",
-    target: "owned",
-    expected: "owned",
-    code: 0,
-    verified: "1",
-    registry: "target",
-    manifest: true,
-  },
-  {
-    name: "pre-manifest-install",
-    target: "pre-manifest",
-    expected: "pre-manifest",
-    code: 0,
-    verified: "0",
-    registry: "target",
-    files: { [executable]: "old" },
-  },
-  { name: "foreign-files", target: "foreign", expected: "foreign", code: 5, files: { "foreign.txt": "keep" } },
-  {
-    name: "different-existing-install",
-    target: "different",
-    expected: "different",
-    code: 5,
-    registry: "other",
-    other: { "foreign.txt": "keep" },
-  },
-  { name: "profile", target: process.env.USERPROFILE ?? "", expected: "", code: 5 },
-  { name: "drive-root", target: path.parse(os.tmpdir()).root, expected: "", code: 5 },
-]
+const standard = { [executable]: "desktop", "resources/app.asar": "first" }
+
+async function withHarness(fn: (h: Awaited<ReturnType<typeof harness>>) => Promise<void>) {
+  const h = await harness()
+  try {
+    await fn(h)
+  } finally {
+    await h.cleanup()
+  }
+}
+
+test(
+  "makensis compiles installer, staging and uninstaller from the same pinned payload",
+  () =>
+    withHarness(async (h) => {
+      const build = await h.build("compile", standard)
+      expect(Bun.file(build.exe).size).toBeGreaterThan(0)
+      expect(build.pin).toMatch(/^[0-9a-f]{64}$/)
+    }),
+  180_000,
+)
 
 windows(
-  "installs only into an owned or empty directory",
-  async () => {
-    const installer = await harness()
+  "fresh install and ordinary upgrade preserve changed files and retire the verified previous build",
+  () =>
+    withHarness(async (h) => {
+      const old = await h.build("old", standard)
+      const next = await h.build("new", { ...standard, "resources/app.asar": "next" })
+      const root = path.join(h.dir, "app")
+      expect((await h.install(old.exe, "old", root)).code).toBe(0)
+      expect((await h.registry.get("PanacodeInstallReceipt")).stdout).toContain(old.pin)
+      await writeFiles(root, { "notes.txt": "mine", "resources/app.asar": "other" })
+      expect((await h.install(next.exe, "upgrade", root)).code).toBe(0)
+      expect((await h.registry.get("PanacodeInstallReceipt")).stdout).toContain(next.pin)
+      expect(await Bun.file(path.join(root, "resources/app.asar")).text()).toBe("next")
+      expect(await names(root + ".old")).toEqual(["notes.txt", "resources/app.asar"])
+      expect(await Bun.file(path.join(root + ".old", "resources/app.asar")).text()).toBe("other")
+    }),
+  180_000,
+)
 
-    try {
-      const exe = await installer.compile("init", initBody)
+windows(
+  "legacy migration keeps shared bytes, refuses a linked final destination and preserves registration on cancel",
+  () =>
+    withHarness(async (h) => {
+      const next = await h.build("new", standard)
+      const shared = path.join(h.dir, "programs", legacyDirectory)
+      const target = path.join(h.dir, "programs", appId)
+      const outside = path.join(h.dir, "outside")
+      await writeFiles(outside, { sentinel: "keep" })
+      await writeFiles(shared, { [executable]: "legacy", "OpenCode.exe": "foreign" })
+      await h.registry.set("InstallLocation", shared)
+      await h.registry.set("UninstallString", "old-uninstall")
+      await h.registry.set("QuietUninstallString", "old-quiet")
+      await symlink(outside, target, "junction")
+      const before = await digest(shared)
+      expect((await h.install(next.exe, "linked", shared)).code).toBe(5)
+      expect(await names(outside)).toEqual(["sentinel"])
+      expect((await h.registry.get("UninstallString")).stdout).toContain("old-uninstall")
+      expect((await h.registry.get("QuietUninstallString")).stdout).toContain("old-quiet")
+      await rm(target)
+      expect((await h.install(next.exe, "migrate", shared)).code).toBe(0)
+      expect(await digest(shared)).toBe(before)
+      expect(await Bun.file(path.join(target, executable)).text()).toBe("desktop")
+    }),
+  180_000,
+)
 
-      for (const item of initCases) {
-        await installer.registry.clear()
-        const root = path.join(installer.dir, item.name)
-        const target = path.isAbsolute(item.target) ? item.target : path.join(root, item.target)
-
-        if (item.manifest) await writeOwned(target, { [executable]: "old" })
-        else if (item.files) await writeFiles(target, item.files)
-
-        if (item.registry === "target") await installer.registry.set("InstallLocation", target)
-
-        if (item.other) {
-          const other = path.join(root, "other")
-          await writeFiles(other, item.other)
-          await installer.registry.set("InstallLocation", other)
-        }
-
+windows(
+  "foreign and unregistered install trees are refused before files or registry change",
+  () =>
+    withHarness(async (h) => {
+      const build = await h.build("new", standard)
+      for (const name of ["marker-only", "copied-payload"]) {
+        const root = path.join(h.dir, name)
+        if (name === "copied-payload") await cp(build.root, root, { recursive: true })
+        else await writeFiles(root, { [executable]: "foreign" })
         const before = await digest(root)
-
-        const result = await installer.install(exe, item.name, target)
-
-        expect(result.code, item.name).toBe(item.code)
-
-        if (item.code !== 0) {
-          expect(await digest(root), item.name).toBe(before)
-          continue
-        }
-
-        expect(result.result.INSTDIR, item.name).toBe(path.join(root, item.expected))
-
-        if (item.verified) expect(result.result.VERIFIED, item.name).toBe(item.verified)
+        expect((await h.install(build.exe, name, root)).code).toBe(5)
+        expect(await digest(root)).toBe(before)
+        expect((await h.registry.get("InstallLocation")).code).not.toBe(0)
       }
-    } finally {
-      await installer.cleanup()
-    }
-  },
+    }),
   180_000,
 )
 
-// The old shared directory is this app's only when its own registry entry points at it. Its unknown
-// files are never deleted, and a manifest-verified file is deleted only while its size still matches.
-const sharedCases = [
-  {
-    name: "manifest-owned-shared",
-    owned: { [executable]: "exe", "resources/app.asar": "asar", "resources/nested/helper.dll": "dll" },
-    foreign: { "marker.txt": "keep", "Panacode Beta.exe": "beta", "resources/beta.asar": "beta" },
-    expected: {
-      left: ["Panacode Beta.exe", "marker.txt", "resources/beta.asar"],
-      shared: "shared",
-    },
-  },
-  {
-    name: "legacy-shared-zero-exe",
-    foreign: { "marker.txt": "keep", "Panacode Beta.exe": "beta", "resources/beta.asar": "beta" },
-    expected: {
-      left: ["Panacode Beta.exe", "marker.txt", "resources/beta.asar"],
-      shared: "shared",
-    },
-  },
-  {
-    name: "shared-other-exe",
-    foreign: { "Panacode Beta.exe": "beta" },
-    expected: {
-      left: ["Panacode Beta.exe"],
-      shared: "shared",
-    },
-  },
-  {
-    name: "changed-size-is-kept",
-    owned: { "owned.dll": "old", "Panacode.exe": "exe" },
-    changed: { "owned.dll": "changed" },
-    foreign: { "marker.txt": "keep" },
-    expected: {
-      left: ["marker.txt", "owned.dll"],
-      shared: "shared",
-    },
-  },
-]
-
 windows(
-  "removes only the shared files this build proves",
-  async () => {
-    const installer = await harness()
-
-    try {
-      const exe = await installer.compile("shared", installBody)
-
-      for (const item of sharedCases) {
-        await installer.registry.clear()
-        const root = path.join(installer.dir, item.name)
-        const shared = path.join(root, appFilename)
-
-        if (item.owned) await writeOwned(shared, item.owned)
-        else await mkdir(shared, { recursive: true })
-
-        if (item.foreign) await writeFiles(shared, item.foreign)
-
-        if (item.changed) await writeFiles(shared, item.changed)
-
-        const foreignBefore = await Promise.all(
-          Object.keys(item.foreign ?? {}).map(async (name) => [name, await content(shared, name)] as const),
-        )
-
-        await installer.registry.set("InstallLocation", shared)
-        const result = await installer.install(exe, item.name, shared)
-
-        expect(result.code, item.name).toBe(0)
-        expect(result.result.INSTDIR, item.name).toBe(path.join(root, appId))
-        expect(result.result.SHARED, item.name).toBe(shared)
-        expect(result.result.SHAREDOWNED, item.name).toBe(item.owned ? "1" : "0")
-        expect(await names(shared), item.name).toEqual(item.expected.left.toSorted())
-
-        for (const [name, bytes] of foreignBefore) expect(await content(shared, name), name).toEqual(bytes)
-
-        if (item.owned) {
-          expect(await names(shared), item.name).not.toContain(INSTALL_MANIFEST)
-          expect(await names(shared), item.name).not.toContain("resources/nested/helper.dll")
-        }
+  "a pre-manifest image survives and only a receipt-verified running image is closed",
+  () =>
+    withHarness(async (h) => {
+      const root = path.join(h.dir, "app")
+      const file = path.join(root, executable)
+      const ping = path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "PING.EXE")
+      await mkdir(root)
+      await copyFile(ping, file)
+      await h.registry.set("InstallLocation", root)
+      const fixture = await h.compile("packaged-app", "  Sleep 60000")
+      const build = await h.build("new", { ...standard, [executable]: await readFile(fixture) })
+      const legacy = Bun.spawn([file, "-n", "60", "127.0.0.1"], { stdout: "ignore", stderr: "ignore" })
+      try {
+        expect((await h.install(build.exe, "legacy-running", root)).code).toBe(5)
+        expect(legacy.exitCode).toBeNull()
+      } finally {
+        legacy.kill()
+        await legacy.exited
       }
-    } finally {
-      await installer.cleanup()
-    }
-  },
+      expect((await h.install(build.exe, "install", root)).code).toBe(0)
+      const unrelated = Bun.spawn([fixture], { stdout: "ignore", stderr: "ignore" })
+      const owned = Bun.spawn([file], { stdout: "ignore", stderr: "ignore" })
+      try {
+        expect((await h.install(build.exe, "verified", root)).code).toBe(0)
+        expect(await owned.exited).toBe(1)
+        expect(unrelated.exitCode).toBeNull()
+      } finally {
+        unrelated.kill()
+        if (owned.exitCode === null) owned.kill()
+        await Promise.all([unrelated.exited, owned.exited])
+      }
+    }),
   180_000,
 )
 
-// The sandbox SID is granted to the installation directory only. An unrelated ACE on the same tree,
-// the parent and a sibling file keep their exact SDDL, and a second run is idempotent.
 windows(
-  "grants the sandbox access only to its own installation",
-  async () => {
-    const installer = await harness()
+  "stage preparation reuses only a complete unchanged build and activation ignores an altered stage",
+  () =>
+    withHarness(async (h) => {
+      const old = await h.build("old", standard)
+      const next = await h.build("next", { ...standard, "resources/app.asar": "next" })
+      const root = path.join(h.dir, "app")
+      const stage = root + next.suffix
+      expect((await h.install(old.exe, "old", root)).code).toBe(0)
+      expect((await h.run([next.exe, "--stage"])).code).toBe(0)
+      expect(await digest(stage)).toBe(await digest(next.root))
+      expect((await h.run([next.exe, "--stage"])).code).toBe(0)
+      await writeFiles(stage, { "resources/app.asar": "edit", "unlisted.dll": "mine" })
+      const before = await digest(stage)
+      expect((await h.run([next.exe, "--stage"])).code).toBe(2)
+      expect((await h.install(next.exe, "upgrade", root)).code).toBe(0)
+      expect(await digest(stage)).toBe(before)
+      expect(await names(root)).not.toContain("unlisted.dll")
+      expect(await Bun.file(path.join(root, "resources/app.asar")).text()).toBe("next")
+      await rm(stage, { recursive: true })
+      expect((await h.run([next.exe, "--stage"])).code).toBe(0)
+      expect((await h.install(next.exe, "verified-stage", root)).code).toBe(0)
+      expect(await entries(h.dir)).not.toContain(path.basename(stage))
+    }),
+  180_000,
+)
 
-    try {
-      const root = path.join(installer.dir, "acl")
-      const install = path.join(root, "app")
-      await writeFiles(root, { "unrelated.txt": "outside the installation" })
-      await writeFiles(install, { "resources/icudtl.dat": "runtime fixture" })
-      await installer.registry.set("InstallLocation", install)
+windows(
+  "uninstall retains same-length replacements and leaves all sibling trees and junctions intact",
+  () =>
+    withHarness(async (h) => {
+      const build = await h.build("new", standard)
+      const root = path.join(h.dir, "app")
+      const outside = path.join(h.dir, "outside")
+      expect((await h.install(build.exe, "install", root)).code).toBe(0)
+      await writeFiles(root, { "resources/app.asar": "other", "private.txt": "keep" })
+      await cp(build.root, outside, { recursive: true })
+      await writeFiles(outside, { [uninstaller]: "outside", "uninstallerIcon.ico": "outside" })
+      await symlink(outside, root + ".old", "junction")
+      await symlink(outside, root + build.suffix, "junction")
+      const before = await digest(outside)
+      expect((await h.run([path.join(root, uninstaller), "/S"])).code).toBe(0)
+      const kept = ["private.txt", "resources/app.asar"]
+      expect(await settle(() => names(root), kept)).toEqual(kept)
+      expect(await digest(outside)).toBe(before)
+    }),
+  180_000,
+)
 
+windows(
+  "an untrusted manifest stops deletion even when its modified file has the stated digest",
+  () =>
+    withHarness(async (h) => {
+      const build = await h.build("new", standard)
+      const root = path.join(h.dir, "app")
+      expect((await h.install(build.exe, "install", root)).code).toBe(0)
+      await writeFiles(root, { "mine.txt": "keep" })
+      await writeInstallManifest({ appDir: root, appId, version, executable })
+      const before = await digest(root)
+      // _?= runs the uninstall section synchronously instead of returning from a launcher copy.
+      expect((await h.run([path.join(root, uninstaller), "/S", "_?=" + root])).code).toBe(5)
+      expect(await digest(root)).toBe(before)
+    }),
+  180_000,
+)
+
+windows(
+  "the sandbox read/execute grant applies only to the new install tree",
+  () =>
+    withHarness(async (h) => {
+      const build = await h.build("new", standard)
+      const root = path.join(h.dir, "app")
+      const sibling = path.join(h.dir, "outside.txt")
+      await Bun.write(sibling, "outside")
       const acl = async (target: string) => {
-        const result = await installer.run(
-          [
-            "powershell.exe",
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "(Get-Acl -LiteralPath $env:PANACODE_TEST_PATH).Sddl",
-          ],
+        const result = await h.run(
+          ["powershell.exe", "-NoProfile", "-Command", "(Get-Acl -LiteralPath $env:PANACODE_TEST_PATH).Sddl"],
           { PANACODE_TEST_PATH: target },
         )
-
-        expect(result.code, result.stderr).toBe(0)
-
-        return result.stdout.trim()
-      }
-
-      const grant = await installer.run([
-        "icacls.exe",
-        install,
-        "/grant",
-        "*S-1-15-2-999-999-999:(OI)(CI)(F)",
-      ])
-
-      expect(grant.code, grant.stderr).toBe(0)
-      const parent = await acl(root)
-      const unrelated = await acl(path.join(root, "unrelated.txt"))
-
-      const exe = await installer.compile("acl", "  !insertmacro customInstall")
-      expect((await installer.install(exe, "acl", install)).code).toBe(0)
-      const installed = await acl(path.join(install, "resources/icudtl.dat"))
-      expect(installed).toContain("(A;ID;0x1200a9;;;S-1-15-2-2)")
-      expect(installed).toContain("S-1-15-2-999-999-999")
-      expect((await installer.install(exe, "acl-again", install)).code).toBe(0)
-      expect(await acl(path.join(install, "resources/icudtl.dat"))).toBe(installed)
-      expect(await acl(root)).toBe(parent)
-      expect(await acl(path.join(root, "unrelated.txt"))).toBe(unrelated)
-    } finally {
-      await installer.cleanup()
-    }
-  },
-  180_000,
-)
-
-// A process is stopped only when its verified image is this installation's executable. A sibling
-// with the same file name, a helper inside the tree and a pre-manifest shared executable stay alive.
-windows(
-  "stops only the executable that belongs to this installation",
-  async () => {
-    const installer = await harness()
-    const ping = path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "PING.EXE")
-
-    try {
-      const exe = await installer.compile("running", `  !insertmacro customInit
-  !insertmacro customCheckAppRunning
-${report}`)
-
-      const spawn = (file: string, pings: number) =>
-        Bun.spawn([file, "-n", String(pings), "127.0.0.1"], { stdout: "ignore", stderr: "ignore" })
-
-      {
-        await installer.registry.clear()
-        const install = path.join(installer.dir, "manual", "app")
-        await mkdir(install, { recursive: true })
-        await copyFile(ping, path.join(install, executable))
-        await installer.registry.set("InstallLocation", install)
-        const app = spawn(path.join(install, executable), 30)
-
-        try {
-          const started = performance.now()
-          const result = await installer.install(exe, "manual", install)
-          expect(result.code).toBe(0)
-          expect(await app.exited).toBe(1)
-          expect(performance.now() - started).toBeLessThan(5_000)
-        } finally {
-          app.kill()
-          await app.exited
-        }
-      }
-
-      {
-        await installer.registry.clear()
-        const root = path.join(installer.dir, "lookalike")
-        const install = path.join(root, "app")
-        const sibling = path.join(root, "sibling")
-        await mkdir(install, { recursive: true })
-        await mkdir(sibling, { recursive: true })
-        await copyFile(ping, path.join(install, "helper.exe"))
-        await copyFile(ping, path.join(sibling, executable))
-        await writeInstallManifest({ appDir: install, appId, version, executable })
-        const helper = spawn(path.join(install, "helper.exe"), 30)
-        const other = spawn(path.join(sibling, executable), 30)
-
-        try {
-          expect((await installer.install(exe, "lookalike", install)).code).toBe(0)
-          expect(helper.exitCode).toBeNull()
-          expect(other.exitCode).toBeNull()
-        } finally {
-          helper.kill()
-          other.kill()
-          await Promise.all([helper.exited, other.exited])
-        }
-      }
-
-      {
-        await installer.registry.clear()
-        const root = path.join(installer.dir, "shared-legacy")
-        const shared = path.join(root, appFilename)
-        await mkdir(shared, { recursive: true })
-        await copyFile(ping, path.join(shared, executable))
-        await installer.registry.set("InstallLocation", shared)
-        const app = spawn(path.join(shared, executable), 30)
-
-        try {
-          const result = await installer.install(exe, "shared-legacy", shared)
-          expect(result.code).toBe(0)
-          expect(result.result.SHAREDOWNED).toBe("0")
-          expect(app.exitCode).toBeNull()
-        } finally {
-          app.kill()
-          await app.exited
-        }
-      }
-
-      {
-        await installer.registry.clear()
-        const root = path.join(installer.dir, "shared-owned")
-        const shared = path.join(root, appFilename)
-        await mkdir(shared, { recursive: true })
-        await copyFile(ping, path.join(shared, executable))
-        await writeInstallManifest({ appDir: shared, appId, version, executable })
-        await installer.registry.set("InstallLocation", shared)
-        const app = spawn(path.join(shared, executable), 30)
-
-        try {
-          expect((await installer.install(exe, "shared-owned", shared)).code).toBe(0)
-          expect(await app.exited).toBe(1)
-        } finally {
-          app.kill()
-          await app.exited
-        }
-      }
-
-      {
-        await installer.registry.clear()
-        const install = path.join(installer.dir, "updated", "app")
-        await mkdir(install, { recursive: true })
-        await copyFile(ping, path.join(install, executable))
-        await installer.registry.set("InstallLocation", install)
-        const app = spawn(path.join(install, executable), 30)
-
-        try {
-          const started = performance.now()
-          expect((await installer.install(exe, "updated", install, ["--updated"])).code).toBe(0)
-          // An update gives the running app the full ten-second grace period before stopping it.
-          expect(performance.now() - started).toBeGreaterThanOrEqual(9_500)
-          expect(await app.exited).toBe(1)
-        } finally {
-          app.kill()
-          await app.exited
-        }
-      }
-    } finally {
-      await installer.cleanup()
-    }
-  },
-  240_000,
-)
-
-// A staged directory is taken only when its manifest names this app, version and executable, and
-// only when the current directory is either empty or fully proven by its own manifest.
-const stagedCases = [
-  {
-    name: "moves-into-empty",
-    staged: { [executable]: "new", "resources/app.asar": "new" },
-    expected: "installed",
-    left: [INSTALL_MANIFEST, executable, "resources/app.asar"],
-    leftovers: [],
-  },
-  {
-    name: "replaces-owned",
-    owned: { [executable]: "old", "resources/app.asar": "old" },
-    staged: { [executable]: "new", "resources/app.asar": "new" },
-    expected: "installed",
-    left: [INSTALL_MANIFEST, executable, "resources/app.asar"],
-    leftovers: [],
-  },
-  {
-    name: "keeps-unknown-files",
-    owned: { [executable]: "old" },
-    foreign: { "keep.me": "keep" },
-    staged: { [executable]: "new" },
-    expected: "installed",
-    left: [INSTALL_MANIFEST, executable],
-    leftovers: ["keep.me"],
-  },
-  {
-    name: "keeps-pre-manifest-install",
-    preManifest: { [executable]: "old", "foreign.txt": "keep" },
-    staged: { [executable]: "new" },
-    expected: "",
-    left: [executable, "foreign.txt"],
-    leftovers: [],
-  },
-  {
-    name: "ignores-another-payload",
-    stagedName: "update-FEDCBA9876543210",
-    staged: { [executable]: "new" },
-    expected: "",
-    left: [],
-    leftovers: [],
-  },
-  {
-    name: "ignores-a-wrong-app",
-    staged: { [executable]: "new" },
-    wrongApp: true,
-    expected: "",
-    left: [],
-    leftovers: [],
-  },
-]
-
-windows(
-  "takes only the staged directory that belongs to this build",
-  async () => {
-    const installer = await harness()
-
-    try {
-      const exe = await installer.compile(
-        "staged",
-        `  !insertmacro customInit
-  InitPluginsDir
-  !insertmacro customInstallStagedApp
-  \${If} $R0 == "installed"
-    SetErrorLevel 0
-  \${Else}
-    SetErrorLevel 3
-  \${EndIf}
-${report}`,
-      )
-
-      for (const item of stagedCases) {
-        await installer.registry.clear()
-        const root = path.join(installer.dir, item.name)
-        const install = path.join(root, "app")
-        const stage = path.join(`${install}.${item.stagedName ?? updateStage}`)
-        await mkdir(install, { recursive: true })
-
-        if (item.preManifest) {
-          await writeFiles(install, item.preManifest)
-          await installer.registry.set("InstallLocation", install)
-        } else if (item.owned) {
-          await writeOwned(install, item.owned)
-          await installer.registry.set("InstallLocation", install)
-        }
-
-        if (item.foreign) await writeFiles(install, item.foreign)
-        await writeFiles(stage, item.staged)
-        await writeInstallManifest({
-          appDir: stage,
-          appId: item.wrongApp ? "ai.other.desktop" : appId,
-          version,
-          executable,
-        })
-        const stageBefore = await digest(stage)
-
-        const result = await installer.install(exe, item.name, install)
-
-        expect(result.code, item.name).toBe(item.expected === "installed" ? 0 : 3)
-        expect(result.result.RESULT, item.name).toBe(item.expected)
-        expect(await names(install), item.name).toEqual(item.left.toSorted())
-
-        if (item.expected === "installed") {
-          expect(await entries(root), item.name).not.toContain(`app.${updateStage}`)
-          expect(await names(`${install}.old`), item.name).toEqual(item.leftovers.toSorted())
-        } else {
-          expect(await digest(stage), item.name).toBe(stageBefore)
-        }
-      }
-    } finally {
-      await installer.cleanup()
-    }
-  },
-  180_000,
-)
-
-// The preInstall --stage path builds a real 7z from the production manifest writer and proves it
-// stages beside the private install directory, never inside the old shared one.
-windows(
-  "stages an update only beside a verified installation",
-  async () => {
-    const installer = await harness()
-
-    try {
-      const payload = path.join(installer.dir, "payload")
-      await writeFiles(payload, { [executable]: "new", "resources/app.asar": "new" })
-      await writeInstallManifest({ appDir: payload, appId, version, executable })
-      const archive = path.join(installer.dir, "payload.7z")
-      const packed = await installer.archive(payload, archive)
-
-      const exe = await installer.compile("stage", "  !insertmacro preInit", {
-        payload: archive,
-        payloadHash: packed.hash,
-        payloadSize: packed.size,
-      })
-
-      const suffix = packed.hash.slice(0, 16)
-      const stagedName = `update-${suffix}`
-
-      {
-        await installer.registry.clear()
-        const root = path.join(installer.dir, "stage-private")
-        const install = path.join(root, "app")
-        await writeOwned(install, { [executable]: "old" })
-        await installer.registry.set("InstallLocation", install)
-        const before = await digest(install)
-
-        const result = await installer.run([exe, "--stage"])
         expect(result.code).toBe(0)
-        expect(await entries(root)).toContain(`app.${stagedName}`)
-        expect(await names(path.join(`${install}.${stagedName}`))).toEqual(
-          [INSTALL_MANIFEST, executable, "resources/app.asar"].toSorted(),
-        )
-        expect(await digest(install)).toBe(before)
-        expect((await entries(root)).filter((name) => name.includes(".staging-"))).toEqual([])
+        return result.stdout
       }
-
-      {
-        await installer.registry.clear()
-        const root = path.join(installer.dir, "stage-shared")
-        const shared = path.join(root, appFilename)
-        await writeOwned(shared, { [executable]: "old", "resources/app.asar": "old" })
-        await writeFiles(shared, { "marker.txt": "keep" })
-        await installer.registry.set("InstallLocation", shared)
-        const before = await digest(shared)
-
-        const result = await installer.run([exe, "--stage"])
-        expect(result.code).toBe(0)
-        expect(await entries(root)).toContain(`${appId}.${stagedName}`)
-        expect(await digest(shared)).toBe(before)
-        expect((await entries(root)).filter((name) => name.includes(".staging-"))).toEqual([])
-      }
-
-      {
-        await installer.registry.clear()
-        const root = path.join(installer.dir, "stage-unrecorded")
-        await mkdir(path.join(root, "app"), { recursive: true })
-
-        const result = await installer.run([exe, "--stage"])
-        expect(result.code).toBe(2)
-        expect(await entries(root)).toEqual(["app"])
-      }
-
-      {
-        // A foreign stage with the same name is never overwritten or reused.
-        await installer.registry.clear()
-        const root = path.join(installer.dir, "stage-foreign")
-        const install = path.join(root, "app")
-        await writeOwned(install, { [executable]: "old" })
-        const stage = path.join(`${install}.update-${suffix}`)
-        await writeFiles(stage, { "foreign.txt": "keep" })
-        await installer.registry.set("InstallLocation", install)
-        const before = await digest(stage)
-        const result = await installer.run([exe, "--stage"])
-        expect(result.code).toBe(2)
-        expect(await digest(stage)).toBe(before)
-        expect((await names(root)).filter((name) => name.includes(".staging-"))).toEqual([])
-      }
-
-      {
-        // A stage that belongs to this exact build is reused without rewriting it.
-        await installer.registry.clear()
-        const root = path.join(installer.dir, "stage-reuse")
-        const install = path.join(root, "app")
-        await writeOwned(install, { [executable]: "old" })
-        const stage = path.join(`${install}.update-${suffix}`)
-        await writeOwned(stage, { [executable]: "new", "staged.txt": "keep" })
-        await installer.registry.set("InstallLocation", install)
-        const before = await digest(stage)
-        const result = await installer.run([exe, "--stage"])
-        expect(result.code).toBe(0)
-        expect(await digest(stage)).toBe(before)
-      }
-    } finally {
-      await installer.cleanup()
-    }
-  },
-  240_000,
-)
-
-// The standard uninstaller calls customRemoveFiles instead of its recursive removal. It removes an
-// exact tree only while the manifest and registry agree, and it never touches a foreign tree.
-windows(
-  "uninstalls only a manifest-verified installation",
-  async () => {
-    const installer = await harness()
-
-    try {
-      const exe = await installer.compile("uninstall", `  WriteUninstaller "$INSTDIR\\${uninstaller}"`, {
-        footer: `Section "Uninstall"
-  !insertmacro customRemoveFiles
-SectionEnd`,
-      })
-
-      const cases = [
-        {
-          name: "verified",
-          manifest: true,
-          match: true,
-          remove: true,
-          left: ["foreign.txt"],
-          stageLeft: [],
-        },
-        {
-          name: "registry-mismatch",
-          manifest: true,
-          match: false,
-          remove: false,
-          left: [INSTALL_MANIFEST, executable, "foreign.txt", "resources/app.asar", uninstaller],
-          stageLeft: [INSTALL_MANIFEST, executable],
-        },
-        {
-          name: "no-manifest",
-          manifest: false,
-          match: true,
-          remove: false,
-          left: [executable, "foreign.txt", "resources/app.asar", uninstaller],
-          stageLeft: [INSTALL_MANIFEST, executable],
-        },
-      ]
-
-      for (const item of cases) {
-        await installer.registry.clear()
-        const root = path.join(installer.dir, `uninstall-${item.name}`)
-        const install = path.join(root, "app")
-
-        if (item.manifest) await writeOwned(install, { [executable]: "old", "resources/app.asar": "old" })
-        else await writeFiles(install, { [executable]: "old", "resources/app.asar": "old" })
-        await writeFiles(install, { "foreign.txt": "keep" })
-        await installer.registry.set("InstallLocation", item.match ? install : path.join(root, "elsewhere"))
-        // The same build's stage is owned; a differently named sibling is not.
-        await writeOwned(path.join(`${install}.update-${stageSuffix}`), { [executable]: "staged" })
-        await writeOwned(path.join(`${install}.update-FEDCBA9876543210`), { [executable]: "other" })
-
-        expect((await installer.run([exe, `/D=${install}`])).code, item.name).toBe(0)
-        const created = path.join(install, uninstaller)
-        expect((await stat(created).catch(() => undefined))?.isFile(), item.name).toBe(true)
-        expect((await installer.run([created, "/S"])).code, item.name).toBe(0)
-        const left = await settle(() => names(install), item.left.toSorted())
-
-        if (item.remove) {
-          expect(left, item.name).toEqual(item.left.toSorted())
-          expect(await settle(() => names(path.join(`${install}.update-${stageSuffix}`)), []), item.name).toEqual([])
-          expect(await names(path.join(`${install}.update-FEDCBA9876543210`)), item.name).toEqual(
-            [INSTALL_MANIFEST, executable].toSorted(),
-          )
-        } else {
-          expect(left, item.name).toEqual(item.left.toSorted())
-          expect(
-            await settle(() => names(path.join(`${install}.update-${stageSuffix}`)), item.stageLeft.toSorted()),
-            item.name,
-          ).toEqual(item.stageLeft.toSorted())
-        }
-      }
-
-      {
-        // customInit runs in .onInit, before the stock section's uninstallOldVersion step. Removing
-        // both registry values there is what stops the old uninstaller from running at all.
-        await installer.registry.clear()
-        const init = await installer.compile("init-old-uninstaller", initBody)
-        const root = path.join(installer.dir, "uninstall-old")
-        const install = path.join(root, "app")
-        await writeFiles(install, { [executable]: "old" })
-        await installer.registry.set("InstallLocation", install)
-        await installer.registry.set("UninstallString", `"${path.join(install, uninstaller)}"`)
-        await installer.registry.set("QuietUninstallString", `"${path.join(install, uninstaller)}" /S`)
-        const result = await installer.install(init, "uninstall-old", install)
-        expect(result.code).toBe(0)
-        expect((await installer.registry.get("UninstallString")).code).not.toBe(0)
-        expect((await installer.registry.get("QuietUninstallString")).code).not.toBe(0)
-      }
-    } finally {
-      await installer.cleanup()
-    }
-  },
-  240_000,
-)
-
-// A second channel's registry entry and the user's pinned taskbar folder must be byte-identical
-// after this channel installs. The pinned folder is only read; this app's shortcut name is a unique
-// test name, so nothing in the user's real taskbar matches it.
-windows(
-  "does not touch another channel's registration or shortcuts",
-  async () => {
-    const installer = await harness()
-    const other = `Software\\PanacodeInstallerTest-Other-${crypto.randomUUID()}`
-
-    try {
-      const root = path.join(installer.dir, "channels")
-      const install = path.join(root, "app")
-      await writeOwned(install, { [executable]: "old" })
-      await installer.registry.set("InstallLocation", install)
-
-      const otherValues = [
-        ["DisplayName", "Panacode Beta"],
-        ["InstallLocation", path.join(root, "beta")],
-        ["UninstallString", "beta-uninstall"],
-        ["QuietUninstallString", "beta-uninstall /S"],
-      ] as const
-
-      for (const [name, value] of otherValues) {
-        const added = await installer.run([
-          "reg.exe",
-          "add",
-          `HKCU\\${other}`,
-          "/v",
-          name,
-          "/t",
-          "REG_SZ",
-          "/d",
-          value,
-          "/f",
-        ])
-
-        expect(added.code, added.stderr).toBe(0)
-      }
-
-      const query = () =>
-        installer.run(["reg.exe", "query", `HKCU\\${other}`, "/s"]).then((result) => result.stdout)
-
-      const before = await query()
-
-      const pinned = path.join(
-        process.env.APPDATA ?? "",
-        "Microsoft",
-        "Internet Explorer",
-        "Quick Launch",
-        "User Pinned",
-        "TaskBar",
-      )
-
-      const pinnedFiles = async () =>
-        (await readdir(pinned, { recursive: true, withFileTypes: true }).catch(() => []))
-          .map((entry) => path.relative(pinned, path.join(entry.parentPath, entry.name)))
-          .toSorted()
-
-      const pinnedBefore = await pinnedFiles()
-
-      const exe = await installer.compile("channels", installBody)
-      expect((await installer.install(exe, "channels", install)).code).toBe(0)
-
-      expect(await query()).toBe(before)
-      expect(await pinnedFiles()).toEqual(pinnedBefore)
-    } finally {
-      await installer.run(["reg.exe", "delete", `HKCU\\${other}`, "/f"])
-      await installer.cleanup()
-    }
-  },
+      const before = await acl(sibling)
+      expect((await h.install(build.exe, "install", root)).code).toBe(0)
+      expect(await acl(path.join(root, "resources/app.asar"))).toContain("S-1-15-2-2")
+      expect(await acl(sibling)).toBe(before)
+    }),
   180_000,
 )

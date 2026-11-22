@@ -1,16 +1,17 @@
-import { readFile } from "node:fs/promises"
 import type { DiscoverOptions, Endpoint, EnsureDiagnostic, Info, EnsureOptions, StopOptions } from "../service.js"
-import { contenderPool, spawnServiceContender } from "../service-contender.js"
-import { defaultEnsureTiming, ensureTiming, withEnsureTiming, type EnsureTiming } from "../service-timing.js"
+import { contenderPool, exitDiagnostic, spawnServiceContender } from "../service-contender.js"
+import { ensureTiming, withEnsureTiming } from "../service-timing.js"
 export { withEnsureTiming }
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { request } from "../service-control.js"
-import { removeOwned } from "../service-file.js"
+import { stopOwned } from "../service-stop.js"
+import { currentOwner, registrationBytes, removeOwned } from "../service-file.js"
 import { decide, fallback, headers, occupied, parseRegistration, probeResult, same } from "../service-probe.js"
 
 export * from "../service.js"
 export { fallback, headers }
+export { publishRegistration, migrateOwnedRegistration, registrationSnapshot, registrationBytes, currentOwner } from "../service-file.js"
+export { answerControl, request as requestControl, type TerminalAction } from "../service-control.js"
 
 // Find, start, and stop the local opencode background service.
 //
@@ -20,13 +21,18 @@ export { fallback, headers }
 
 /** Discover a healthy, compatible local service without starting one. */
 export async function discover(options: DiscoverOptions = {}) {
+  return (await discoverInstance(options))?.endpoint
+}
+
+export async function discoverInstance(options: DiscoverOptions = {}) {
   const registration = await registered(options.file)
   if (registration.problem !== undefined) return undefined
   const found = registration.service
   if (found?.state !== "ready") return undefined
   if (!found.compatible) return undefined
   if (!matchesVersion(found.version, options)) return undefined
-  return found.endpoint
+  if (!(await currentOwner(options.file ?? fallback(), found.info))) return undefined
+  return { endpoint: found.endpoint, info: found.info }
 }
 
 /** Ensure a healthy, compatible local service is running. */
@@ -92,8 +98,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
         if (timeouts.count >= 3) {
           announce("missing")
           console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
-          await PtyHandoff.clear(options.file ?? fallback())
-          await terminate(registration.info, options, timing, false)
+          await stopOwned(options.file ?? fallback(), registration.info, "clear", timing)
           pool.evict(registration.info.pid)
           pool.recruitNow()
           timeouts = undefined
@@ -112,10 +117,14 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
         // A contender this call spawned can answer before it publishes its own registration. That
         // endpoint is ours, not a foreign owner, so keep polling instead of failing on the stale
         // record. Adoption still waits for a matching registration.
-        if (decision._tag === "fail" && (service.answeredPid === undefined || !pool.has(service.answeredPid)))
+        if (
+          decision._tag === "fail" &&
+          !(service.unverified && pool.pending()) &&
+          (service.answeredPid === undefined || !pool.has(service.answeredPid))
+        )
           throw decision.error
         if (decision._tag === "reuse") {
-          await PtyHandoff.complete(options.file ?? fallback(), service.info)
+          if (!(await PtyHandoff.complete(options.file ?? fallback(), service.info))) continue
           report({ stage: "ready", pid: service.info.pid })
           return service.endpoint
         }
@@ -123,7 +132,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
           announce("version-mismatch", service.version)
           if (service.state !== "ready")
             console.warn("Background service is not ready; replacement cannot preserve persistent terminals")
-          await stop({ file: options.file, pty: decision.pty }).catch(() => undefined)
+          await stopOwned(options.file ?? fallback(), service.info, decision.pty, timing)
           pool.evict(service.info.pid)
         }
       } else {
@@ -139,7 +148,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   } catch (error) {
     report({
       stage: "exit",
-      reason: error instanceof Error ? error.message.split("\n", 1)[0] : "Background service startup failed",
+      ...exitDiagnostic(error),
     })
     throw error
   } finally {
@@ -152,22 +161,13 @@ export async function stop(options: StopOptions = {}) {
   const registration = await read(options.file)
   if (registration.problem !== undefined)
     throw new Error(`${registration.problem} Refusing to stop an unidentified process.`)
-  const info = registration.info
-  const ping = info === undefined ? undefined : await request(info, "ping", defaultEnsureTiming.requestTimeout)
-  // Persistent-terminal work reaches the service over HTTP, so it happens only after the private
-  // control channel confirms the same instance and process.
-  await (
-    ping?.ok === true && options.pty === "handoff" && info !== undefined
-      ? PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout)
-      : PtyHandoff.clear(options.file ?? fallback())
-  ).catch((cause: unknown) => console.warn("Failed to prepare persistent terminals for replacement", cause))
-  if (info !== undefined) await terminate(info, options, ensureTiming(options), ping?.ok === true)
+  const info = options.expected ?? registration.info
+  if (info !== undefined) await stopOwned(options.file ?? fallback(), info, options.pty, ensureTiming(options))
 }
 
 async function read(file?: string) {
-  const text = await readFile(file ?? fallback(), "utf8").catch(() => undefined)
-  if (text === undefined) return {}
-  return parseRegistration(text)
+  const bytes = await registrationBytes(file ?? fallback())
+  return bytes ? parseRegistration(bytes.toString("utf8")) : {}
 }
 
 async function registered(file?: string, timeout?: number) {
@@ -185,42 +185,9 @@ async function registered(file?: string, timeout?: number) {
   return { info, ...(await probeResult(info, timeout)) }
 }
 
-function stopped(pid: number) {
-  try {
-    process.kill(pid, 0)
-    return false
-  } catch {
-    return true
-  }
-}
-
-async function waitUntilStopped(pid: number, timing: EnsureTiming) {
-  for (let attempt = 0; attempt <= timing.stopPollAttempts; attempt++) {
-    if (stopped(pid)) return true
-    if (attempt < timing.stopPollAttempts) await delay(timing.stopPollInterval)
-  }
-  return false
-}
-
-async function terminate(info: Info, options: { readonly file?: string }, timing: EnsureTiming, verified: boolean) {
-  const current = (await read(options.file)).info
-  if (current === undefined || !same(current, info)) return
-  if (!verified) {
-    const ping = await request(info, "ping", timing.requestTimeout)
-    if (!ping.ok) throw new Error(ping.message)
-  }
-  const shutdown = await request(info, "shutdown", timing.requestTimeout)
-  if (!shutdown.ok) throw new Error(shutdown.message)
-  // Waiting for the process to exit is observation only. A service that does not honor its own
-  // authenticated shutdown request is left running with a clear error, never killed by PID.
-  if (!(await waitUntilStopped(info.pid, timing)))
-    throw new Error(`Server process ${info.pid} did not stop after an authenticated shutdown request`)
-  await removeOwned(options.file ?? fallback(), info)
-}
-
 function delay(milliseconds: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, milliseconds))
 }
 
 /** Promise-based local service lifecycle operations. */
-export const Service = { discover, ensure, stop, headers, removeOwned }
+export const Service = { discover, discoverInstance, ensure, stop, headers, removeOwned }

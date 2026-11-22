@@ -1,4 +1,4 @@
-import { Service, type Endpoint, type EnsureOptions } from "@opencode/client/effect/service"
+import { Service, type Endpoint, type EnsureOptions, type Info } from "@opencode/client/effect/service"
 import { ClientError, isUnauthorizedError, OpenCode } from "@opencode/client/promise"
 import { OPENCODE_VERSION } from "../version"
 import { Effect, Option, Redacted } from "effect"
@@ -55,49 +55,44 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
   const mismatch = args.mismatch ?? "ignore"
   const options = yield* ServiceConfig.options({ checkVersion: mismatch !== "ignore" })
   if (args.autostart === false) {
-    const endpoint = yield* Service.discover({ ...options, version: undefined })
-    if (!endpoint) return { endpoint: yield* Standalone.start(), standalone: true } satisfies Resolved
-    return { endpoint, service: managedService(options) } satisfies Resolved
+    const found = yield* Service.discoverInstance({ ...options, version: undefined })
+    if (!found) return { endpoint: yield* Standalone.start(), standalone: true } satisfies Resolved
+    return { endpoint: found.endpoint, service: managedService(options, found.info) } satisfies Resolved
   }
-  return {
-    endpoint: yield* resolveManaged({ ...options, onStart: args.onStart }, mismatch),
-    service: managedService(options),
-  } satisfies Resolved
+  const found = yield* resolveManaged({ ...options, onStart: args.onStart }, mismatch)
+  return { endpoint: found.endpoint, service: managedService(options, found.info) } satisfies Resolved
 })
 
-function managedService(options: EnsureOptions) {
+function managedService(options: EnsureOptions, initial: Info) {
   const reconnectOptions = { ...options, version: undefined }
+  let owner = initial
+  const reconnect = () =>
+    Service.ensureInstance(reconnectOptions).pipe(
+      Effect.map((found) => {
+        owner = found.info
+        return found.endpoint
+      }),
+    )
   return {
-    reconnect: () => Service.ensure(reconnectOptions),
+    reconnect,
     restart: () =>
       Effect.gen(function* () {
-        yield* Service.stop({ file: options.file, pty: "handoff" })
-        yield* Service.ensure(reconnectOptions)
+        yield* Service.stop({ file: options.file, expected: owner, pty: "handoff" })
+        yield* reconnect()
       }),
   }
 }
 
-export const shutdownPersistentPty = Effect.fn("cli.server-connection.shutdown-persistent-pty")(function* (
-  options: EnsureOptions,
-) {
-  // Persistent terminals are an action on the registered process, so the private control channel
-  // must prove the same instance before the HTTP endpoint is called.
-  const endpoint = yield* Service.verified({ ...options, version: undefined })
-  if (!endpoint) return
-  const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
-  yield* Effect.tryPromise(() => client.experimental.persistentPty.shutdown())
-})
-
 const resolveManaged = Effect.fnUntraced(function* (options: EnsureOptions, mismatch: NonNullable<Args["mismatch"]>) {
-  if (mismatch === "replace") return yield* Service.ensure(options)
-  if (mismatch === "ignore") return yield* Service.ensure({ ...options, version: undefined })
+  if (mismatch === "replace") return yield* Service.ensureInstance(options)
+  if (mismatch === "ignore") return yield* Service.ensureInstance({ ...options, version: undefined })
 
-  const compatible = yield* Service.discover(options)
+  const compatible = yield* Service.discoverInstance(options)
   if (compatible !== undefined) return compatible
   const existing = yield* Service.discover({ ...options, version: undefined })
   if (existing !== undefined)
     return yield* Effect.fail(new Error("Background server version does not match this client"))
-  return yield* Service.ensure(options)
+  return yield* Service.ensureInstance(options)
 })
 
 function connectError(endpoint: Endpoint, cause: unknown) {

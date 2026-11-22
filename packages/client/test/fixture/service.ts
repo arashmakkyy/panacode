@@ -1,3 +1,6 @@
+import { answerControl } from "../../src/service-control"
+import { healthProof } from "./control"
+import { serviceProofPath } from "@opencode/schema/service-proof"
 import { createHash, randomBytes } from "node:crypto"
 import { appendFile, chmod, mkdir, rename, rm, unlink, writeFile } from "node:fs/promises"
 import { createServer } from "node:net"
@@ -11,9 +14,7 @@ if (mode === "stderr-failed") {
   process.exit(1)
 }
 if (mode === "stderr-secrets") {
-  process.stderr.write(
-    "password=service-password\ntoken: control-token\nAuthorization: Basic dXNlcjpwYXNz\n",
-  )
+  process.stderr.write("password=service-password\ntoken: control-token\nAuthorization: Basic dXNlcjpwYXNz\n")
   process.exit(1)
 }
 if (mode === "record-start") {
@@ -64,25 +65,22 @@ const controlPath =
     : path.join(path.dirname(registration), `${id}.sock`)
 const controlToken = randomBytes(24).toString("base64url")
 const control = createServer((socket) => {
-  let input = ""
-  socket.setEncoding("utf8")
-  socket.on("data", async (chunk: string) => {
-    input += chunk
-    const newline = input.indexOf("\n")
-    if (newline < 0) return
-    let request: Record<string, unknown>
-    try {
-      request = JSON.parse(input.slice(0, newline))
-    } catch {
-      return socket.end(JSON.stringify({ ok: false, error: "invalid" }) + "\n")
-    }
-    if (request.id !== id || request.token !== controlToken || request.version !== 1)
-      return socket.end(JSON.stringify({ ok: false, error: "denied" }) + "\n")
-    if (request.action !== "ping" && request.action !== "shutdown")
-      return socket.end(JSON.stringify({ ok: false, error: "denied" }) + "\n")
-    socket.end(JSON.stringify({ ok: true, id, pid: process.pid, action: request.action }) + "\n")
-    if (request.action === "shutdown") setImmediate(() => void shutdown("CONTROL"))
-  })
+  answerControl(
+    socket,
+    { product: "panacode", id, pid: process.pid, version, url: server.url.href, password: "private" },
+    controlToken,
+    () => void shutdown("CONTROL"),
+    async (action) => {
+      if (action === "pty-shutdown") return null
+      if (mode === "handoff-broken") throw new Error("Terminal subsystem unavailable")
+      if (mode === "protocol") await writeFile(registration + ".handoff-request", "")
+      if (mode === "handoff") {
+        await writeFile(registration + ".prepared", JSON.stringify(handoff))
+        return handoff
+      }
+      return null
+    },
+  )
 })
 if (process.platform !== "win32") {
   await mkdir(path.dirname(controlPath), { recursive: true, mode: 0o700 })
@@ -119,7 +117,7 @@ const server = Bun.serve({
     }
     if (pathname === "/api/experimental/persistent-pty/handoff" && mode === "handoff-broken")
       return new Response(null, { status: 500 })
-    if (pathname !== "/api/info") return new Response(null, { status: 404 })
+    if (pathname !== "/api/info" && pathname !== serviceProofPath) return new Response(null, { status: 404 })
     if (mode === "unauthorized") return new Response(null, { status: 401 })
     if (mode === "redirect") return new Response(null, { status: 302, headers: { location: "http://127.0.0.1:1/" } })
     if (mode === "invalid-health") return new Response("not json", { status: 200 })
@@ -137,19 +135,47 @@ const server = Bun.serve({
     if (mode === "modern" && requests === 1) {
       await writeFile(registration + ".first-request", "")
       while (!(await Bun.file(registration + ".release").exists())) await Bun.sleep(5)
+      if (pathname === serviceProofPath) return healthProof(request, controlToken, id, "starting")
       return Response.json(
-        { version, pid: process.pid, instance, product, urls: [server.url.toString()], paths: { tmp: "/tmp/opencode" } },
+        {
+          version,
+          pid: process.pid,
+          instance,
+          product,
+          urls: [server.url.toString()],
+          paths: { tmp: "/tmp/opencode" },
+        },
         { status: 503 },
       )
     }
-    if (mode === "starting" && !(await Bun.file(registration + ".release").exists()))
+    if (mode === "starting" && !(await Bun.file(registration + ".release").exists())) {
+      if (pathname === serviceProofPath) return healthProof(request, controlToken, id, "starting")
       return Response.json(
-        { version, pid: process.pid, instance, product, urls: [server.url.toString()], paths: { tmp: "/tmp/opencode" } },
+        {
+          version,
+          pid: process.pid,
+          instance,
+          product,
+          urls: [server.url.toString()],
+          paths: { tmp: "/tmp/opencode" },
+        },
         { status: 503 },
       )
+    }
+    if (pathname === serviceProofPath) {
+      if (!instance || product !== "panacode") return new Response(null, { status: 403 })
+      return healthProof(request, controlToken, instance, mode === "failed-owner" ? "failed" : "ready")
+    }
     if (mode === "failed-owner")
       return Response.json(
-        { version, pid: process.pid, instance, product, urls: [server.url.toString()], paths: { tmp: "/tmp/opencode" } },
+        {
+          version,
+          pid: process.pid,
+          instance,
+          product,
+          urls: [server.url.toString()],
+          paths: { tmp: "/tmp/opencode" },
+        },
         { status: 500 },
       )
     return Response.json({

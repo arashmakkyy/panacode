@@ -175,6 +175,7 @@
       "dependencies": {
         "@opencode/protocol": "workspace:*",
         "@opencode/schema": "workspace:*",
+        "proper-lockfile": "4.1.2",
       },
       "devDependencies": {
         "@effect/platform-node": "catalog:",

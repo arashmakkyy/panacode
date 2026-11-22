@@ -48,10 +48,6 @@ export class UpgradeError extends Error {
   }
 }
 
-const decodeVpPackages = Schema.decodeUnknownOption(
-  Schema.fromJsonString(Schema.Array(Schema.Struct({ name: Schema.String }))),
-)
-
 const decodeManifest = Schema.decodeUnknownOption(
   Schema.fromJsonString(
     Schema.Struct({
@@ -221,43 +217,22 @@ const make = Effect.gen(function* () {
     "bin",
     process.platform === "win32" ? `${ProductIdentity.cli}.exe` : ProductIdentity.cli,
   )
-  const curlBinary = yield* fs.realPath(curlPath).pipe(Effect.orElseSucceed(() => curlPath))
+  const curlBinary = yield* fs.realPath(curlPath).pipe(Effect.orElseSucceed(() => undefined))
 
   const detectMethod = Effect.fnUntraced(function* () {
-    if (executable === curlBinary) return "curl" as const
+    if (curlPath === curlBinary && executable === curlBinary) return "curl" as const
     if (!installedPackage || installedOwner) return
 
-    const parts = executable
-      .toLowerCase()
-      .split(path.sep)
-      .map((part) => part.replace(/^\./, ""))
-    const checks: Array<{ method: Method; command: string[] }> = [
-      { method: "npm", command: [npm, "list", "-g", "--depth=0", ...npmPrefixArgs, installedPackage] },
-      { method: "pnpm", command: ["pnpm", "list", "-g", "--depth=0", installedPackage] },
-      { method: "bun", command: ["bun", "pm", "ls", "-g"] },
-      { method: "yarn", command: ["yarn", "global", "list"] },
-      { method: "vp", command: ["vp", "list", "-g", "--json", installedPackage] },
-    ]
-    checks.sort((a, b) => Number(parts.includes(b.method)) - Number(parts.includes(a.method)))
-    const results = yield* Effect.forEach(
-      checks,
-      (check) =>
-        exec(check.command).pipe(
-          Effect.orElseSucceed(() => ({ code: 1, stdout: "", stderr: "" })),
-          Effect.map((result) => ({ check, result })),
-        ),
-      { concurrency: "unbounded" },
+    // npm's explicit prefix and global layout must both select this installation.
+    // Other managers cannot scope their removal command to the verified manifest.
+    if (!npmPrefix) return
+    const modules = process.platform === "win32" ? "node_modules" : path.join("lib", "node_modules")
+    if (path.relative(path.join(npmPrefix, modules, installedPackage), packageDirectory) !== "") return
+    const result = yield* exec([npm, "list", "-g", "--depth=0", ...npmPrefixArgs, installedPackage]).pipe(
+      Effect.orElseSucceed(() => ({ code: 1, stdout: "" })),
     )
-    // Require the exact package name, so `panacode-cli` or an upstream `@opencode/cli` entry cannot
-    // be mistaken for `panacode` through substring matching.
     const listed = new RegExp(`(?:^|[\\s/"'])${escapeRegExp(installedPackage)}@`, "m")
-    return results.find((result) => {
-      if (result.check.method !== "vp") return listed.test(result.result.stdout)
-      // Vite+ repeats the filter in its successful no-match message, so substring detection would be a false positive.
-      return Option.exists(decodeVpPackages(result.result.stdout), (packages) =>
-        packages.some((item) => item.name === installedPackage),
-      )
-    })?.check.method
+    if (result.code === 0 && listed.test(result.stdout)) return "npm" as const
   })
 
   // removal(method) is synchronous so uninstall can print its plan before confirmation. Cache the one
@@ -296,20 +271,7 @@ const make = Effect.gen(function* () {
 
   const removalCommand = (method: Method) => {
     if (!owns(method) || !installedPackage) return
-    switch (method) {
-      case "npm":
-        return [npm, "uninstall", "--global", ...npmPrefixArgs, installedPackage]
-      case "pnpm":
-        return ["pnpm", "remove", "--global", installedPackage]
-      case "bun":
-        return ["bun", "remove", "--global", installedPackage]
-      case "yarn":
-        return ["yarn", "global", "remove", installedPackage]
-      case "vp":
-        return ["vp", "uninstall", "-g", installedPackage]
-      default:
-        return
-    }
+    if (method === "npm" && npmPrefix) return [npm, "uninstall", "--global", ...npmPrefixArgs, installedPackage]
   }
 
   const removal = (method: Method) => {

@@ -1,3 +1,4 @@
+import { Service, withEnsureTiming } from "@opencode/client/service"
 import { describe, expect, test } from "bun:test"
 import { BlobReader, TextWriter, ZipReader } from "@zip.js/zip.js"
 import fs from "node:fs/promises"
@@ -9,6 +10,7 @@ import {
   diagnosticErrorCode,
   MAX_DIAGNOSTIC_BYTES,
   recordDiagnostic,
+  recordServiceBoot,
   writeSupportArchive,
   type DiagnosticRecord,
 } from "./support-archive"
@@ -90,6 +92,25 @@ describe("Support archive", () => {
     ["unknown", undefined, "unknown"],
   ])("%s failures keep a bounded error code", (_name, reason, code) => {
     expect(diagnosticErrorCode(reason)).toBe(code)
+  })
+
+  test("a real failed contender exports the bind cause without its stderr", async () => {
+    const { root, run } = await workspace()
+    try {
+      configureDiagnostics(path.join(run, "diagnostics.jsonl"))
+      const command = [process.execPath, "-e", 'console.error("Managed service port 28844 on localhost is already in use by /private/test/path");process.exit(1)']
+      await expect(Service.ensure(withEnsureTiming({
+        command, file: path.join(root, "service.json"), onDiagnostic: recordServiceBoot,
+      }, { pollInterval: 20, spawnDelay: 200, promiseTimeout: 4_000 }))).rejects.toThrow("Server process exited")
+      const output = path.join(root, "support.zip")
+      await archive(run, output)
+      const text = (await extract(output)).get("diagnostics.jsonl") ?? ""
+      expect(lines(text)).toContainEqual(expect.objectContaining({ event: "service.boot", stage: "exit", errorCode: "bind-failed" }))
+      expect(text).not.toContain("/private/test/path")
+      expect(text).not.toContain("EADDRINUSE")
+    } finally {
+      await fs.rm(root, { recursive: true, force: true })
+    }
   })
 
   test("contains only structured diagnostics and a relative manifest", async () => {
@@ -348,6 +369,7 @@ describe("Support archive", () => {
     await fs.mkdir(recent, { recursive: true })
     await fs.mkdir(foreign, { recursive: true })
     await fs.mkdir(aliasOld, { recursive: true })
+    await fs.writeFile(path.join(old, ".panacode-log-run"), "panacode-log-v1\n")
     await fs.writeFile(path.join(old, "main.log"), markers.prompt)
     await fs.writeFile(path.join(recent, "main.log"), markers.body)
     await fs.writeFile(foreignRun, markers.foreign)
@@ -357,7 +379,12 @@ describe("Support archive", () => {
     await fs.utimes(aliasOld, new Date(0), new Date(0))
     await fs.symlink(foreign, path.join(logs, "20200202T000000"), process.platform === "win32" ? "junction" : "dir")
 
+    const unowned = path.join(logs, "20200203T000000")
+    await fs.mkdir(unowned)
+    await fs.writeFile(path.join(unowned, "keep"), "foreign")
+    await fs.utimes(unowned, new Date(0), new Date(0))
     await cleanupRunDirectories(logs)
+    expect(await fs.readFile(path.join(unowned, "keep"), "utf8")).toBe("foreign")
 
     expect(await exists(old)).toBeFalse()
     expect(await exists(recent)).toBeTrue()
@@ -414,6 +441,11 @@ describe("Support archive", () => {
 
     const foreign = path.join(root, "foreign-diagnostics.jsonl")
     await fs.writeFile(foreign, markers.foreign)
+    await fs.rm(file)
+
+    await fs.link(foreign, file)
+    recordDiagnostic({ event: "app.error", errorCode: "unknown" })
+    expect(await fs.readFile(foreign, "utf8")).toBe(markers.foreign)
     await fs.rm(file)
 
     try {

@@ -626,7 +626,7 @@ function testDirectory() {
       process.env.PANACODE_PTY_BIN = binary
       process.env.SHELL = "/bin/sh"
       return {
-        database: path.join(root, "opencode.db"),
+        database: path.join(root, "panacode.db"),
         directory: path.join(root, "runtime"),
         environment,
         root,

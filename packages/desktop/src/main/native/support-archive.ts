@@ -1,6 +1,8 @@
+import type { EnsureDiagnostic } from "@opencode/client/service"
 import { randomUUID } from "node:crypto"
-import { appendFileSync, lstatSync } from "node:fs"
-import { lstat, open, readdir, realpath, rename, rm, writeFile } from "node:fs/promises"
+import { privateDirectory } from "@opencode/util/private-directory"
+import { closeSync, constants, fstatSync, lstatSync, openSync, writeSync } from "node:fs"
+import { lstat, mkdtemp, open, readdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { Option, Schema } from "effect"
 
@@ -10,7 +12,14 @@ export const DIAGNOSTICS_MEMBER = "diagnostics.jsonl"
 /** A support archive is diagnostics, not a copy of the log directory. */
 export const MAX_DIAGNOSTIC_BYTES = 5 * 1024 * 1024
 
-const RUN_DIRECTORY = /^\d{8}T\d{6}$/u
+const RUN_DIRECTORY = /^\d{8}T\d{6}(?:-[a-zA-Z0-9]{6})?$/u
+const RUN_MARKER = ".panacode-log-run"
+
+export async function createRunDirectory(root: string, stamp: string) {
+  const directory = await mkdtemp(path.join(privateDirectory(root, true), stamp + "-"))
+  await writeFile(path.join(directory, RUN_MARKER), "panacode-log-v1\n", { flag: "wx", mode: 0o600 })
+  return directory
+}
 
 const VERSION = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}$/u))
 
@@ -44,19 +53,31 @@ export function configureDiagnostics(file: string) {
 export function recordDiagnostic(record: DiagnosticRecord) {
   if (!diagnosticsFile) return
 
+  let fd: number | undefined
   try {
-    const info = lstatSync(diagnosticsFile)
-
-    if (!info.isFile() || info.isSymbolicLink()) return
-  } catch (error) {
-    if (!(error instanceof Error) || !isMissing(error)) return
-  }
-
-  try {
-    appendFileSync(diagnosticsFile, `${JSON.stringify(toDiagnostic(record))}\n`, { encoding: "utf8", mode: 0o600 })
+    privateDirectory(path.dirname(diagnosticsFile))
+    const previous = lstatSync(diagnosticsFile, { throwIfNoEntry: false })
+    if (previous && (!previous.isFile() || previous.nlink !== 1)) return
+    fd = openSync(diagnosticsFile, constants.O_WRONLY | constants.O_APPEND | (constants.O_NOFOLLOW ?? 0) |
+      (previous ? 0 : constants.O_CREAT | constants.O_EXCL), 0o600)
+    const info = fstatSync(fd)
+    if (!info.isFile() || info.nlink !== 1 || (previous && !sameIdentity(previous, info))) return
+    writeSync(fd, JSON.stringify(toDiagnostic(record)) + "\n")
   } catch {
-    // Logging must not interrupt application work.
+    // A linked, missing or inaccessible log must not interrupt application work.
+  } finally {
+    if (fd !== undefined) closeSync(fd)
   }
+}
+
+export function recordServiceBoot(diagnostic: EnsureDiagnostic) {
+  recordDiagnostic({
+    event: "service.boot",
+    stage: diagnostic.stage,
+    durationMs: diagnostic.elapsed,
+    status: diagnostic.state,
+    errorCode: diagnostic.stage === "exit" ? diagnostic.errorCode ?? diagnosticErrorCode(diagnostic.reason) : undefined,
+  })
 }
 
 function toDiagnostic(record: DiagnosticRecord) {
@@ -137,6 +158,10 @@ export async function cleanupRunDirectories(directory: string) {
 
     if (!info || !info.isDirectory() || info.isSymbolicLink() || info.mtimeMs >= cutoff) continue
 
+    const marker = path.join(target, RUN_MARKER)
+    const receipt = await lstat(marker).catch(() => undefined)
+    if (!receipt?.isFile() || receipt.nlink !== 1 || receipt.size !== 16 ||
+        await readFile(marker, "utf8").catch(() => "") !== "panacode-log-v1\n") continue
     await rm(target, { recursive: true, force: true }).catch(() => {})
   }
 }
@@ -240,37 +265,14 @@ async function readDiagnostics(directory: string): Promise<
 }
 
 async function ownedDirectory(directory: string) {
-  const resolved = path.resolve(directory)
-
-  const parent = await realpath(path.dirname(resolved)).catch((error: Error) => {
-    if (isMissing(error)) return undefined
+  try { return privateDirectory(directory) } catch (error) {
+    if (error instanceof Error && isMissing(error)) return undefined
     throw error
-  })
-
-  if (!parent) return undefined
-
-  const expected = path.join(parent, path.basename(resolved))
-
-  const actual = await realpath(resolved).catch((error: Error) => {
-    if (isMissing(error)) return undefined
-    throw error
-  })
-
-  if (!actual || !samePath(actual, expected)) throw new Error("Log root is not an ordinary directory")
-
-  const info = await lstat(actual)
-
-  if (!info.isDirectory() || info.isSymbolicLink()) throw new Error("Log root is not an ordinary directory")
-
-  return actual
+  }
 }
 
 function sameIdentity(first: Awaited<ReturnType<typeof lstat>>, second: Awaited<ReturnType<typeof lstat>>) {
   return String(first.dev) === String(second.dev) && String(first.ino) === String(second.ino)
-}
-
-function samePath(first: string, second: string) {
-  return process.platform === "win32" ? first.toLowerCase() === second.toLowerCase() : first === second
 }
 
 function within(root: string, file: string) {

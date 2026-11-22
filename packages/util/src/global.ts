@@ -9,6 +9,7 @@ import { ProductIdentity } from "./product-identity.js"
 // The variants resolve through the `workerd` bundle condition, like the
 // native-module stubs, so no runtime sniffing happens here.
 import { roots } from "#global-roots"
+import { physicalPath, upstreamRoots, within } from "./product-path.js"
 import { Flock } from "./flock.js"
 import { makeGlobalNode } from "./effect/app-node.js"
 
@@ -66,13 +67,18 @@ export function make(input: Partial<Interface> = {}): Interface {
 const acquire = (input: Partial<Interface>) =>
   Effect.gen(function* () {
     const service = Service.of(make(input))
-    yield* Effect.promise(() =>
-      Promise.all(
-        [service.data, service.config, service.state, service.log, service.bin, service.repos, service.tmp].map(
-          (directory) => fs.promises.mkdir(directory, { recursive: true }),
-        ),
-      ),
-    )
+    const directories = [service.data, service.config, service.state, service.log, service.bin, service.repos, service.tmp]
+    yield* Effect.promise(async () => {
+      // Validate the entire set before creating the first directory. A redirected product root
+      // must never cause startup to create nested log, repo or bin directories in OpenCode.
+      const protectedRoots = upstreamRoots()
+      for (const directory of directories) {
+        const resolved = physicalPath(directory)
+        if (protectedRoots.some((root) => within(root, resolved)) || resolved.toLowerCase().split(path.sep).includes(".opencode"))
+          throw new Error("Refusing to initialize Panacode inside OpenCode storage")
+      }
+      await Promise.all(directories.map((directory) => fs.promises.mkdir(directory, { recursive: true })))
+    })
     const canonicalTmp = yield* Effect.promise(() => fs.promises.realpath(service.tmp))
     return Service.of({ ...service, tmp: input.tmp ?? canonicalTmp })
   })

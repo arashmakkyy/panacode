@@ -50,6 +50,26 @@ describe("global", () => {
     fs.rmSync(root, { recursive: true, force: true })
   })
 
+  test("validates product directories before creating children of a redirected root", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "panacode-private-roots-"))
+    try {
+      const data = path.join(root, "xdg-data")
+      const upstream = path.join(data, "opencode")
+      fs.mkdirSync(upstream, { recursive: true })
+      fs.symlinkSync(upstream, path.join(data, "panacode"), process.platform === "win32" ? "junction" : "dir")
+      const module = pathToFileURL(path.resolve(import.meta.dir, "../src/global.ts")).href
+      const effect = import.meta.resolve("effect")
+      const child = Bun.spawnSync([process.execPath, "-e", `const {Effect,Layer}=await import(${JSON.stringify(effect)}); const {Global}=await import(${JSON.stringify(module)}); await Effect.runPromise(Effect.scoped(Layer.build(Global.layerWith({}))));`], {
+        cwd: import.meta.dir, env: { ...process.env, XDG_DATA_HOME: data }, stderr: "pipe",
+      })
+      expect(child.exitCode).not.toBe(0)
+      expect(child.stderr.toString()).toContain("Refusing to initialize Panacode")
+      expect(fs.readdirSync(upstream)).toEqual([])
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   test("building a layer with default tmp creates and canonicalizes it", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-global-layer-"))
     const directories = ["data", "cache", "config", "state", "tmp"].map((directory) => path.join(root, directory))

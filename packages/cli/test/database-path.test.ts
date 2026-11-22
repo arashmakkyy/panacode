@@ -60,7 +60,7 @@ describe("database path resolution", () => {
       const configured = item.configured === "absolute" ? path.join(root, "private", "custom.db") : item.configured
       setEnvironment(configured, item.disableChannel)
 
-      const file = databasePath(data)
+      const file = databasePath(data, true)
       expect(file).toBe(item.expected(root))
 
       if (file !== ":memory:") await fs.mkdir(path.dirname(file), { recursive: true })
@@ -80,6 +80,31 @@ describe("database path resolution", () => {
       }
     } finally {
       await fs.rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test("external ownership survives an interrupted final link and rejects a replaced inode", async () => {
+    const fixture = await foreignFixture()
+    try {
+      const data = path.join(fixture.data, "panacode")
+      const external = path.join(fixture.root, "custom.db")
+      setEnvironment(external, undefined)
+      expect(databasePath(data, true)).toBe(external)
+      const ownerDir = path.join(data, "database-owners")
+      const records = await fs.readdir(ownerDir)
+      expect(records).toHaveLength(1)
+      const id = await fs.readFile(path.join(ownerDir, records[0]), "utf8")
+      const temporary = path.join(fixture.root, `.panacode-db-${id}.tmp`)
+      await fs.link(external, temporary)
+      expect(databasePath(data, true)).toBe(external)
+      expect(await fs.stat(external).then((info) => info.nlink)).toBe(1)
+      // Retaining the original prevents the filesystem recycling its inode for this replacement.
+      await fs.rename(external, external + ".previous")
+      await fs.copyFile(fixture.database, external)
+      expect(() => databasePath(data, true)).toThrow("ownership")
+      expect(await readMarker(external)).toEqual({ value: "foreign" })
+    } finally {
+      await fixture.cleanup()
     }
   })
 
@@ -138,16 +163,20 @@ describe("database path guard", () => {
             cwd: path.join(import.meta.dir, ".."),
             env: environment(fixture, path.join(alias, "not-created.db")),
             stdout: "ignore",
-            stderr: "ignore",
+            stderr: "pipe",
           },
         )
+        const stderr = new Response(child.stderr).text()
         const exited = await Promise.race([child.exited, Bun.sleep(15_000).then(() => "timeout" as const)])
         if (exited === "timeout") {
           child.kill(9)
           await child.exited
         }
 
-        expect(exited).not.toBe("timeout")
+        const diagnostic = await stderr
+        expect(exited, diagnostic).toBeTypeOf("number")
+        expect(exited, diagnostic).not.toBe(0)
+        expect(diagnostic).toContain("Refusing PANACODE_DB")
         expect(await snapshot(fixture.opencode)).toEqual(before)
       } finally {
         await fixture.cleanup()
@@ -155,6 +184,32 @@ describe("database path guard", () => {
     },
     30_000,
   )
+
+  test("rejects relocated OpenCode names and unclaimed existing external databases", async () => {
+    const fixture = await foreignFixture()
+    try {
+      for (const name of ["opencode.db", "OpenCode-next.DB", "renamed.db"]) {
+        const external = path.join(fixture.root, name)
+        await fs.copyFile(fixture.database, external)
+        expect(await probe(fixture, external)).toMatchObject({ ok: false })
+        expect(await readMarker(external)).toEqual({ value: "foreign" })
+      }
+    } finally {
+      await fixture.cleanup()
+    }
+  })
+
+  test("an unrelated dangling upstream cache link does not prevent an isolated startup", async () => {
+    const fixture = await foreignFixture()
+    try {
+      const cache = path.join(fixture.root, "xdg-cache")
+      await fs.mkdir(cache, { recursive: true })
+      await fs.symlink(path.join(fixture.root, "retired-cache"), path.join(cache, "opencode"), process.platform === "win32" ? "junction" : "dir")
+      expect(await probe(fixture, undefined)).toMatchObject({ ok: true })
+    } finally {
+      await fixture.cleanup()
+    }
+  })
 
   test("rejects a missing database under a parent alias to OpenCode", async () => {
     const fixture = await foreignFixture()
@@ -262,16 +317,7 @@ describe("database path guard", () => {
 
     try {
       await fs.mkdir(path.dirname(linked), { recursive: true })
-      try {
-        await fs.link(fixture.database, linked)
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code
-        if (code === "EPERM" || code === "EXDEV" || code === "ENOTSUP" || code === "EOPNOTSUPP") {
-          console.warn(`hard-link rejection test skipped: hard links are unsupported (${code})`)
-          return
-        }
-        throw error
-      }
+      await fs.link(fixture.database, linked)
 
       const before = await snapshot(fixture.opencode)
       const result = await probe(fixture, linked)
@@ -321,15 +367,12 @@ describe("database path guard", () => {
     }
   })
 
-  test.skipIf(process.platform !== "win32")("does not reject a path on another Windows drive", async () => {
+  test.skipIf(process.platform !== "win32")("accepts an absolute Windows database path outside protected roots", async () => {
     const fixture = await foreignFixture()
 
     try {
-      const foreignDrive = await alternateDrive(fixture.root)
-      if (foreignDrive === undefined) {
-        console.warn("alternate-drive test skipped: no second local drive is available")
-        return
-      }
+      // Use an absolute drive/UNC path on the fixture's volume when there is only one local drive.
+      const foreignDrive = (await alternateDrive(fixture.root)) ?? fixture.root
       const result = await probe(fixture, path.join(foreignDrive, "opencode", "panacode.db"))
 
       expect(result.ok).toBe(true)

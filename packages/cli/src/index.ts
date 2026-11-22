@@ -3,7 +3,7 @@
 import "./env-bootstrap"
 import { ensurePluginRuntime } from "@opencode/plugin/runtime"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
-import { Cause, Effect } from "effect"
+import { Cause, Effect, Layer } from "effect"
 import { defaultTeardown, getErrorReported } from "effect/Runtime"
 import { Commands } from "./commands/commands"
 import { Runtime } from "./framework/runtime"
@@ -97,11 +97,37 @@ const Handlers = Runtime.handlers(Commands, {
     unset: () => import("./commands/handlers/service/unset"),
   },
   serve: () => import("./commands/handlers/serve"),
-})
+}).map(({ spec, load }) => ({
+  spec,
+  async load() {
+    const command = await load()
+    // Inspect the parsed command, including global flags. Uninstall inspects ownership without
+    // creating a data/log/bin directory inside a cache that it will subsequently refuse to remove.
+    const uninstall = spec === Commands.commands.uninstall.spec
+    const paths = process.env.PANACODE_CONFIG_DIR ? { config: process.env.PANACODE_CONFIG_DIR } : {}
+    const global = uninstall ? Layer.succeed(Global.Service, Global.make(paths)) : Global.layerWith(paths)
+    return {
+      default: (input: unknown) =>
+        Effect.gen(function* () {
+          if (!uninstall) {
+            yield* Heap.listen
+            yield* CpuProfile.listen
+          }
+          return yield* command.default(input)
+        }).pipe(
+          Effect.provide(Config.layer),
+          Effect.provide(Updater.layer),
+          Effect.provide(
+            LayerNode.compile(LayerNode.group([Global.node, AppProcess.node, Npm.node, EffectFlock.node]), {
+              replacements: [Global.node.replace(global)],
+            }),
+          ),
+        ),
+    }
+  },
+}))
 
 Effect.gen(function* () {
-  yield* Heap.listen
-  yield* CpuProfile.listen
   yield* ShutdownDeadline.install()
   // runMain reports every signal interruption as 130; remember a SIGTERM so the exit code is 143.
   process.once("SIGTERM", () => {
@@ -137,17 +163,6 @@ Effect.gen(function* () {
     }).pipe(Effect.andThen(Effect.failCause(cause))),
   ),
   Effect.annotateLogs({ role: "cli" }),
-  Effect.provide(Config.layer),
-  Effect.provide(Updater.layer),
-  Effect.provide(
-    LayerNode.compile(LayerNode.group([Global.node, AppProcess.node, Npm.node, EffectFlock.node]), {
-      replacements: [
-        Global.node.replace(
-          Global.layerWith(process.env.PANACODE_CONFIG_DIR ? { config: process.env.PANACODE_CONFIG_DIR } : {}),
-        ),
-      ],
-    }),
-  ),
   Effect.provide(
     Observability.layer({
       endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,

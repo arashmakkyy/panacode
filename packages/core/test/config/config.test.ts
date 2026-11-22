@@ -1,3 +1,4 @@
+import { PluginSourceDirectory } from "../../src/plugin/source-directory"
 import path from "path"
 import fs from "fs/promises"
 import { createHash } from "node:crypto"
@@ -750,6 +751,41 @@ describe("Config", () => {
             }).pipe(Effect.provide(testLayer(project, global))),
           ),
         )
+      }),
+    ),
+  )
+
+  it.live("keeps aliased OpenCode configuration out of full documents and writable config", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "project")
+        const foreign = path.join(project, ".opencode")
+        const text = JSON.stringify({ shell: "foreign", tool_output: { max_lines: 47 } })
+        return Effect.promise(async () => {
+          await fs.mkdir(global)
+          await fs.mkdir(foreign, { recursive: true })
+          await fs.writeFile(path.join(foreign, "opencode.json"), text)
+          await fs.writeFile(path.join(foreign, "panacode.json"), text)
+          await fs.mkdir(path.join(foreign, "plugins"))
+          await fs.writeFile(path.join(foreign, "plugins", "fixture.ts"), "export default {}")
+          await fs.symlink(path.join(foreign, "plugins"), path.join(global, "plugins"), process.platform === "win32" ? "junction" : "dir")
+          await fs.link(path.join(foreign, "opencode.json"), path.join(project, "panacode.jsonc"))
+          await fs.link(path.join(foreign, "opencode.json"), path.join(global, "panacode.jsonc"))
+          await fs.symlink(foreign, path.join(project, ".panacode"), process.platform === "win32" ? "junction" : "dir")
+        }).pipe(Effect.andThen(Effect.gen(function* () {
+          const service = yield* Config.Service
+          const entries = yield* service.entries()
+          const plugins = yield* Effect.flatMap(FSUtil.Service, (fs) => PluginSourceDirectory.discover(fs, global)).pipe(
+            Effect.provide(AppNodeBuilder.build(FSUtil.node)),
+          )
+          expect(plugins).toEqual([])
+          expect(Config.latest(entries, "shell")).toBeUndefined()
+          expect(Config.latest(entries, "tool_output")).toEqual({ max_lines: 47 })
+          if (!service.update) throw new Error("Missing config update entry point")
+          expect((yield* Effect.exit(service.update({ shell: "new-shell" })))._tag).toBe("Failure")
+          expect(yield* Effect.promise(() => fs.readFile(path.join(foreign, "opencode.json"), "utf8"))).toBe(text)
+        }).pipe(Effect.provide(testLayer(project, global)))))
       }),
     ),
   )

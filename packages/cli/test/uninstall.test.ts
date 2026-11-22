@@ -104,6 +104,7 @@ test("uninstall leaves a cache alias and the cache it points at untouched", asyn
     expect({ exitCode: result.exitCode, stderr: result.stderr }).toEqual({ exitCode: 0, stderr: "" })
     expect(result.stdout).toContain("symlink or shared alias")
     expect(await fs.readFile(path.join(target, "marker"), "utf8")).toBe("opencode-cache")
+    expect(await fs.readdir(target)).toEqual(["marker"])
     expect((await fs.lstat(link)).isSymbolicLink()).toBe(true)
   } finally {
     await fs.rm(root, { recursive: true, force: true })

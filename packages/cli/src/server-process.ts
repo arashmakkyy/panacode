@@ -3,12 +3,14 @@ export * as ServerProcess from "./server-process"
 import "./env-bootstrap"
 import { NodeServices } from "@effect/platform-node"
 import { Service } from "@opencode/client/effect/service"
+import { registrationSnapshot } from "@opencode/client/service"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
 import { AppProcess } from "@opencode/util/process"
 import { randomBytes, randomUUID } from "node:crypto"
 import { Effect, Option, Redacted, Schema } from "effect"
+import { deriveServiceProofKey } from "@opencode/schema/service-proof"
 import { PersistentPty } from "@opencode/schema/persistent-pty"
 import { HttpServer } from "effect/http"
 import { NetAddress } from "effect/net"
@@ -47,6 +49,9 @@ export const run = Effect.fnUntraced(function* (options: Options) {
 })
 
 const processEffect = Effect.fnUntraced(function* (options: Options) {
+  const suppliedKey = process.env.PANACODE_SERVICE_PROOF_KEY
+  delete process.env.PANACODE_SERVICE_PROOF_KEY
+  const foregroundProofKey = options.mode === "default" && suppliedKey && /^[a-f0-9]{64}$/.test(suppliedKey) ? suppliedKey : undefined
   const inherited = process.env.PANACODE_PTY_HANDOFF
   delete process.env.PANACODE_PTY_HANDOFF
   const handoff =
@@ -69,6 +74,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
     Effect.gen(function* () {
       const foreground = options.mode === "default"
       const serviceOptions = options.mode === "service" ? yield* ServiceConfig.options() : undefined
+      const expectedRegistration = serviceOptions ? yield* Effect.tryPromise(() => registrationSnapshot(serviceOptions.file)) : undefined
       const config = options.mode === "service" ? yield* ServiceConfig.read() : {}
       const hostname = options.hostname ?? config.hostname ?? "127.0.0.1"
       const port = options.port ?? config.port ?? (options.mode === "service" ? ServiceConfig.defaultPort() : undefined)
@@ -82,6 +88,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       // Keep a package-manager or curl install replaceable while the service runs; Desktop updates its own copy.
       if (options.mode === "service" && process.platform === "win32" && RetainedImage.installed(global.home))
         yield* RetainedImage.retain(global.cache, "service")
+      const database = databasePath(global.data, true)
       const { start } = yield* Effect.promise(() => import("@opencode/server/process"))
       const environmentPassword = yield* Env.password
       // Keep the lease credential out of the environment inherited by tools.
@@ -98,6 +105,8 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
             ? Redacted.value(environmentPassword)
             : randomBytes(32).toString("base64url")
       if (!password) return yield* Effect.fail(new Error("Missing server password"))
+      const controlToken = randomBytes(32).toString("base64url")
+      const serviceProofKey = options.mode === "service" ? deriveServiceProofKey(controlToken) : foregroundProofKey
       const instanceID = randomUUID()
       const transform = yield* WebUi.handler()
       const remote = { urls: [] as ReadonlyArray<string> }
@@ -113,10 +122,11 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           port,
           cors: options.cors ?? config.cors,
           password,
+          serviceProofKey,
           pty: { handoff },
           simulation: truthy(process.env.PANACODE_SIMULATE),
           database: {
-            path: databasePath(global.data),
+            path: database,
           },
           models: {
             url: process.env.PANACODE_MODELS_URL,
@@ -150,16 +160,20 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         serviceOptions === undefined
           ? undefined
           : {
-              onListen: (address, shutdown) =>
+              onListen: (address, shutdown, terminals) =>
                 Effect.gen(function* () {
-                  if (!config.password) yield* ServiceConfig.password(password)
-                  return yield* ServiceRegistration.register({
+                  const cleanup = yield* ServiceRegistration.register({
+                    controlToken,
+                    expectedRegistration,
+                    terminals,
                     address,
                     password,
                     id: instanceID,
                     file: serviceOptions.file,
                     shutdown,
                   })
+                  if (!config.password) yield* ServiceConfig.password(password).pipe(Effect.onError(() => cleanup))
+                  return cleanup
                 }),
             },
         transform,
