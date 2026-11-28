@@ -98,12 +98,19 @@ jobs:
         run: bun run build
         env:
           OPENCODE_TARGET: windows-x64-baseline
+          # Use a separate service registration and port while the preview is installed beside stable.
+          OPENCODE_CHANNEL: ${{ env.OPENCODE_CHANNEL == 'dev' && 'arc-redesign' || env.OPENCODE_CHANNEL }}
 
       - name: Build desktop
         working-directory: packages/desktop
         run: bun run build
         env:
           OPENCODE_TARGET: windows-x64
+
+      - name: Verify the preview bundles its own service
+        if: env.OPENCODE_CHANNEL == 'dev'
+        working-directory: packages/desktop
+        run: grep -Eq '^0\.0\.0-arc-redesign-[0-9]+(\.[0-9]+)?$' resources/opencode-cli.version
 
       - name: Pack NSIS installer
         working-directory: packages/desktop
