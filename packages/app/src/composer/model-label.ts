@@ -1,4 +1,5 @@
 import { consoleProviderGroup, consoleProviderName } from "@/providers/catalog/console"
+import { modelDisplayName, PANAAI_PROVIDER_ID } from "@/providers/catalog/labels"
 
 export type ComposerModelLabel = { provider?: string; model: string }
 
@@ -21,6 +22,7 @@ export function composerProviderName(
   catalog: ReadonlyMap<string, Provider>,
   connected?: readonly string[],
 ) {
+  if (providerID === PANAAI_PROVIDER_ID) return
   const provider = catalog.get(providerID)
 
   if (!provider) return providerID
@@ -58,7 +60,7 @@ export function composerModelLabels(
       const name = composerProviderName(provider.id, catalog, connected)
 
       return Object.values(provider.models).map((model) => {
-        const label = model.name.replace("(latest)", "").trim()
+        const label = modelDisplayName(provider.id, model.name)
 
         return {
           key: composerModelLabelKey(provider.id, model.id),
@@ -76,7 +78,8 @@ export function composerModelLabels(
   return new Map(
     rows.map((row) => {
       const peers = groups.get(row.text) ?? []
-      const provider = peers.some((other) => other.providerID !== row.providerID) ? row.providerID : row.provider
+      const collides = row.providerID !== PANAAI_PROVIDER_ID && peers.some((other) => other.providerID !== row.providerID)
+      const provider = collides ? row.providerID : row.provider
       const same = peers.filter((other) => other.providerID === row.providerID).map((other) => other.modelID)
       const suffix = same.length > 1 ? row.modelID.slice(sharedPrefix(same)).replace(/^[-_./:]+/, "") : ""
 

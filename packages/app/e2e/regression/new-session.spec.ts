@@ -1333,15 +1333,17 @@ for (const row of [
     expect((await listed).ok()).toBe(true)
     const composer = page.locator('[data-component="composer"]')
     const send = composer.getByRole("button", { name: "Send", exact: true })
+    const face = send.locator('[data-slot="composer-submit-face"]')
     await expect(composer.locator('[data-action="composer-model"]')).toHaveText("Accent Model")
     await view.editor.fill("Inspect this fixture workspace.")
     await expect(send).toBeEnabled()
-    await expectBackground(send, "icon-button-contrast")
+    await expectToken(face, "background-color", "--primary-fill")
     await send.hover()
-    await expectBackground(send, "icon-button-contrast")
+    await expectToken(face, "background-color", "--primary-hover")
+    await page.mouse.move(0, 0)
     await composer.locator('[data-action="composer-model"]').press("Tab")
     await expect(send).toBeFocused()
-    await expectBackground(send, "icon-button-contrast")
+    await expectToken(face, "background-color", "--primary-fill")
     const message = page.locator('[data-slot="user-message-text"]')
     await expect(message).toHaveText("Check this fixture workspace.")
     await expectToken(message, "background-color", "--v2-background-bg-layer-02")
@@ -1367,7 +1369,7 @@ for (const row of [
     expect((await refreshed).ok()).toBe(true)
     await expect(page).toHaveURL(url)
     await expect(view.editor).toHaveText("Inspect this fixture workspace.")
-    await expectBackground(send, "icon-button-contrast")
+    await expectToken(face, "background-color", "--primary-fill")
     // SAFETY: the fixture event matches the generated OpenCodeEvent shape for its type.
     await view.push([
       {
@@ -1381,7 +1383,7 @@ for (const row of [
     await view.editor.fill("")
     const stop = composer.getByRole("button", { name: "Stop", exact: true })
     await expect(stop).toBeEnabled()
-    await expectBackground(stop, "icon-button-contrast")
+    await expect(stop.locator('[data-slot="composer-submit-face"]')).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
   })
 }
 
@@ -1435,22 +1437,6 @@ async function submitPending(page: Page, mock: Awaited<ReturnType<typeof openWor
   expect(mock.prompts).toEqual([])
 
   return { url, sessionID, messageID, message, shimmer }
-}
-
-// Resolves semantic colors through the browser, without reproducing the button's gradient.
-async function expectBackground(element: Locator, token: string) {
-  const color = await element.evaluate((element, token) => {
-    const probe = document.createElement("span")
-    probe.hidden = true
-    probe.style.backgroundColor = `var(--v2-background-bg-${token})`
-    element.append(probe)
-    const color = getComputedStyle(probe).backgroundColor
-    probe.remove()
-
-    return color
-  }, token)
-
-  await expect(element).toHaveCSS("background-image", new RegExp(color.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
 }
 
 async function expectToken(element: Locator, property: string, token: string) {

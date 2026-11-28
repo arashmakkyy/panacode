@@ -27,6 +27,22 @@ const root = provider("opencode", "Anomaly / OpenCode", { integrationID: "openco
 
 const managed = provider("console-openai", "Anomaly / OpenAI", { integrationID: "opencode", canonical: "openai" })
 
+test("PanaAI models keep their routing IDs and show only their model names, including when a peer has the same name", () => {
+  const id = "panaai/deepseek-v4-flash-0731"
+
+  const all = catalog(
+    provider("panaai", "PanaAI", { models: [[id, "PanaAI / deepseek-v4-flash-0731"], ["org/model", "org/model"]] }),
+    provider("opencode", "OpenCode", { models: [["other", "deepseek-v4-flash-0731"]] }),
+  )
+
+  const labels = composerModelLabels(all)
+
+  expect(composerProviderName("panaai", catalog())).toBeUndefined()
+  expect(label(labels, "panaai", id)).toEqual({ provider: undefined, model: "deepseek-v4-flash-0731" })
+  expect(label(labels, "panaai", "org/model")).toEqual({ provider: undefined, model: "org/model" })
+  expect(label(labels, "opencode", "other")?.provider).toBe("opencode")
+})
+
 test.each([
   provider("opencode", "Anomaly / OpenCode", { integrationID: "opencode" }),
   provider("opencode", "OpenCode"),

@@ -1,6 +1,5 @@
 import { DropdownMenu } from "@kobalte/core/dropdown-menu"
-import { createMemo, createSignal, For, Show, type JSX } from "solid-js"
-import { prefersReducedMotion } from "../../motion/reduced"
+import { createMemo, For, Show, splitProps, type JSX } from "solid-js"
 import "./parts.css"
 
 /**
@@ -32,61 +31,44 @@ export function SendButton(
     held?: boolean
   } & Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "onClick">,
 ) {
-  const reduced = prefersReducedMotion()
-  const generating = () => props.state === "generating"
-  const usable = () => props.state === "ready" || generating()
-  const known = () => props.progress !== null && props.progress !== undefined
-  const offset = () => (known() ? 1 - Math.max(0.02, props.progress!) : 0.72)
-  const [pressed, setPressed] = createSignal(false)
-  const rest = () => {
-    const { state, progress, label, onSend, onStop, held, ...others } = props
-    void state, progress, label, onSend, onStop, held
-    return others
-  }
+  const [action, button] = splitProps(props, ["state", "progress", "label", "onSend", "onStop", "held", "children"])
+  const generating = () => action.state === "generating"
   return (
     <button
       type="button"
-      {...rest()}
+      {...button}
       class="pc-aic-send"
-      data-state={props.state}
-      data-held={props.held || undefined}
-      data-pressed={pressed() || undefined}
-      aria-label={props.label}
-      title={props.label}
-      aria-disabled={!usable() || undefined}
-      onPointerDown={() => usable() && !reduced() && setPressed(true)}
-      onPointerUp={() => setPressed(false)}
-      onPointerLeave={() => setPressed(false)}
+      data-state={action.state}
+      data-held={action.held || undefined}
+      aria-label={action.label}
+      title={action.label}
+      aria-disabled={(action.state !== "ready" && !generating()) || undefined}
       onClick={(event) => {
         event.preventDefault()
         event.stopPropagation()
-        if (generating()) props.onStop()
-        else if (props.state === "ready") props.onSend()
+        if (generating()) action.onStop()
+        else if (action.state === "ready") action.onSend()
       }}
     >
-      <svg
-        class="pc-aic-sendRing"
-        data-spin={((generating() || props.held) && !known() && !reduced()) || undefined}
-        viewBox="0 0 44 44"
-        aria-hidden="true"
-      >
-        <circle class="pc-aic-sendTrack" cx="22" cy="22" r="20.5" data-on={generating() || props.held || undefined} />
-        <circle
-          class="pc-aic-sendArc"
-          cx="22"
-          cy="22"
-          r="20.5"
-          pathLength={1}
-          stroke-dasharray="1 1"
-          data-on={generating() || props.held || undefined}
-          style={{ "stroke-dashoffset": generating() || props.held ? offset() : 1 }}
-        />
-      </svg>
-      <Show when={generating()} keyed fallback={<span class="pc-aic-sendGlyph pc-aic-arrowIn"><ArrowUp /></span>}>
-        <span class="pc-aic-sendGlyph pc-aic-stopIn">
-          <span class="pc-aic-stopGlyph" />
-        </span>
-      </Show>
+      <span data-slot="composer-submit-face" aria-hidden="true">
+        <Show when={generating() || action.held} fallback={action.children ?? <ArrowUp />}>
+          <svg class="pc-aic-sendRing" data-spin={action.progress == null || undefined} viewBox="0 0 18 18">
+            <circle class="pc-aic-sendTrack" cx="9" cy="9" r="8" />
+            <circle
+              class="pc-aic-sendArc"
+              cx="9"
+              cy="9"
+              r="8"
+              pathLength={1}
+              stroke-dasharray="1 1"
+              stroke-dashoffset={action.progress == null ? 0.72 : 1 - Math.max(0.02, Math.min(1, action.progress))}
+            />
+          </svg>
+          <Show when={generating()}>
+            <span class="pc-aic-stopGlyph" />
+          </Show>
+        </Show>
+      </span>
     </button>
   )
 }

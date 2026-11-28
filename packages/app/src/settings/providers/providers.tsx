@@ -30,7 +30,8 @@ import {
   type SettingsProvidersEvent,
 } from "./machine"
 import "@/settings/settings.css"
-import { PanaAISpotlight, PANAAI_PROVIDER_ID } from "./panacode-spotlight"
+import { PanaAISpotlight } from "./panacode-spotlight"
+import { modelDisplayName, PANAAI_PROVIDER_ID } from "@/providers/catalog/labels"
 
 type ProviderSource = "env" | "api" | "account" | "config" | "custom"
 
@@ -485,7 +486,7 @@ export const SettingsProviders: Component<{
           onRefresh={refreshPana}
           sourceLabel={panaai() ? type(panaai()!) : undefined}
           connected={panaSource()}
-          models={panaai() ? Object.values(panaai()!.models).map((model) => model.name) : []}
+          models={Object.values(panaai()?.models ?? {}).map((model) => modelDisplayName(PANAAI_PROVIDER_ID, model.name))}
           onConnect={() => connect(PANAAI_PROVIDER_ID)}
           accounts={<Show when={canManageAccounts(panaAccount)}><AccountMenu provider={panaAccount} /></Show>}
         />

@@ -14,6 +14,7 @@ import { formatKeybind, useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { ComposerModel } from "./model"
 import type { ComposerModelLabel } from "./model-label"
+import { modelDisplayName } from "@/providers/catalog/labels"
 import {
   createModelChipState,
   selectModelChipPending,
@@ -42,7 +43,7 @@ export function Composer(props: {
     if (model) return model.name
     const key = selection.key()
 
-    if (key) return language.t("dialog.model.unavailable", { model: key.modelID })
+    if (key) return language.t("dialog.model.unavailable", { model: modelDisplayName(key.providerID, key.modelID) })
 
     return language.t("dialog.model.select.title")
   }

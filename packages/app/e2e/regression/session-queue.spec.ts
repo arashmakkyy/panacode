@@ -324,6 +324,7 @@ test("a blank Enter leaves the running session alone while Stop still interrupts
   const stop = view.composer.getByRole("button", { name: "Stop", exact: true })
 
   await expect(stop).toBeVisible()
+  await expect(stop.locator("svg")).toHaveCSS("width", "18px")
   await view.input.click()
   await view.input.press("Enter")
   await view.input.press("ControlOrMeta+Enter")
@@ -381,7 +382,7 @@ test.describe("touch keyboard", () => {
     await view.rows.filter({ hasText: "check the logs" }).locator('[data-action="session-queue-edit"]').tap()
     await expect(view.input).toHaveText(/check the logs/)
     await expect(bar.locator('[data-action="composer-alternate-delivery"]')).toHaveText("Steer")
-    await expect(bar.locator('[data-action="composer-submit"]')).toHaveText("Queue")
+    await expect(bar.locator('[data-action="composer-submit"]')).toHaveAccessibleName("Queue")
   })
 })
 

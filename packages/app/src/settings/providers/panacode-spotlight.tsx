@@ -3,9 +3,7 @@ import { ProviderSpotlight } from "@panacode/ui/features/providers"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 
-export const PANAAI_PROVIDER_ID = "panaai"
-
-/** PanaAI dashboard, where credits are bought. Kept beside the provider id so a domain move is one edit. */
+/** PanaAI dashboard, where credits are bought. */
 const PANAAI_DASHBOARD_URL = "https://panaai-psi.vercel.app"
 
 /** PanaAI, featured first in Settings → Providers. `connected` is the connection source, or undefined. */

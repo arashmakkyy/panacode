@@ -10,26 +10,89 @@ for (const scheme of ["dark", "light"] as const) {
     test.use({ hasTouch: scheme === "light", viewport: { width: scheme === "light" ? 390 : 1280, height: 800 } })
 
     test("keeps the input edge quiet and paints the ready action in the dashboard colors", async ({ page }) => {
-      const { editor } = await openDraft(page, { name: "Composer colors", seed: { theme: { id: "panacode", scheme } } })
+      const model = {
+        id: "deepseek-v4-flash-0731",
+        name: "deepseek-v4-flash-0731",
+        variants: { low: {}, medium: {}, high: {} },
+      }
+
+      const { editor } = await openDraft(page, {
+        name: "Composer colors",
+        provider: {
+          all: [{ id: "panaai", name: "PanaAI", models: { [model.id]: model } }],
+          connected: ["panaai"],
+          default: { providerID: "panaai", modelID: model.id },
+        },
+        seed: { theme: { id: "panacode", scheme } },
+      })
+
       const form = page.locator('form[data-component="composer"]')
       const send = form.getByRole("button", { name: "Send", exact: true })
+      const face = send.locator('[data-slot="composer-submit-face"]')
       const edge = scheme === "dark" ? "rgba(255, 255, 255, 0.094)" : "rgb(226, 220, 207)"
 
+      const modelButton = form.locator('[data-action="composer-model"]')
+      await expect(modelButton).toHaveAccessibleName(model.name)
+      await page.evaluate(() => document.fonts.ready)
+      const modelText = modelButton.getByText(model.name, { exact: true })
+      expect(await modelText.evaluate((text) => text.scrollWidth <= text.clientWidth + 1)).toBe(true)
       await expect(send).toBeDisabled()
       await editor.fill("Review the code")
       await expect(send).toBeEnabled()
       await expect(form).toHaveCSS("border-top-color", edge)
       await expect(form).toHaveCSS("box-shadow", "none")
-      await expect(send).toHaveCSS("background-image", "none")
-      await expect(send).toHaveCSS("background-color", "rgb(239, 193, 90)")
-      await expect(send).toHaveCSS("color", "rgb(36, 26, 7)")
-      await expect(send).toHaveCSS("border-radius", "10px")
+      await expect(face).toHaveCSS("background-image", "none")
+      await expect(face).toHaveCSS("background-color", "rgb(239, 193, 90)")
+      await expect(face).toHaveCSS("color", "rgb(36, 26, 7)")
+      await expect(face).toHaveCSS("width", "26px")
+      await expect(face).toHaveCSS("height", "26px")
       await send.focus()
       await expect(send).toBeFocused()
       await expect(form).toHaveCSS("border-top-color", edge)
     })
   })
 }
+
+test("a PanaAI model shows its short name and sends with its full catalog ID", async ({ page }) => {
+  const current = { id: "first", name: "First" }
+  const next = { id: "panaai/deepseek-v4-flash-0731", name: "PanaAI / deepseek-v4-flash-0731" }
+  const sessionID = "ses_panaai_model_labels"
+  const prompts: string[] = []
+
+  const view = await openSession(page, {
+    name: "Model labels",
+    sessions: [{ id: sessionID, agent: "build", model: { id: current.id, providerID: "panaai" } }],
+    provider: {
+      all: [{ id: "panaai", name: "PanaAI", models: { [current.id]: current, [next.id]: next } }],
+      connected: ["panaai"],
+      default: { providerID: "panaai", modelID: current.id },
+    },
+    seed: {
+      storage: {
+        "opencode.global.dat:model": { user: [{ providerID: "panaai", modelID: next.id, visibility: "show" }] },
+      },
+    },
+    onPrompt: ({ sessionID }) => void prompts.push(sessionID),
+  })
+
+  const model = page.locator('[data-action="composer-model"]')
+  await expect(model).toHaveAccessibleName(current.name)
+  await model.click()
+  const picker = page.getByRole("dialog", { name: "Select model", exact: true })
+
+  const selected = page.waitForRequest(
+    (request) => request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${sessionID}/model`,
+  )
+
+  const option = picker.locator(`[data-option-key="panaai:${next.id}"]`)
+  await expect(option.getByText("deepseek-v4-flash-0731", { exact: true })).toBeVisible()
+  await option.click()
+  await expect(model).toHaveAccessibleName("deepseek-v4-flash-0731")
+  await view.editor.fill("Use the selected model")
+  await view.editor.press("Enter")
+  expect((await selected).postDataJSON()).toMatchObject({ model: { providerID: "panaai", id: next.id } })
+  await expect.poll(() => prompts).toEqual([sessionID])
+})
 
 test("mention a session by title, send its stable token, and open its own tab", async ({ page }) => {
   const target = "ses_0123456789abcdefghijklmnop"
@@ -1623,61 +1686,41 @@ test("marks a Console provider with its workspace only when it is also connected
   await expect(menu.getByText(/Anomaly \//)).toHaveCount(0)
 })
 
-test("shows thinking on hover or a non-default selection while preserving keyboard access", async ({ page }) => {
+test("keeps effort visible beside the model and reaches Send by keyboard", async ({ page }) => {
   const { editor: input } = await openSession(page, {
     name: "ComposerThinking",
     provider: provider({ id: "thinking-model", name: "Thinking Model", variants: { high: {} } }),
   })
 
   const composer = page.locator('[data-component="composer"]')
-  const control = composer.getByRole("button", { name: "Choose model variant" })
+  const control = composer.getByRole("button", { name: /^Choose effort:/ })
   const option = (name: string) => page.getByRole("menuitemradio", { name, exact: true })
 
+  await input.fill("Review the changes")
   await page.mouse.move(0, 0)
-  await expect(control).toHaveText("default")
-  await expect(control).toHaveCSS("opacity", "0")
-  await expect(control).toHaveCSS("pointer-events", "none")
-
-  await input.hover()
+  await expect(control).toHaveAccessibleName("Choose effort: Default")
   await expect(control).toHaveCSS("opacity", "1")
-
-  // The menu keeps the control visible after the pointer leaves.
-  await control.click()
-  await expect(option("high")).toBeVisible()
-  await page.mouse.move(0, 0)
-  await expect(control).toHaveAttribute("aria-expanded", "true")
-  await expect(control).toHaveCSS("opacity", "1")
-  await option("high").click()
-
-  await input.click()
-  await page.mouse.move(0, 0)
-  await expect(control).toHaveText("high")
-  await expect(control).toHaveCSS("opacity", "1")
+  await composer.getByRole("button", { name: "Thinking Model", exact: true }).press("Tab")
+  await expect(control).toBeFocused()
+  await control.press("ArrowDown")
+  await expect(option("Default")).toBeFocused()
+  await option("Default").press("ArrowRight")
+  await expect(option("High")).toBeFocused()
+  await option("High").press("Enter")
+  await expect(option("High")).toBeChecked()
+  await option("High").press("Escape")
+  await expect(control).toHaveAccessibleName("Choose effort: High")
 
   await control.click()
-  await option("default").click()
-  await input.click()
   await page.mouse.move(0, 0)
-  await expect(control).toHaveText("default")
-  await expect(control).toHaveCSS("opacity", "0")
-
-  // The single-agent fixture has Add, Agent and Model before the thinking trigger.
-  await page.keyboard.press("Tab")
-  await expect(composer.getByRole("button", { name: "Add images and files" })).toBeFocused()
-  await page.keyboard.press("Tab")
-  await expect(composer.getByRole("button", { name: "Choose agent" })).toBeFocused()
-  await page.keyboard.press("Tab")
-  await expect(composer.getByRole("button", { name: "Thinking Model" })).toBeFocused()
-  await page.keyboard.press("Tab")
-  await expect(control).toBeFocused()
-  await expect(control).toHaveCSS("opacity", "1")
-  await page.keyboard.press("Enter")
-  await expect(option("default")).toBeFocused()
-  await expect(control).toHaveCSS("opacity", "1")
-  await page.keyboard.press("Escape")
+  await expect(option("High")).toBeChecked()
+  await option("Default").click()
+  await expect(option("Default")).toBeChecked()
+  await option("Default").press("Escape")
+  await expect(control).toHaveAccessibleName("Choose effort: Default")
   await expect(control).toBeFocused()
   await page.keyboard.press("Tab")
-  await expect(control).toHaveCSS("opacity", "0")
+  await expect(composer.getByRole("button", { name: "Send", exact: true })).toBeFocused()
 })
 
 test("pastes into the composer from the session view but not into other inputs", async ({ page }) => {

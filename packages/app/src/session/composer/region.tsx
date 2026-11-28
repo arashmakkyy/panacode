@@ -46,6 +46,7 @@ import { sessionTodos, todoFinished } from "./todos"
 import { useOpenSessionRoute } from "../session-identity-header"
 import { resolveSessionComposerSelection } from "./selection"
 import { composerModelLabelKey, composerModelLabels, composerProviderName } from "@/composer/model-label"
+import { modelDisplayName } from "@/providers/catalog/labels"
 import { useProviders } from "@/providers/catalog/providers"
 import { SubagentBar } from "./subagent-bar"
 import { createSessionRequestModel } from "../requests/model"
@@ -546,7 +547,7 @@ export function ActiveSessionComposerRegion(props: {
             providers.all(),
             providers.connected().map((provider) => provider.id),
           ),
-      name: label?.model ?? ref.id,
+      name: label?.model ?? modelDisplayName(ref.providerID, ref.id),
       variant: ref.variant,
     }
   }

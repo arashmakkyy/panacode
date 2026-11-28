@@ -20,6 +20,7 @@ import { useComposerState } from "./persistence"
 import { useConfiguredModel } from "@/providers/models/configured"
 import { useGlobal } from "@/runtime/server/runtime"
 import { composerModelLabelKey, composerModelLabels, composerProviderName } from "./model-label"
+import { modelDisplayName } from "@/providers/catalog/labels"
 
 export function createComposerControls(input: { model?: ModelSelection } = {}) {
   const local = useLocal()
@@ -83,7 +84,7 @@ export function createComposerControls(input: { model?: ModelSelection } = {}) {
 
     return {
       provider: composerProviderName(expected.model.providerID, match.all, match.connected),
-      model: match.model.name.replace("(latest)", "").trim(),
+      model: modelDisplayName(expected.model.providerID, match.model.name),
       label: composerModelLabels(match.all, match.connected).get(
         composerModelLabelKey(expected.model.providerID, expected.model.modelID),
       ),

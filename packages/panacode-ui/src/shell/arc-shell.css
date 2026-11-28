@@ -268,10 +268,22 @@
   }
 }
 
-/* Narrower still, the model name gives way (ellipsis) so the effort chip is never clipped. */
+/* Size the model to the space left by the agent and effort, including when the actions have their own touch row. */
 @container pc-composer (max-width: 520px) {
-  [data-brand="panacode"] [data-action="composer-model"] {
-    max-width: max(96px, calc(100cqw - 276px)) !important;
+  [data-brand="panacode"] [data-slot="composer-controls-list"] {
+    width: 100%;
+  }
+  [data-brand="panacode"] form[data-component="composer"] [data-slot="composer-controls"]
+    :is([data-action="composer-model"], [data-action="composer-effort"], button:not([data-action])) {
+    padding-inline: 6px;
+  }
+  [data-brand="panacode"] form[data-component="composer"] [data-action="composer-model"] {
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 100%;
+  }
+  [data-brand="panacode"] [data-action="composer-effort"] {
+    flex-shrink: 0;
   }
 }
 

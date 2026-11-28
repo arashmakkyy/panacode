@@ -7,7 +7,6 @@
     [data-component="panacode-button"][data-variant="primary"],
     [data-component="panacode-provider-spotlight"] [data-slot="spotlight-primary"],
     [data-slot="sidebar-actions"] > [data-action="vertical-tabs-new-session"],
-    .pc-aic-send[data-state="ready"],
     .pc-ac-send:enabled,
     .pc-mcp-button.is-primary,
     .pc-ar-button-primary,
@@ -42,7 +41,7 @@
     color: var(--accent-foreground);
   }
 
-  :is(.pc-aic-send[data-state="empty"], [data-action="composer-submit"][data-variant="submit"]:disabled, .pc-ac-send:disabled) {
+  .pc-ac-send:disabled {
     border: 1px solid var(--border);
     border-radius: var(--radius-control);
     background: var(--surface-muted);

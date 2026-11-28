@@ -2,8 +2,7 @@
 
 /* ------------------------------------------------------------ send / stop */
 .pc-aic-send {
-  --pc-aic-size: var(--control-height-sm, 32px);
-  position: relative;
+  --pc-aic-size: 26px;
   display: grid;
   width: var(--pc-aic-size);
   height: var(--pc-aic-size);
@@ -11,83 +10,79 @@
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: var(--radius-pill);
-  background: var(--surface-muted);
+  border-radius: 7px;
+  background: transparent;
   color: var(--text-muted);
   cursor: default;
+}
+/* The touch toolbar enlarges the button's hit target. Its visible face stays centered at the same size. */
+.pc-aic-send [data-slot="composer-submit-face"] {
+  display: grid;
+  place-items: center;
+  width: var(--pc-aic-size);
+  height: var(--pc-aic-size);
+  box-sizing: border-box;
+  border-radius: inherit;
+  border: 1px solid var(--border);
+  background: var(--surface-muted);
   transition:
     background-color var(--duration-fast) var(--ease-standard),
-    color var(--duration-fast) var(--ease-standard),
-    transform var(--spring-snappy-duration, 0.2s) var(--spring-snappy, var(--ease-standard));
+    border-color var(--duration-fast) var(--ease-standard);
 }
-.pc-aic-send[data-state="ready"] {
+.pc-aic-send[data-state="ready"] [data-slot="composer-submit-face"] {
   background: var(--primary-fill);
-  border: 1px solid var(--primary-border);
+  border-color: var(--primary-border);
   color: var(--accent-foreground);
-  cursor: pointer;
+  box-shadow: var(--pana-button-shadow, none);
 }
-.pc-aic-send[data-state="generating"] {
-  color: var(--foreground);
+.pc-aic-send:enabled:is([data-state="ready"], [data-state="generating"]) {
   cursor: pointer;
-}
-.pc-aic-send[data-pressed] {
-  transform: scale(0.92);
 }
 @media (hover: hover) and (pointer: fine) {
-  .pc-aic-send[data-state="ready"]:hover {
+  .pc-aic-send[data-state="ready"]:enabled:not([data-held]):hover [data-slot="composer-submit-face"] {
     background: var(--primary-hover);
+    border-color: var(--pana-button-hover-border, var(--primary-border));
   }
-  .pc-aic-send[data-state="generating"]:hover {
-    background: color-mix(in oklab, var(--surface-muted), var(--foreground) 8%);
-  }
+}
+.pc-aic-send[data-state="ready"]:enabled:not([data-held]):active [data-slot="composer-submit-face"] {
+  background: var(--primary-hover);
+  border-color: var(--pana-button-hover-border, var(--primary-border));
+}
+.pc-aic-send:is([data-state="generating"], [data-held]) [data-slot="composer-submit-face"] {
+  color: var(--foreground);
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
 }
 .pc-aic-send:focus-visible {
   outline: 2px solid var(--focus-ring, var(--accent));
   outline-offset: 2px;
 }
-.pc-aic-sendGlyph {
-  display: grid;
+.pc-aic-send [data-slot="composer-submit-face"] > * {
   grid-area: 1 / 1;
-  place-items: center;
 }
-.pc-aic-sendGlyph svg {
-  width: 18px;
-  height: 18px;
+.pc-aic-send [data-slot="composer-submit-face"] > svg:not(.pc-aic-sendRing) {
+  width: 16px;
+  height: 16px;
 }
 .pc-aic-stopGlyph {
-  display: block;
-  width: 11px;
-  height: 11px;
-  border-radius: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 1.5px;
   background: currentColor;
 }
-.pc-aic-arrowIn {
-  animation: pc-aic-arrow-in var(--spring-snappy-duration, 0.2s) var(--spring-snappy, var(--ease-standard)) both;
-}
-.pc-aic-stopIn {
-  animation: pc-aic-stop-in var(--spring-snappy-duration, 0.2s) var(--spring-snappy, var(--ease-standard)) both;
-}
-@keyframes pc-aic-arrow-in {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-}
-@keyframes pc-aic-stop-in {
-  from {
-    opacity: 0;
-    transform: scale(0.3);
-    border-radius: 8px;
+@media (forced-colors: active) {
+  .pc-aic-stopGlyph {
+    forced-color-adjust: none;
+    background: ButtonText;
   }
 }
 .pc-aic-sendRing {
-  position: absolute;
-  inset: -4px;
-  width: calc(100% + 8px);
-  height: calc(100% + 8px);
-  overflow: visible;
-  pointer-events: none;
+  width: 18px;
+  height: 18px;
   transform: rotate(-90deg);
+  fill: none;
+  stroke-width: 1.5;
 }
 .pc-aic-sendRing[data-spin] {
   animation: pc-aic-ring-spin 1.1s linear infinite;
@@ -100,27 +95,13 @@
     transform: rotate(270deg);
   }
 }
-.pc-aic-sendTrack,
-.pc-aic-sendArc {
-  fill: none;
-  stroke-width: 1.5;
-  opacity: 0;
-  transition: opacity var(--duration-standard, 0.24s) var(--ease-standard);
-}
 .pc-aic-sendTrack {
   stroke: var(--border);
 }
 .pc-aic-sendArc {
   stroke: var(--accent);
   stroke-linecap: round;
-  transition:
-    opacity var(--duration-standard, 0.24s) var(--ease-standard) 0.12s,
-    stroke-dashoffset 0.6s linear;
-}
-.pc-aic-sendTrack[data-on],
-.pc-aic-sendArc[data-on] {
-  opacity: 1;
-  transition-delay: 0s;
+  transition: stroke-dashoffset 0.6s linear;
 }
 
 /* --------------------------------------------------------- model / effort */
@@ -422,14 +403,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pc-aic-send,
+  .pc-aic-send [data-slot="composer-submit-face"],
+  .pc-aic-sendArc,
   .pc-aic-chevron,
   .pc-aic-effortThumb,
   .pc-aic-effortItem,
   .pc-aic-chip,
   .pc-aic-chipActionGlyph,
-  .pc-aic-arrowIn,
-  .pc-aic-stopIn,
   .pc-aic-menu {
     animation: none;
     transition: none;

@@ -1,6 +1,7 @@
 import { type Accessor, createMemo } from "solid-js"
 import { createSimpleContext } from "@opencode/ui/context"
 import { useProviders } from "@/providers/catalog/providers"
+import { modelDisplayName } from "@/providers/catalog/labels"
 import { useGlobal } from "@/runtime/server/runtime"
 
 type ModelKey = { providerID: string; modelID: string }
@@ -106,7 +107,7 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
   const list = createMemo(() =>
     available().map((m) => ({
       ...m,
-      name: m.name.replace("(latest)", "").trim(),
+      name: modelDisplayName(m.provider.id, m.name),
       latest: m.name.includes("(latest)"),
     })),
   )

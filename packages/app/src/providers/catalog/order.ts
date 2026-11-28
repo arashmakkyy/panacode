@@ -1,5 +1,7 @@
+import { PANAAI_PROVIDER_ID } from "./labels"
+
 export const popularProviders = [
-  "panaai",
+  PANAAI_PROVIDER_ID,
   "opencode-go",
   "opencode",
   "anthropic",

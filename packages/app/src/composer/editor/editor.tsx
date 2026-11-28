@@ -20,7 +20,6 @@ import { Key } from "@solid-primitives/keyed"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
-import { Loader } from "@opencode/ui/loader"
 import { ProviderModelIcon } from "@/providers/models/provider-group"
 import { useLanguage } from "@/runtime/i18n/language"
 import { hasAppLabel } from "@/runtime/i18n/app-label"
@@ -478,7 +477,11 @@ export function ComposerEditor(props: ComposerEditorProps) {
             inert={mode() === "shell" ? true : undefined}
             style={buttons()}
           >
-            <div ref={controlsContent} class="flex h-full w-max min-w-full items-center gap-0.5">
+            <div
+              ref={controlsContent}
+              data-slot="composer-controls-list"
+              class="flex h-full w-max min-w-full items-center gap-0.5"
+            >
               <Show when={view.agent} keyed>
                 {(control) => (
                   <ComposerEditorConfiguredSelect
@@ -529,16 +532,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
                   </span>
                 </Button>
               </Show>
-              <ComposerEditorSubmitButton
-                mode={mode()}
-                stopping={view.submit.stopping()}
-                busy={view.submit.busy?.() ?? false}
-                disabled={!props.controller.canSubmit()}
-                sendLabel={deliveryLabel(props.controller, i18n)}
-                stopLabel={i18n.t("ui.promptInput.stop")}
-                onSubmit={() => props.controller.submit()}
-                onStop={props.controller.stop}
-              />
+              <ComposerEditorSubmitButton controller={props.controller} />
             </div>
           </Show>
         </div>
@@ -1456,38 +1450,29 @@ function ComposerEditorAlternateDelivery(props: {
   )
 }
 
-function ComposerEditorSubmitButton(props: {
-  mode: ComposerMode
-  stopping: boolean
-  busy?: boolean
-  disabled: boolean
-  sendLabel: string
-  stopLabel: string
-  onSubmit: () => void
-  onStop: () => void
-}) {
-  // The Arc send button: muted while empty, accent when ready, and the stop square inside a spinning ring while the
-  // turn runs (a live reply has no known length, so the ring spins rather than fills).
-  const held = () => !!props.busy && !props.stopping
+function ComposerEditorSubmitButton(props: { controller: ComposerEditorModel; touch?: boolean }) {
+  const i18n = useI18n()
+  const stopping = () => props.controller.view.submit.stopping()
+  const held = () => !stopping() && !!props.controller.view.submit.busy?.()
+  const disabled = () => !stopping() && !props.controller.canSubmit()
+  const label = () => stopping() ? i18n.t("ui.promptInput.stop") : deliveryLabel(props.controller, i18n)
 
   return (
-    <Tooltip
-      placement="top"
-      inactive={!props.stopping && props.disabled}
-      value={props.stopping ? props.stopLabel : props.sendLabel}
-    >
+    <Tooltip placement="top" inactive={props.touch || disabled()} value={label()}>
       <SendButton
         data-action="composer-submit"
-        state={props.stopping ? "generating" : props.disabled ? "empty" : "ready"}
+        state={stopping() ? "generating" : disabled() ? "empty" : "ready"}
         held={held()}
-        progress={null}
-        label={props.stopping ? props.stopLabel : props.sendLabel}
+        label={label()}
         aria-busy={held()}
-        disabled={!props.stopping && props.disabled}
-        tabIndex={props.mode === "normal" ? undefined : -1}
-        onSend={props.onSubmit}
-        onStop={props.onStop}
-      />
+        disabled={disabled()}
+        tabIndex={props.touch || props.controller.mode() === "normal" ? undefined : -1}
+        onMouseDown={props.touch ? (event) => event.preventDefault() : undefined}
+        onSend={() => props.controller.submit()}
+        onStop={props.controller.stop}
+      >
+        {props.touch && props.controller.mode() === "shell" ? <Icon name="arrow-undo-down" /> : undefined}
+      </SendButton>
     </Tooltip>
   )
 }
@@ -1551,8 +1536,6 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel }) {
     return queue.alternate()
   })
 
-  const busy = () => (view.submit.busy?.() ?? false) && !view.submit.stopping()
-
   return (
     <div
       data-slot="composer-touch-bar"
@@ -1612,55 +1595,21 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel }) {
         </For>
       </Show>
       <div class="flex-1" />
-      <Show
-        when={!view.submit.stopping()}
-        fallback={
+      <Show when={!view.submit.stopping() && alternate()} keyed>
+        {(delivery) => (
           <Button
             type="button"
-            data-action="composer-submit"
+            data-action="composer-alternate-delivery"
             variant="neutral"
-            class="size-11 shrink-0 rounded-full p-0"
+            class="h-11 rounded-xl px-4 text-[15px] leading-5"
             onMouseDown={keep}
-            onClick={props.controller.stop}
+            onClick={() => props.controller.submit({ alternate: true })}
           >
-            <Icon name="stop" size="small" />
-            <span class="sr-only">{i18n.t("ui.promptInput.stop")}</span>
+            {delivery === "steer" ? i18n.t("ui.promptInput.steer") : i18n.t("ui.promptInput.queue")}
           </Button>
-        }
-      >
-        <Show when={alternate()} keyed>
-          {(delivery) => (
-            <Button
-            type="button"
-              data-action="composer-alternate-delivery"
-              variant="neutral"
-              class="h-11 rounded-xl px-4 text-[15px] leading-5"
-              onMouseDown={keep}
-              onClick={() => props.controller.submit({ alternate: true })}
-            >
-              {delivery === "steer" ? i18n.t("ui.promptInput.steer") : i18n.t("ui.promptInput.queue")}
-            </Button>
-          )}
-        </Show>
-        <Button
-            type="button"
-          data-action="composer-submit"
-          variant="submit"
-          class="size-11 shrink-0 rounded-full p-0"
-          disabled={!props.controller.canSubmit()}
-          aria-busy={busy()}
-          onMouseDown={keep}
-          onClick={() => props.controller.submit()}
-        >
-          <span class="sr-only">{deliveryLabel(props.controller, i18n)}</span>
-          <Show
-            when={busy()}
-            fallback={<Icon name={props.controller.mode() === "shell" ? "arrow-undo-down" : "arrow-up"} />}
-          >
-            <Loader class="size-4" />
-          </Show>
-        </Button>
+        )}
       </Show>
+      <ComposerEditorSubmitButton controller={props.controller} touch />
     </div>
   )
 }
