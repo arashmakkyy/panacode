@@ -30,7 +30,7 @@ export default bench({
 
   targets: {
     web: web({
-      expect: { title: "Panacode" },
+      expect: { title: "Timeline collapse state regression" },
       viewport: { width: 1366, height: 768 },
       prepare: async (ctx) => {
         const edits = ctx.setupKey === "edits"

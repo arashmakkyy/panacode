@@ -9,6 +9,12 @@
   box-shadow: var(--shadow-resting);
 }
 
+/* In the model drawer the rows share the search field's gutter. Paint the card edge inside it. */
+[data-brand="panacode"] [data-slot="model-selector-drawer"] [data-component="settings-list"][data-variant="catalog"] {
+  border-width: 0;
+  box-shadow: inset 0 0 0 1px var(--border), var(--shadow-resting);
+}
+
 /* Select trigger: bordered control, darkens on hover, chevron turns when open. */
 [data-brand="panacode"] [data-component="select-v2"] {
   height: 34px;

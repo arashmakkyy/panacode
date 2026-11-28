@@ -74,3 +74,8 @@
     transform: translateY(-2px);
   }
 }
+
+.source-card { position: relative; }
+.source-card > .source-passage { display: none; position: absolute; bottom: calc(100% + 5px); left: 0; z-index: 2; width: max-content; max-width: min(230px, 95vw); padding: 9px 11px; border: 1px solid var(--border-subtle); border-radius: 9px; background: var(--surface); color: var(--foreground); box-shadow: var(--v2-elevation-floating); white-space: normal; }
+.source-card:is(:hover,:focus-visible,[data-cited=true]) > .source-passage { display: block; }
+.source-cards [data-cited=true] { box-shadow: 0 0 0 1px var(--brand-highlight); }

@@ -19,6 +19,7 @@ import { useLocal, type ModelSelection } from "@/providers/models/selection"
 import { isFreeModel } from "@/providers/models/models"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { popularProviders } from "@/providers/catalog/providers"
+import { PANAAI_PROVIDER_ID } from "@/providers/catalog/labels"
 import { Button } from "@opencode/ui/button"
 import { Badge } from "@opencode/ui/badge"
 import { Dialog, DialogBody, DialogTitle } from "@opencode/ui/dialog"
@@ -339,7 +340,7 @@ export function ModelSelectorDrawer(props: {
       onManage={manage}
       model={props.model}
       provider={props.provider}
-      onConnect={connect}
+      onConnect={controller.canConnect() ? connect : undefined}
       chatgptPlan={chatgptPlan()}
       onClose={() => props.onClose?.()}
     />
@@ -485,6 +486,7 @@ function createModelSelectorController(input: {
   )
 
   return {
+    canConnect: createMemo(() => model.list().some((item) => item.provider.id !== PANAAI_PROVIDER_ID)),
     all: () => model.list().filter((item) => (input.provider() ? item.provider.id === input.provider() : true)),
     models: (search: string) => {
       const query = search.trim()
@@ -1015,19 +1017,16 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
             placeholder={language.t("dialog.model.search.placeholder")}
             trailing={
               <>
-                <Tooltip
-                  placement="top"
-                  gutter={4}
-                  value={language.t("command.provider.connect")}
-                  ignoreSafeArea={false}
-                >
-                  <IconButton
-                    variant="ghost-muted"
-                    icon={<Icon name="plus" size="small" />}
-                    aria-label={language.t("command.provider.connect")}
-                    onClick={connect}
-                  />
-                </Tooltip>
+                <Show when={controller.canConnect()}>
+                  <Tooltip placement="top" gutter={4} value={language.t("command.provider.connect")} ignoreSafeArea={false}>
+                    <IconButton
+                      variant="ghost-muted"
+                      icon={<Icon name="plus" size="small" />}
+                      aria-label={language.t("command.provider.connect")}
+                      onClick={connect}
+                    />
+                  </Tooltip>
+                </Show>
                 <Tooltip placement="top" gutter={4} value={language.t("dialog.model.manage")} ignoreSafeArea={false}>
                   <IconButton
                     variant="ghost-muted"

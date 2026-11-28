@@ -42,7 +42,7 @@ jobs:
       run:
         shell: bash
     env:
-      OPENCODE_CHANNEL: prod
+      OPENCODE_CHANNEL: ${{ (github.ref == 'refs/heads/arc-redesign' || inputs.ref == 'arc-redesign') && !inputs.release_tag && 'dev' || 'prod' }}
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
       NODE_OPTIONS: --max-old-space-size=6144
       GH_TOKEN: ${{ github.token }}

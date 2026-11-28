@@ -3,22 +3,23 @@ import { fixture, installStressSessionTabs } from "../utils/session-fixture"
 import { sessionHref } from "../utils/app"
 import { openWithDirection } from "../utils/direction"
 import { mockOpenCodeServer } from "../utils/mock-server"
+import { openDraft } from "../utils/workspace"
 import { expectAppVisible } from "../utils/waits"
 
 for (const direction of ["ltr", "rtl"] as const) {
   for (const paid of [true, false]) {
-    test(`mobile model and variant pickers use drawers with ${paid ? "paid" : "free"} models in ${direction}`, async ({
+    test(`mobile model drawer and effort menu work with ${paid ? "paid" : "free"} models in ${direction}`, async ({
       page,
     }, testInfo) => {
       await page.setViewportSize({ width: 390, height: 844 })
       await openPickerSession(page, direction, paid)
       const composer = page.locator('[data-component="composer"]')
-      const variant = composer.getByRole("button", { name: "Choose model variant", exact: true })
-      await expect(variant).toHaveText("balanced")
+      const variant = composer.getByRole("button", { name: /^Choose effort:/ })
+      await expect(variant).toHaveAccessibleName(/^Choose effort: balanced$/i)
       await variant.click()
-      const variants = page.getByRole("dialog", { name: "Choose model variant", exact: true })
-      await expect(variants.getByRole("button", { name: "balanced", exact: true })).toHaveAttribute(
-        "aria-pressed",
+      const variants = page.getByRole("menu")
+      await expect(variants.getByRole("menuitemradio", { name: /^balanced$/i })).toHaveAttribute(
+        "aria-checked",
         "true",
       )
       await expect(variants.getByRole("button", { name: "Close", exact: true })).toHaveCount(0)
@@ -29,9 +30,11 @@ for (const direction of ["ltr", "rtl"] as const) {
       await expect(variants).toBeHidden()
       await expect(variant).toBeFocused()
       await variant.click()
-      await variants.getByRole("button", { name: "high", exact: true }).click()
+      await variants.getByRole("menuitemradio", { name: /^high$/i }).click()
+      await expect(variants.getByRole("menuitemradio", { name: /^high$/i })).toHaveAttribute("aria-checked", "true")
+      await page.keyboard.press("Escape")
       await expect(variants).toBeHidden()
-      await expect(variant).toHaveText("high")
+      await expect(variant).toHaveAccessibleName(/^Choose effort: high$/i)
       await expect(variant).toBeFocused()
 
       const model = composer.locator('[data-action="composer-model"]')
@@ -125,8 +128,9 @@ for (const direction of ["ltr", "rtl"] as const) {
   test(`desktop model button opens the model dialog in ${direction}`, async ({ page }) => {
     const { composer, model, variant, dialog } = await openDesktopPicker(page, direction)
     await variant.click()
-    await page.getByRole("menuitemradio", { name: "high", exact: true }).click()
-    await expect(variant).toHaveText("high")
+    await page.getByRole("menuitemradio", { name: /^high$/i }).click()
+    await page.keyboard.press("Escape")
+    await expect(variant).toHaveAccessibleName(/^Choose effort: high$/i)
     await expect(model).toHaveAttribute("data-control-type", "dialog")
     await model.click()
     await expect(dialog.getByRole("combobox", { name: "Search models", exact: true })).toBeFocused()
@@ -153,7 +157,7 @@ for (const direction of ["ltr", "rtl"] as const) {
     await flyout.getByRole("menuitemradio", { name: "max", exact: true }).click()
     await expect(dialog).toBeHidden()
     await expect(model).toHaveText("Mobile Model B")
-    await expect(variant).toHaveText("max")
+    await expect(variant).toHaveAccessibleName(/^Choose effort: max$/i)
   })
 
   test(`model dialog arrow keys stage a variant in ${direction}`, async ({ page }) => {
@@ -167,7 +171,7 @@ for (const direction of ["ltr", "rtl"] as const) {
     await expect(rowA).toContainText("high")
     await search.press("Escape")
     await expect(dialog).toBeHidden()
-    await expect(variant).toHaveText("balanced")
+    await expect(variant).toHaveAccessibleName(/^Choose effort: balanced$/i)
 
     await model.click()
     await search.fill("Mobile Model A")
@@ -181,7 +185,7 @@ for (const direction of ["ltr", "rtl"] as const) {
     await search.press("Enter")
     await expect(dialog).toBeHidden()
     await expect(model).toHaveText("Mobile Model A")
-    await expect(variant).toHaveText("high")
+    await expect(variant).toHaveAccessibleName(/^Choose effort: high$/i)
     await expect(composer.getByRole("textbox", { name: "Prompt", exact: true })).toBeFocused()
   })
 
@@ -197,7 +201,7 @@ for (const direction of ["ltr", "rtl"] as const) {
     await search.press("Enter")
     await expect(dialog).toBeHidden()
     await expect(model).toHaveText("Mobile Model A")
-    await expect(variant).toHaveText("high")
+    await expect(variant).toHaveAccessibleName(/^Choose effort: high$/i)
     await expect(prompt).toBeFocused()
     await expect(prompt).toHaveText("keep me")
   })
@@ -312,12 +316,13 @@ test.describe("touch composer pickers", () => {
     await openPickerSession(page, "ltr", true)
     expect(await page.evaluate(() => matchMedia("(hover: none)").matches)).toBe(true)
     const composer = page.locator('[data-component="composer"]')
-    const variant = composer.getByRole("button", { name: "Choose model variant", exact: true })
+    const variant = composer.getByRole("button", { name: /^Choose effort:/ })
     await variant.tap()
-    const variants = page.getByRole("dialog", { name: "Choose model variant", exact: true })
-    await variants.getByRole("button", { name: "default", exact: true }).tap()
+    const variants = page.getByRole("menu")
+    await variants.getByRole("menuitemradio", { name: /^default$/i }).tap()
+    await page.keyboard.press("Escape")
     await expect(variants).toBeHidden()
-    await expect(variant).toHaveText("default")
+    await expect(variant).toHaveAccessibleName(/^Choose effort: default$/i)
     await page.touchscreen.tap(5, 300)
     await expect(variant).toHaveCSS("pointer-events", "auto")
     await expect(variant).toHaveCSS("opacity", "1")
@@ -326,7 +331,7 @@ test.describe("touch composer pickers", () => {
     await expect
       .poll(() => variants.evaluate((element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).m42))
       .toBe(0)
-    await page.locator('[data-slot="mobile-drawer-overlay"]').tap({ position: { x: 10, y: 10 } })
+    await page.touchscreen.tap(5, 300)
     await expect(variants).toBeHidden()
 
     await composer.locator('[data-action="composer-model"]').tap()
@@ -347,7 +352,7 @@ async function openDesktopPicker(page: Page, direction: "ltr" | "rtl") {
   return {
     composer,
     model: composer.locator('[data-action="composer-model"]'),
-    variant: composer.getByRole("button", { name: "Choose model variant", exact: true }),
+    variant: composer.getByRole("button", { name: /^Choose effort:/ }),
     dialog: page.getByRole("dialog", { name: "Select model", exact: true }),
   }
 }
@@ -404,3 +409,25 @@ async function openPickerSession(page: Page, direction: "ltr" | "rtl", paid: boo
   await expectAppVisible(page.getByRole("textbox", { name: "Prompt", exact: true }))
   await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeEditable()
 }
+
+test("PanaAI lists sibling models and keeps their full routing identifiers", async ({ page }) => {
+  const flash = "deepseek-v4-flash"
+  const pro = "panaai/deepseek-v4-pro"
+
+  const models = Object.fromEntries([flash, pro].map((id) => [
+    id, { id, name: id, family: "deepseek-v4", time: { released: 1680307200000 } },
+  ]))
+
+  await openDraft(page, {
+    name: "PanaAI catalogue",
+    provider: { all: [{ id: "panaai", name: "PanaAI", models }], connected: ["panaai"], default: { providerID: "panaai", modelID: flash } },
+  })
+  const model = page.locator('form[data-component="composer"] [data-action="composer-model"]:visible')
+  await model.click()
+  const dialog = page.getByRole("dialog", { name: "Select model" })
+  await expect(dialog.getByRole("button", { name: "Connect an integration" })).toHaveCount(0)
+  const option = dialog.locator(`[data-option-key="panaai:${pro}"]`)
+  await expect(option).toContainText("deepseek-v4-pro")
+  await option.click()
+  await expect(model).toHaveAccessibleName("deepseek-v4-pro")
+})

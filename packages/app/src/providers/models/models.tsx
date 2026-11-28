@@ -1,7 +1,7 @@
 import { type Accessor, createMemo } from "solid-js"
 import { createSimpleContext } from "@opencode/ui/context"
 import { useProviders } from "@/providers/catalog/providers"
-import { modelDisplayName } from "@/providers/catalog/labels"
+import { modelDisplayName, PANAAI_PROVIDER_ID } from "@/providers/catalog/labels"
 import { useGlobal } from "@/runtime/server/runtime"
 
 type ModelKey = { providerID: string; modelID: string }
@@ -132,7 +132,8 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
 
     if (state === "hide") return false
 
-    if (state === "show") return true
+    // The PanaAI catalogue is the account’s available models, including siblings released on the same date.
+    if (state === "show" || model.providerID === PANAAI_PROVIDER_ID) return true
 
     if (latestSet().has(key) || freeSet().has(key)) return true
 

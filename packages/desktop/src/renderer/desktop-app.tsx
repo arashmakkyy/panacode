@@ -18,6 +18,7 @@ import { useTheme } from "@opencode/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, lazy, onCleanup, Show, Suspense, untrack } from "solid-js"
 import type { ElectronAPI } from "./api-types"
+import type { OnboardingState } from "./onboarding/machine"
 import { DesktopFirstLaunchOnboarding } from "./onboarding"
 import { createDesktopPlatform } from "./platform"
 import { bindDesktopMenu } from "./platform/menu"
@@ -47,6 +48,7 @@ const offline = { url: "http://127.0.0.1:0" }
 const MigrationStatus = lazy(() => import("./migration-status").then((module) => ({ default: module.MigrationStatus })))
 
 export function DesktopApp(props: { api: ElectronAPI; version: string }) {
+  const [onboardingStage, setOnboardingStage] = createSignal<OnboardingState["status"]>("waiting")
   const windowState = { id: props.api.getWindowID(), version: props.version }
   const initialUrl = getLastActiveUrl(windowState.id)
   const url = new URL(initialUrl, "http://localhost")
@@ -113,6 +115,7 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
           <AppInterface servers={servers()} router={router}>
             <DesktopStartupReady dispatch={startup.dispatch} />
             <DesktopFirstLaunchOnboarding
+              onStage={setOnboardingStage}
               api={props.api}
               initialUrl={initialUrl}
               pending={selectFirstLaunch(startup.state())}
@@ -154,6 +157,7 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
             }}
           >
             <LoadingSplash
+              stage={onboardingStage()}
               firstLaunch={selectFirstLaunchSplash(startup.state())}
               deep={selectSplashDeep(startup.state())}
               platform={platform}

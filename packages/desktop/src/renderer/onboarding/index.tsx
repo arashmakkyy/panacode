@@ -8,12 +8,14 @@ import {
   selectOnboardingWaiting,
   transitionOnboarding,
   type OnboardingEffect,
+  type OnboardingState,
   type OnboardingEvent,
 } from "./machine"
 
 export function DesktopFirstLaunchOnboarding(props: {
   api: ElectronAPI
   initialUrl: string
+  onStage?: (stage: OnboardingState["status"]) => void
   pending: boolean
   /** Startup already shows the app. */
   revealed: boolean
@@ -141,6 +143,7 @@ export function DesktopFirstLaunchOnboarding(props: {
     })
   })
 
+  createEffect(() => props.onStage?.(state().status))
   onCleanup(() => dispatch({ type: "disposed" }))
 
   return null

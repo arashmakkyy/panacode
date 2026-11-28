@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import { holdRoute, NO_PROVIDER, sessionHref } from "../utils/app"
 import type { MockServerConfig } from "../utils/mock-server"
-import { mockWorkspace } from "../utils/workspace"
+import { mockWorkspace, openSettings } from "../utils/workspace"
 import { expectSessionTitle } from "../utils/waits"
 
 const directory = "C:\\OpenCode\\main"
@@ -692,3 +692,32 @@ for (const surface of ["popover", "dialog"] as const) {
     await expect(view.panel.getByRole("button", { name: `View error for ${names[2]}`, exact: true })).toBeInViewport()
   })
 }
+
+test("connection filters recount and one undo restores multiple pending removals", async ({ page }) => {
+  const { settings } = await openSettings(page, {
+    name: "Connection filters", provider: NO_PROVIDER,
+    mcp: [
+      { name: "first-server", status: { status: "connected" } },
+      { name: "second-server", status: { status: "disabled" } },
+    ],
+  })
+
+  await settings.getByRole("tab", { name: "Extensions", exact: true }).click()
+  const panel = settings.locator('[data-component="panacode-mcp-servers"]')
+  const filters = panel.getByRole("group", { name: "Filter connections" })
+  await expect(filters.getByRole("button", { name: "All 2" })).toHaveAttribute("aria-pressed", "true")
+  await filters.getByRole("button", { name: "Connected 1" }).click()
+  await expect(panel.locator("[data-server]")).toHaveCount(1)
+  await filters.getByRole("button", { name: "All 2" }).click()
+
+  for (const id of ["second-server", "first-server"]) {
+    const row = panel.locator(`[data-server="${id}"]`)
+    await row.locator(".pc-mcp-rowMain").click()
+    await row.getByRole("button", { name: "Remove", exact: true }).click()
+  }
+
+  await expect(panel.locator(".pc-mcp-undo")).toContainText("Removed 2 servers")
+  await page.keyboard.press("Control+z")
+  await expect(panel.locator("[data-server]")).toHaveCount(2)
+  await expect(panel.locator(".pc-mcp-undo")).toHaveCount(0)
+})

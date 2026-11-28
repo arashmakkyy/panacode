@@ -1,5 +1,5 @@
 import { DropdownMenu } from "@kobalte/core/dropdown-menu"
-import { createMemo, For, Show, splitProps, type JSX } from "solid-js"
+import { createMemo, Index, Show, splitProps, type JSX } from "solid-js"
 import "./parts.css"
 
 /**
@@ -131,13 +131,13 @@ export function EffortMenu(props: {
               onKeyDown={move}
             >
               <span class="pc-aic-effortThumb" aria-hidden="true" />
-              <For each={props.options}>
+              <Index each={props.options}>
                 {(option) => (
-                  <DropdownMenu.RadioItem value={option.id} class="pc-aic-effortItem" closeOnSelect={false}>
-                    <span class="pc-aic-effortText">{option.label}</span>
+                  <DropdownMenu.RadioItem value={option().id} class="pc-aic-effortItem" closeOnSelect={false} onPointerUp={(event) => event.currentTarget.focus({ preventScroll: true })}>
+                    <span class="pc-aic-effortText">{option().label}</span>
                   </DropdownMenu.RadioItem>
                 )}
-              </For>
+              </Index>
             </div>
           </DropdownMenu.RadioGroup>
         </DropdownMenu.Content>

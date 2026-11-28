@@ -352,6 +352,10 @@
   [data-keybind-id] {
     font-variant-numeric: tabular-nums;
   }
+  .project-custom-color { display: inline-grid; align-items: center; width: 24px; height: 24px; }
+  .project-custom-color input { width: 22px; height: 22px; padding: 0; cursor: pointer; border: 1px solid var(--border-subtle); border-radius: 6px; overflow: hidden; }
+  .project-custom-color input::-webkit-color-swatch-wrapper { padding: 0; }
+  .project-custom-color input::-webkit-color-swatch { border: 0; }
   .project-settings-color[aria-pressed="true"] {
     outline: 2px solid var(--foreground);
     outline-offset: 1px;

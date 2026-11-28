@@ -9,6 +9,7 @@ const decodeURL = Schema.decodeUnknownOption(Schema.Struct({ url: Schema.String 
 export type SourceResult = {
   url: string
   title?: string
+  excerpt?: string
   /** The hostname without `www.`, as shown and as the letter tile's seed. */
   site: string
   /** The full hostname, where its favicon lives. */
@@ -100,21 +101,32 @@ function search(tool: SessionMessageAssistantTool): SourceStep {
 // The websearch tool keeps its structured results out of the message and writes each one as a `## [title](url)`
 // heading in its text content (packages/core/src/tool/plugin/websearch.ts); a result without a title repeats its URL.
 function results(text: string) {
-  return text.split("\n").flatMap((line): SourceResult[] => {
-    if (!line.startsWith("## [") || !line.endsWith(")")) return []
+  const items: SourceResult[] = []
+  let current: SourceResult | undefined
 
-    const split = line.lastIndexOf("](")
+  for (const line of text.split("\n")) {
+    const divider = line.startsWith("## [") && line.endsWith(")") ? line.lastIndexOf("](") : -1
 
-    if (split < 4) return []
+    if (divider >= 4) {
+      current = source(line.slice(divider + 2, -1))
 
-    const result = source(line.slice(split + 2, -1))
+      if (current) {
+        const title = line.slice(4, divider).trim()
 
-    if (!result) return []
+        if (title && title !== current.url) current.title = title
+        items.push(current)
+      }
 
-    const title = line.slice(4, split).trim()
+      continue
+    }
 
-    return [{ ...result, title: title && title !== result.url ? title : undefined }]
-  })
+    const passage = line.trim()
+
+    if (!current || !passage || passage.startsWith("Published:") || (current.excerpt?.length ?? 0) >= 260) continue
+    current.excerpt = [current.excerpt, passage].filter(Boolean).join(" ").slice(0, 260)
+  }
+
+  return items
 }
 
 function source(url: string): SourceResult | undefined {

@@ -66,7 +66,7 @@ export const PROJECT_AVATAR_VARIANTS = [
 export type ProjectAvatarVariant = (typeof PROJECT_AVATAR_VARIANTS)[number]
 
 // "outline" is a neutral, muted style (e.g. recently closed projects) and is not part of the color rotation.
-export type ProjectAvatarStyle = ProjectAvatarVariant | "outline"
+export type ProjectAvatarStyle = ProjectAvatarVariant | `#${string}` | "outline"
 
 // Project IDs hash the normalized origin remote (`git-remote:github.com/anomalyco/opencode`); V1 used the root commit.
 const OPENCODE_PROJECT_IDS = new Set([
@@ -85,7 +85,13 @@ export function getProjectAvatarSource(id?: string, icon?: { color?: string; url
   return icon?.url
 }
 
-export function getProjectAvatarVariant(key?: string): ProjectAvatarVariant {
+export function isCustomProjectColor(key?: string): key is `#${string}` {
+  return !!key && /^#[0-9a-f]{6}$/i.test(key)
+}
+
+export function getProjectAvatarVariant(key?: string): ProjectAvatarVariant | `#${string}` {
+  if (isCustomProjectColor(key)) return key
+
   if (key === "mint") return "cyan"
 
   if (key === "lime") return "green"
@@ -164,6 +170,24 @@ export function ProjectAvatar(props: ProjectAvatarProps) {
     "style",
   ])
 
+  const customStyle = () => {
+    const hex = split.variant
+
+    if (!isCustomProjectColor(hex)) return
+
+    const [r, g, b] = [1, 3, 5].map((at) => {
+      const value = parseInt(hex.slice(at, at + 2), 16) / 255
+
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+    })
+
+    return {
+      "--project-avatar-bg": hex,
+      "--project-avatar-border": `color-mix(in srgb, ${hex} 76%, black)`,
+      color: .2126 * r + .7152 * g + .0722 * b > .179 ? "black" : "white",
+    }
+  }
+
   const generated = () =>
     split.src || split.variant === "outline" || avatarStyle() === "letters" ? undefined : split.generated
 
@@ -181,6 +205,7 @@ export function ProjectAvatar(props: ProjectAvatarProps) {
       <div
         data-slot="project-avatar-surface"
         data-variant={split.variant ?? "gray"}
+        style={customStyle()}
         data-has-image={split.src ? "" : undefined}
         data-generated={generated() ? "" : undefined}
       >

@@ -309,3 +309,30 @@ test("denied clipboard access offers full selectable reply and tool output", asy
   await page.getByRole("dialog").getByRole("button", { name: "Close" }).click()
   await expect(field).toHaveCount(0)
 })
+
+test("source cards keep citations, real passages and overflow in the answer", async ({ page }) => {
+  const refs = ["one", "two", "three", "four"].map((name) => ({
+    name,
+    url: `https://${name}.example.com/guide`,
+  }))
+
+  const output = refs.map(({ name, url }) => `## [Guide ${name}](${url})\n\nExcerpt from guide ${name}.`).join("\n\n")
+  await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage([
+        toolPart("prt_arc_search", "websearch", "completed", { query: "Guides" }, { output }),
+        textPart("prt_arc_answer", `See [the first guide](${refs[0].url}).`),
+      ]),
+    ],
+  })
+  const cards = page.getByRole("region", { name: "Sources", exact: true })
+  await expect(cards.getByRole("link")).toHaveCount(3)
+  await page.getByRole("link", { name: "the first guide", exact: true }).focus()
+  await expect(cards.locator('[data-cited=true]')).toContainText("Excerpt from guide one.")
+  await cards.getByRole("button", { name: "+1 more" }).click()
+  await expect(cards.getByRole("link")).toHaveCount(4)
+  await expect(cards.getByRole("link").last()).toHaveAttribute("href", refs[3].url)
+  await cards.getByRole("button", { name: "Show fewer" }).click()
+  await expect(cards.getByRole("link")).toHaveCount(3)
+})

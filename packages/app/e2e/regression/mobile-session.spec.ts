@@ -440,3 +440,22 @@ async function touchDrag(
   await client.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ ...input.to, id: 1 }] })
   await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
 }
+
+test("the context legend filters the split bar without changing reported usage", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await mockStressTimeline(page)
+  await seed(page, { usedProjects: { local: [fixture.project.id] }, tabs: [fixture.targetID] })
+  await page.goto(sessionHref(fixture.targetID))
+  await page.getByRole("tab", { name: "More...", exact: true }).click()
+  await page.getByRole("dialog", { name: "More options" }).getByRole("button", { name: "Usage", exact: true }).click()
+  const window = page.getByRole("region", { name: "Context window" })
+  const legend = window.getByRole("group", { name: "Token breakdown" })
+  const input = legend.getByRole("button", { name: /Input.*100/ })
+  await expect(input).toHaveAttribute("aria-pressed", "true")
+  const summary = await window.locator(".context-window-count").innerText()
+  await input.click()
+  await expect(window.locator(".context-shares [data-tone='0']")).toHaveCount(0)
+  await expect(window.locator(".context-window-count")).toHaveText(summary)
+  await input.click()
+  await expect(window.locator(".context-shares [data-tone='0']")).toHaveCount(1)
+})

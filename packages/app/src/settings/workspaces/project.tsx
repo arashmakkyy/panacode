@@ -2,6 +2,7 @@ import { Icon } from "@opencode/ui/icon"
 import {
   displayName,
   getProjectAvatarVariant,
+  isCustomProjectColor,
   ProjectAvatar,
   PROJECT_AVATAR_VARIANTS,
 } from "@opencode/ui/project-avatar"
@@ -161,6 +162,11 @@ export const SettingsProjectGeneral: Component<{
                     )
                   }}
                 </For>
+                <label class="project-custom-color" title={language.t("panacode.project.customColor")}>
+                  <input type="color" aria-label={language.t("panacode.project.customColor")}
+                    value={isCustomProjectColor(model.view().color) ? model.view().color : "#f5c347"}
+                    onChange={(event) => model.setColor(event.currentTarget.value)} />
+                </label>
               </div>
             </SettingsRow>
           </Show>

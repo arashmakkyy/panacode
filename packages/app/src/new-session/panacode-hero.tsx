@@ -25,7 +25,7 @@ export function PanacodeNewSessionSuggestions(props: { onPick: (prompt: string) 
 
   return (
     <section class="starter-prompts" aria-label={language.t("panacode.starters.title")}>
-      <Tabs value={category()} onChange={(next) => {
+      <Tabs variant="pill" value={category()} onChange={(next) => {
         setCategory(next)
         setOffset(0)
       }}>
