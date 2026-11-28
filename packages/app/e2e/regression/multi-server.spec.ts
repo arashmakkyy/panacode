@@ -245,6 +245,7 @@ test("one server that never answers the inbox index does not hide the other serv
 test("an open session stays visible while its server stops answering", async ({ page }) => {
   const late = session({ id: "ses_server_a_late", directory: directoryA, title: "Late session" })
   await setup(page, { tabs: [sessionA.id, late.id], a: { sessions: [sessionA] } })
+  await seed(page, { settings: { appearance: { tabLayout: "horizontal" } } })
   await holdRoute(page, new RegExp(`/api/session/${late.id}(\\?|$)`), { method: "GET" })
   await page.clock.install()
   await page.goto(sessionHref(sessionA.id))

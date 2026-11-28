@@ -12,7 +12,9 @@ import { emitIpcEvent } from "../ipc-events"
 import type { DesktopPaths } from "../paths"
 import { BACKGROUND_COLOR_KEY, PINCH_ZOOM_ENABLED_KEY, ZOOM_LEVEL_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
-import { platformFrame, savedBackgroundColor, storedBackgroundColor, storedZoomLevel, titlebarOverlay, tone } from "./defaults"
+import type { BackgroundTheme } from "../../shared/ipc-rpc/app"
+import { recordWindowColor } from "./background"
+import { platformFrame, storedBackgroundColor, storedZoomLevel, titlebarOverlay, tone } from "./defaults"
 
 const titlebarThemes = new WeakMap<BrowserWindow, Partial<TitlebarTheme>>()
 
@@ -46,10 +48,14 @@ export function setDockIcon(path: Path.Path, paths: DesktopPaths.Resolved) {
   if (!icon.isEmpty()) app.dock?.setIcon(icon)
 }
 
-export function setBackgroundColor(color: string) {
+export function setBackgroundColor(color: string, theme?: BackgroundTheme) {
   // The renderer reports its theme background on every boot; electron-store rewrites and fsyncs the
   // settings file on each set, so only persist a change.
-  if (getBackgroundColor() !== color) getStore().set(BACKGROUND_COLOR_KEY, color)
+  const store = getStore()
+  const previous = store.get(BACKGROUND_COLOR_KEY)
+  const next = recordWindowColor(previous, color, theme)
+
+  if (previous !== next) store.set(BACKGROUND_COLOR_KEY, next)
   backgroundColor = color
   BrowserWindow.getAllWindows().forEach((win) => {
     win.setBackgroundColor(color)
@@ -59,7 +65,7 @@ export function setBackgroundColor(color: string) {
 }
 
 export function getBackgroundColor() {
-  return backgroundColor ?? savedBackgroundColor()
+  return backgroundColor ?? storedBackgroundColor()
 }
 
 export function setTitlebar(win: BrowserWindow, theme: Partial<TitlebarTheme> = {}) {

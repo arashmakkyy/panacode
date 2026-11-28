@@ -27,11 +27,7 @@
 
 [data-brand="panacode"] [data-panacode-shell="home"],
 [data-brand="panacode"] [data-component="new-session"] {
-  background: var(--surface);
   color: var(--foreground);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-panel);
-  box-shadow: var(--shadow-raised);
 }
 
 [data-brand="panacode"] [data-slot="home-sessions-list"],

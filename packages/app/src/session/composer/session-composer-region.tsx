@@ -14,6 +14,9 @@ type SessionComposerRegionState = Pick<
   | "elicitationRequest"
   | "websearch"
   | "permissionRequest"
+  | "permissionRequests"
+  | "permissionSessionTitle"
+  | "permissionHistory"
   | "permissionResponding"
   | "decide"
   | "blocked"
@@ -86,10 +89,13 @@ export function SessionComposerRegion(props: {
                   {(request) => (
                     <PanacodePermissionAdapter
                       request={request}
+                      requests={controller.state.permissionRequests()}
+                      sessionTitle={controller.state.permissionSessionTitle}
                       responding={controller.state.permissionResponding()}
-                      onDecide={(response) => {
+                      history={controller.state.permissionHistory()}
+                      onDecide={(response, message, id) => {
                         controller.onResponseSubmit()
-                        controller.state.decide(response)
+                        controller.state.decide(response, message, id ?? request.id)
                       }}
                     />
                   )}

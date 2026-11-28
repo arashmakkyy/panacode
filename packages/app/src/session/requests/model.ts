@@ -7,7 +7,7 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useLanguage } from "@/runtime/i18n/language"
 import { projectSettingsKey, useSettings } from "@/settings/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
-import { sessionPermissionRequest, sessionFormRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
+import { sessionFormRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { createWebSearchRequest } from "./websearch"
 import { createSessionBackground } from "@/session/requests/background"
 import { createSteerBackground } from "@/session/requests/steer-background"
@@ -25,6 +25,10 @@ import {
   type PermissionReplyState,
 } from "./permission-machine"
 
+type PermissionSummary = Pick<PermissionRequest, "id" | "sessionID" | "action" | "resources">
+
+export type ConfirmedPermission = { request: PermissionSummary; decision: PermissionDecision; at: number }
+
 export function createSessionRequestModel() {
   const params = useParams()
   const sdk = useWorkspaceLocation()
@@ -35,10 +39,20 @@ export function createSessionRequestModel() {
   const settings = useSettings()
   // Manual replies from the dock, by request. Requests nobody answered from this dock have no entry.
   const [replies, setReplies] = createSignal<Readonly<Record<string, PermissionReplyState>>>({})
-  const runs = new Map<string, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
+  const [permissionHistory, setPermissionHistory] = createSignal<ConfirmedPermission[]>([])
+  const runs = new Map<string, { controller: AbortController; timer: ReturnType<typeof setTimeout>; request: PermissionSummary }>()
   const replyState = (requestID: string) => replies()[requestID] ?? INITIAL_PERMISSION_REPLY_STATE
 
-  const stop = serverSDK.event.on("permission.replied", (event) => dispatch(event.data.requestID, { type: "resolved" }))
+  function confirmed(requestID: string, decision: PermissionDecision) {
+    const run = runs.get(requestID)
+
+    if (run) setPermissionHistory((previous) => [{ request: run.request, decision, at: Date.now() }, ...previous].slice(0, 20))
+  }
+
+  const stop = serverSDK.event.on("permission.replied", (event) => {
+    confirmed(event.data.requestID, event.data.reply)
+    dispatch(event.data.requestID, { type: "resolved" })
+  })
 
   onCleanup(() => {
     stop()
@@ -129,20 +143,21 @@ export function createSessionRequestModel() {
     return data.session.form.list("global", ref)?.find((item) => item.metadata?.kind === "mcp-elicitation")
   })
 
-  const permissionRequest = createMemo((): PermissionRequest | undefined => {
+  const permissionRequests = createMemo((): PermissionRequest[] => {
     const id = params.id
 
     const enabled = settings.permissions.autoApproves(
       projectSettingsKey(serverSDK.scope, id ? data.session.get(id)?.projectID : undefined),
     )
 
-    return sessionPermissionRequest(
-      data.session.list(),
-      data.session.permission.list,
-      id,
-      (item) => needsUser(autoApprove.state(item.id), enabled) && !isPermissionReplied(replyState(item.id)),
+    return sessionTreeIDs(data.session.list(), id).flatMap((sessionID) =>
+      (data.session.permission.list(sessionID) ?? []).filter(
+        (item) => needsUser(autoApprove.state(item.id), enabled) && !isPermissionReplied(replyState(item.id)),
+      ),
     )
   })
+
+  const permissionRequest = createMemo(() => permissionRequests().at(0))
 
   const blocked = createMemo(() => {
     const id = params.id
@@ -195,26 +210,26 @@ export function createSessionRequestModel() {
   const permissionResponding = createMemo(() => {
     const id = lastPermissionID()
 
-    return !!id && isPermissionResponding(replyState(id))
+    return (!!id && isPermissionResponding(replyState(id))) || permissionRequests().some((item) => isPermissionResponding(replyState(item.id)))
   })
 
-  const decide = (decision: PermissionDecision, message?: string) => {
-    const perm = permissionRequest()
+  const decide = (decision: PermissionDecision, message?: string, requestID?: string) => {
+    const perm = requestID ? permissionRequests().find((item) => item.id === requestID) : permissionRequest()
 
-    if (!perm) return
-    dispatch(perm.id, { type: "decide", sessionID: perm.sessionID, decision, message })
+    if (!perm || (decision === "always" && !perm.save?.length)) return
+    dispatch(perm.id, { type: "decide", sessionID: perm.sessionID, decision, message }, perm)
   }
 
-  function dispatch(requestID: string, event: PermissionReplyEvent) {
+  function dispatch(requestID: string, event: PermissionReplyEvent, request?: PermissionSummary) {
     const state = untrack(() => replyState(requestID))
     const result = transitionPermissionReply(state, event)
 
     if (result.state !== state) setReplies((current) => pruneReplied({ ...current, [requestID]: result.state }))
 
-    result.effects.forEach((effect) => execute(requestID, effect))
+    result.effects.forEach((effect) => execute(requestID, effect, request))
   }
 
-  function execute(requestID: string, effect: PermissionReplyEffect) {
+  function execute(requestID: string, effect: PermissionReplyEffect, request?: PermissionSummary) {
     if (effect.type === "toast-failed") {
       showToast({ title: language.t("common.requestFailed"), description: effect.error })
 
@@ -230,10 +245,13 @@ export function createSessionRequestModel() {
       return
     }
 
+    // Only a decision can start a reply. Keep the request that owned the click through any dock change.
+    if (!request) return
     const controller = new AbortController()
 
     runs.set(requestID, {
       controller,
+      request: { id: requestID, sessionID: request.sessionID, action: request.action, resources: request.resources.slice(0, 1) },
       timer: setTimeout(
         () => dispatch(requestID, { type: "reply.timed-out", attempt: effect.attempt }),
         effect.timeoutMs,
@@ -246,12 +264,16 @@ export function createSessionRequestModel() {
           sessionID: effect.sessionID,
           requestID,
           decision: effect.decision,
-          ...(effect.message ? { message: effect.message } : {}),
+          scope: effect.decision === "reject" ? "request" : undefined,
+          message: effect.message || undefined,
         },
         { signal: controller.signal },
       )
       .then(
-        () => dispatch(requestID, { type: "reply.succeeded", attempt: effect.attempt }),
+        () => {
+          if (runs.get(requestID)?.controller === controller) confirmed(requestID, effect.decision)
+          dispatch(requestID, { type: "reply.succeeded", attempt: effect.attempt })
+        },
         (error) =>
           dispatch(
             requestID,
@@ -272,6 +294,9 @@ export function createSessionRequestModel() {
     elicitationRequest,
     websearch,
     permissionRequest,
+    permissionRequests,
+    permissionSessionTitle: (id: string) => data.session.get(id)?.title ?? id,
+    permissionHistory,
     permissionResponding,
     background: {
       blocking,

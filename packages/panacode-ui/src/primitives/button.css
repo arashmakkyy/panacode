@@ -1,4 +1,4 @@
-/* Arc button. Primary is the foreground fill (reference), not a separate accent chip. */
+/* Panacode action buttons. */
 [data-component="panacode-button"],
 [data-component="panacode-icon-button"] {
   position: relative;
@@ -41,9 +41,9 @@
 }
 
 [data-component="panacode-button"][data-variant="primary"] {
-  color: var(--background);
-  background: var(--foreground);
-  border-color: var(--foreground);
+  color: var(--accent-foreground);
+  background: var(--primary-fill);
+  border-color: var(--primary-border);
 }
 [data-component="panacode-button"][data-variant="secondary"] {
   color: var(--foreground);
@@ -85,7 +85,7 @@
 
 @media (hover: hover) and (pointer: fine) {
   [data-component="panacode-button"][data-variant="primary"]:hover:not(:disabled) {
-    opacity: 0.91;
+    background: var(--primary-hover);
     box-shadow: var(--shadow-resting);
   }
   [data-component="panacode-button"][data-variant="secondary"]:hover:not(:disabled),

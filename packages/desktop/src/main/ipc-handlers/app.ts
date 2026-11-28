@@ -41,7 +41,7 @@ export const appHandlers = AppRpcs.toLayer(
         finishFirstLaunchOnboarding(createDefaultProject).pipe(Effect.orDie),
       AppCheckAppExists: ({ appName }) => checkAppExists(appName).pipe(Effect.orDie),
       AppResolveAppPath: ({ appName }) => resolveAppPath(appName).pipe(Effect.orDie),
-      AppSetBackgroundColor: ({ color }) => Effect.sync(() => setBackgroundColor(color)),
+      AppSetBackgroundColor: ({ color, theme }) => Effect.sync(() => setBackgroundColor(color, theme)),
       AppGetSpellcheckEnabled: () => Effect.sync(getSpellcheckEnabled),
       AppSetSpellcheckEnabled: ({ enabled }) => Effect.sync(() => setSpellcheckEnabled(enabled)),
       AppExportDebugLogs: () => logging.exportDebug,

@@ -1,9 +1,44 @@
 import { describe, expect, test } from "bun:test"
 import { contrastRatio } from "../color"
+import { resolveThemeVariant } from "../resolve"
 import type { DesktopTheme, HexColor, ResolvedV2Theme } from "../types"
 import { resolveThemeV2, resolveThemeVariantV2, themeV2ToCss } from "./resolve"
 
 const theme: DesktopTheme = await Bun.file(new URL("../themes/oc-2.json", import.meta.url)).json()
+
+const panacode: DesktopTheme = await Bun.file(new URL("../themes/panacode.json", import.meta.url)).json()
+
+describe("Panacode workbench contrast", () => {
+  test.each(["light", "dark"] as const)("%s keeps readable text, controls and focus", (mode) => {
+    const tokens = { ...resolveThemeVariant(panacode[mode], mode === "dark"), ...resolveThemeV2(panacode)[mode] }
+    const solidHex = (value: string): value is HexColor => /^#[a-f0-9]{6}$/i.test(value)
+
+    const ratio = (text: string, surface: string) => {
+      const fg = tokens[text]
+      const bg = tokens[surface]
+
+      if (!solidHex(fg) || !solidHex(bg))
+        throw new Error(`Expected solid colours for ${text} on ${surface}`)
+
+      return contrastRatio(fg, bg)
+    }
+
+    for (const surface of ["v2-background-bg-base", "v2-background-bg-layer-01", "v2-background-bg-deep"]) {
+      for (const label of ["v2-text-text-base", "v2-text-text-muted", "v2-text-text-accent"])
+        expect(ratio(label, surface)).toBeGreaterThanOrEqual(4.5)
+
+      for (const edge of ["v2-border-border-focus", "v2-border-border-strong"])
+        expect(ratio(edge, surface)).toBeGreaterThanOrEqual(3)
+    }
+
+    for (const fill of ["v2-background-bg-accent", "pana-button-hover"])
+      expect(ratio("pana-button-text", fill)).toBeGreaterThanOrEqual(4.5)
+
+    for (const state of ["danger", "success", "warning", "info"])
+      expect(ratio(`v2-state-fg-${state}`, `v2-state-bg-${state}`)).toBeGreaterThanOrEqual(4.5)
+    expect(ratio("v2-icon-icon-inverse", "v2-background-bg-icon-button-contrast")).toBeGreaterThanOrEqual(3)
+  })
+})
 
 describe("icon emphasis", () => {
   test.each(["light", "dark"] as const)("OC-2 %s icons increase in contrast from faint to base", (mode) => {

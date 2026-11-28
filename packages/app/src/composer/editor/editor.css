@@ -96,3 +96,13 @@
   background: transparent !important;
   box-shadow: none !important;
 }
+
+[data-slot="new-session-content"] { padding-block: clamp(12px, 14dvh, 150px) 16px; }
+[data-slot="composer-touch-bar"] { justify-content: flex-end; }
+[data-slot="composer-touch-bar"] button { flex-shrink: 0; min-inline-size: 44px; min-block-size: 44px; }
+@media (max-height: 560px) {
+  [data-slot="new-session-content"] { padding-block: 8px; }
+  [data-component="new-session"] [data-component="panacode-composer-hero"] { margin-block: 4px 8px; }
+  [data-component="new-session"] [data-slot="hero-mark"] { display: none; }
+  [data-component="composer"] [data-component="composer-scroll"] { max-height: clamp(48px, 22dvh, 120px); }
+}

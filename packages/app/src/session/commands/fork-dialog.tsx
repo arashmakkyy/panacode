@@ -21,7 +21,7 @@ interface ForkableMessage {
 }
 
 function formatTime(date: Date): string {
-  return date.toLocaleTimeString(undefined, { timeStyle: "short" })
+  return date.toLocaleTimeString("en", { timeStyle: "short" })
 }
 
 export const DialogFork: Component = () => {

@@ -1,4 +1,4 @@
-/* Startup splash. Theme CSS vars may not be ready on first paint, so every var has a brand-paper fallback. */
+/* Startup splash. Use system colours until the theme preload supplies the selected palette. */
 [data-component="startup-splash"],
 [data-component="first-launch-splash"] {
   position: relative;
@@ -6,55 +6,15 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  color: var(--v2-text-text-base, #091412);
-  background-color: var(--v2-background-bg-base, #fbfdfc);
+  color: var(--v2-text-text-base, CanvasText);
+  background-color: var(--v2-background-bg-base, Canvas);
   app-region: drag;
   -webkit-app-region: drag;
 }
 
 [data-component="startup-splash"][data-deep],
 [data-component="first-launch-splash"][data-deep] {
-  background-color: var(--v2-background-bg-deep, #f2f6f5);
-}
-
-:root[data-color-scheme="dark"] [data-component="startup-splash"],
-:root[data-color-scheme="dark"] [data-component="first-launch-splash"] {
-  color: var(--v2-text-text-base, #e9f4f2);
-  background-color: var(--v2-background-bg-base, #0c1010);
-}
-
-:root[data-color-scheme="dark"] [data-component="startup-splash"][data-deep],
-:root[data-color-scheme="dark"] [data-component="first-launch-splash"][data-deep] {
-  background-color: var(--v2-background-bg-deep, #070909);
-}
-
-/* Faint grid plus a soft brand glow behind the mark. */
-[data-component="startup-splash"]::before,
-[data-component="first-launch-splash"]::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(to right, color-mix(in srgb, currentColor 5%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in srgb, currentColor 5%, transparent) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: radial-gradient(ellipse 50% 45% at 50% 46%, #000 0%, transparent 100%);
-  -webkit-mask-image: radial-gradient(ellipse 50% 45% at 50% 46%, #000 0%, transparent 100%);
-}
-
-[data-component="startup-splash"]::after,
-[data-component="first-launch-splash"]::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 44%;
-  width: 420px;
-  height: 420px;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  background: radial-gradient(circle, var(--brand-glow, rgb(46 230 200 / 0.18)) 0%, transparent 62%);
-  opacity: 0.55;
+  background-color: var(--v2-background-bg-deep, Canvas);
 }
 
 [data-slot="startup-brand"] {
@@ -70,7 +30,6 @@
 [data-slot="startup-mark"] {
   display: flex;
   margin-bottom: 6px;
-  filter: drop-shadow(0 12px 28px var(--brand-glow, rgb(46 230 200 / 0.25)));
 }
 
 [data-slot="startup-wordmark"] {
@@ -83,7 +42,7 @@
   font-family: var(--font-body, "Inter", system-ui, sans-serif);
   font-size: 13px;
   letter-spacing: 0.01em;
-  color: color-mix(in srgb, currentColor 55%, transparent);
+  color: var(--text-weak, currentColor);
 }
 
 [data-slot="startup-progress"] {
@@ -101,7 +60,7 @@
   inset: 0 auto 0 0;
   width: 40%;
   border-radius: inherit;
-  background: var(--brand-gradient, linear-gradient(90deg, #14c4ad, #2ee6c8));
+  background: var(--v2-border-border-focus, currentColor);
   animation: startup-progress 1.3s ease-in-out infinite;
 }
 

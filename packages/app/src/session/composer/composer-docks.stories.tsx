@@ -147,6 +147,9 @@ function ComposerDocksPreview(props: DockArgs) {
       } satisfies WebSearchRequestModel,
       elicitationRequest: () => undefined,
       permissionRequest: () => (state.permission ? activePermissionRequest : undefined),
+      permissionRequests: () => state.permission ? [activePermissionRequest] : [],
+      permissionSessionTitle: (id: string) => id,
+      permissionHistory: () => [],
       permissionResponding: () => props.responding,
       decide: () => {
         deciding = true

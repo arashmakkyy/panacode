@@ -1781,9 +1781,9 @@ function TurnTokenUsage(props: {
   })
   const columns = createMemo(() => ({
     step: Math.max("Step".length, ...steps().map((item) => item.finish.length)),
-    newTokens: Math.max("New".length, ...steps().map((item) => item.newTokens.toLocaleString().length)),
-    cached: Math.max("Cached".length, ...steps().map((item) => item.cached.toLocaleString().length)),
-    total: Math.max("Total".length, ...steps().map((item) => item.total.toLocaleString().length)),
+    newTokens: Math.max("New".length, ...steps().map((item) => item.newTokens.toLocaleString("en").length)),
+    cached: Math.max("Cached".length, ...steps().map((item) => item.cached.toLocaleString("en").length)),
+    total: Math.max("Total".length, ...steps().map((item) => item.total.toLocaleString("en").length)),
   }))
   const summary = createMemo(() => {
     const items = steps()
@@ -1813,8 +1813,8 @@ function TurnTokenUsage(props: {
             <span style={{ attributes: TextAttributes.BOLD }}>Tokens</span>
             <span>
               : {summary().count} {summary().count === 1 ? "step" : "steps"} · latest:{" "}
-              {summary().latestNewTokens.toLocaleString()} new · {summary().latestCached.toLocaleString()} cached ·{" "}
-              {summary().latestTotal.toLocaleString()} total
+              {summary().latestNewTokens.toLocaleString("en")} new · {summary().latestCached.toLocaleString("en")} cached ·{" "}
+              {summary().latestTotal.toLocaleString("en")} total
             </span>
             <Show when={summary().reuseDrops > 0}>
               <span style={{ fg: theme.text.feedback.warning.base }}>
@@ -1841,17 +1841,17 @@ function TurnTokenUsage(props: {
                 <text fg={verbose() && item.finish === "tool-call" ? undefined : theme.text.muted}>
                   {item.finish.padEnd(columns().step + 2)}
                   <span style={{ attributes: TextAttributes.BOLD }}>
-                    {item.newTokens.toLocaleString().padStart(columns().newTokens)}
+                    {item.newTokens.toLocaleString("en").padStart(columns().newTokens)}
                   </span>
                   {"  "}
-                  {item.cached.toLocaleString().padStart(columns().cached)}
+                  {item.cached.toLocaleString("en").padStart(columns().cached)}
                   {"  "}
-                  {item.total.toLocaleString().padStart(columns().total)}
+                  {item.total.toLocaleString("en").padStart(columns().total)}
                 </text>
                 <TurnTokenToolCalls tools={item.tools} />
                 <Show when={item.reuseDrop !== undefined}>
                   <text fg={theme.text.feedback.warning.base}>
-                    ! Likely cache bust: {item.reuseDrop?.toLocaleString()} fewer cached tokens than the previous step
+                    ! Likely cache bust: {item.reuseDrop?.toLocaleString("en")} fewer cached tokens than the previous step
                   </text>
                 </Show>
               </box>
@@ -3775,7 +3775,7 @@ function formatSessionTranscript(
     if (content.length === 0) return []
     return [`## Assistant\n\n${content.join("\n\n")}`]
   })
-  return `# ${withTimestampedFallback(session)}\n\n**Session ID:** ${session.id}\n**Created:** ${new Date(session.time.created).toLocaleString()}\n**Updated:** ${new Date(session.time.updated).toLocaleString()}\n\n---\n\n${body.join("\n\n---\n\n")}\n`
+  return `# ${withTimestampedFallback(session)}\n\n**Session ID:** ${session.id}\n**Created:** ${new Date(session.time.created).toLocaleString("en")}\n**Updated:** ${new Date(session.time.updated).toLocaleString("en")}\n\n---\n\n${body.join("\n\n---\n\n")}\n`
 }
 
 export function parseApplyPatchFiles(value: unknown) {

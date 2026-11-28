@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, onCleanup, untrack, type Accessor } from "solid-js"
-import type { PromptAttachment } from "@opencode/client/promise"
+import { storedFileUri } from "@/composer/stored-file-uri"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { ComposerDelivery, ComposerSession } from "@/composer/adapter"
 import type { ComposerStateTarget } from "@/composer/submission-state"
@@ -506,14 +506,6 @@ export async function undoQueuedPrompt<A>(input: {
   await input.cancelInboxItem()
 
   return pinned
-}
-
-// A stored file re-admits by the URI it came from, as the TUI does, so a file:// reference keeps its
-// provenance (review comment files stay recognizable) instead of turning into an inline snapshot.
-function storedFileUri(file: PromptAttachment) {
-  const source = file.source
-
-  return source?.type === "uri" ? source.uri : "uri" in file ? file.uri : `data:${file.mime};base64,${file.data}`
 }
 
 // Confirming an edit submits the current composer content as the replacement:

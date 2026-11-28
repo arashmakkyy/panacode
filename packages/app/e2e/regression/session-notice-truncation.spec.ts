@@ -2,11 +2,11 @@ import { expect, test } from "@playwright/test"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { setupTimeline } from "../utils/timeline"
 
-for (const { width, ...profile } of [
-  { width: 1400, locale: "en", direction: "ltr" },
-  { width: 390, locale: "ar", direction: "rtl" },
+for (const { width, locale } of [
+  { width: 1400, locale: "en" },
+  { width: 390, locale: "ar" },
 ]) {
-  test(`keeps notices on one line: ${profile.locale} ${profile.direction} ${width}`, async ({ page }) => {
+  test(`keeps notices on one line at ${width}px with stored locale ${locale}`, async ({ page }) => {
     const command =
       "bun run inspect --target src/renderer/session-timeline.ts --output artifacts/inspection-report.json ".repeat(5)
 
@@ -20,7 +20,7 @@ for (const { width, ...profile } of [
       settings: {
         timelineDetail: { ...timelinePresets[2].value, notices: { placement: "separate" } },
       },
-      locale: profile.locale,
+      locale,
       viewport: { width, height: 900 },
       sessionMessages: [
         {
@@ -48,18 +48,17 @@ for (const { width, ...profile } of [
         },
       ],
     })
-    await page
-      .locator("html")
-      .evaluate((element, direction) => element.setAttribute("dir", direction), profile.direction)
-    const notices = page.locator('[data-slot="session-timeline-notice"]')
+    await expect(page.locator("html")).toHaveAttribute("dir", "ltr")
+    await page.getByRole("button", { name: "Finished 1 shell" }).click()
+    await page.getByRole("button", { name: "Finished 1 subagent" }).click()
+    const notices = page.locator('[data-slot="session-timeline-notice"], [data-slot="timeline-event-item-title"]')
     await expect(notices).toHaveCount(3)
     await expect(notices).toContainText(descriptions)
     await expect
       .poll(() =>
         notices.evaluateAll((nodes) =>
-          nodes.map((node) => {
-            const style = getComputedStyle(node)
-            const element = node as HTMLElement
+          nodes.map((element) => {
+            const style = getComputedStyle(element)
 
             return {
               direction: style.direction,
@@ -80,7 +79,7 @@ for (const { width, ...profile } of [
       )
       .toEqual(
         Array.from({ length: 3 }, () => ({
-          direction: profile.direction,
+          direction: "ltr",
           whiteSpace: "nowrap",
           textOverflow: "ellipsis",
           overflow: "hidden",

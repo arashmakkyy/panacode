@@ -31,9 +31,11 @@ export type ApprovalRequest = {
   /** Left part of the meta row (the asking agent or tool). */
   source: string
   /** Muted detail next to the source (model, tool id). */
+  canAlways?: boolean
   sourceDetail?: string
   requestedAt?: number
   args: ApprovalArgument[]
+  patches?: { file: string; patch: string }[]
 }
 
 export type ApprovalResolved = { id: string; summary: string; outcome: ApprovalOutcome; at: number; icon?: ApprovalIconName }
@@ -55,6 +57,7 @@ export type ApprovalLabels = {
   hintMove: string
   hintApprove: string
   hintDeny: string
+  denialNote: string
   arguments: string
 }
 
@@ -75,6 +78,7 @@ export const defaultApprovalLabels: ApprovalLabels = {
   hintMove: "Move",
   hintApprove: "Approve",
   hintDeny: "Deny",
+  denialNote: "Add a reason for denying (optional)",
   arguments: "Arguments",
 }
 
@@ -83,7 +87,7 @@ export interface AgentApprovalsProps {
   resolved?: readonly ApprovalResolved[]
   /** Id of the request whose decision is in flight. */
   sending?: { id: string; decision: ApprovalDecision }
-  onDecision: (id: string, decision: ApprovalDecision) => void
+  onDecision: (id: string, decision: ApprovalDecision, message?: string) => void
   labels?: Partial<ApprovalLabels>
   class?: string
 }
@@ -91,7 +95,7 @@ export interface AgentApprovalsProps {
 const RISK_ICON: Record<ApprovalRisk, ApprovalIconName> = { low: "shieldCheck", medium: "shieldAlert", high: "shieldX" }
 const OUTCOME_ICON: Record<ApprovalOutcome, ApprovalIconName> = { approved: "check", denied: "x", allowed: "shieldCheck" }
 
-const clock = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" })
+const clock = new Intl.DateTimeFormat("en", { hour: "2-digit", minute: "2-digit" })
 
 function CallTitle(props: { text: string }) {
   return (
@@ -121,15 +125,10 @@ function Kbd(props: { keys: string[] }) {
   )
 }
 
-const editable = (target: EventTarget | null) => {
-  const el = target as HTMLElement | null
-  if (!el || !(el instanceof HTMLElement)) return false
-  return el.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON|A)$/.test(el.tagName) || !!el.closest("[role=menu],[role=dialog]")
-}
-
 export function AgentApprovals(props: AgentApprovalsProps) {
   const labels = createMemo<ApprovalLabels>(() => ({ ...defaultApprovalLabels, ...props.labels }))
   const [focusId, setFocusId] = createSignal<string>()
+  const [note, setNote] = createSignal<{ id: string; value: string }>()
   const [logOpen, setLogOpen] = createSignal(false)
   const [now, setNow] = createSignal(Date.now())
 
@@ -145,8 +144,10 @@ export function AgentApprovals(props: AgentApprovalsProps) {
 
   const decide = (decision: ApprovalDecision) => {
     const current = focus()
-    if (!current || props.sending) return
-    props.onDecision(current.id, decision)
+    if (!current || props.sending || (decision === "always" && current.canAlways === false)) return
+    const draft = note()
+    const message = decision === "denied" && draft?.id === current.id ? draft.value.trim() : ""
+    props.onDecision(current.id, decision, message || undefined)
   }
 
   const move = (step: number) => {
@@ -158,28 +159,31 @@ export function AgentApprovals(props: AgentApprovalsProps) {
 
   onMount(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 15e3)
-    const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || editable(event.target)) return
-      const key = event.key.toLowerCase()
-      if (key === "enter" || key === "a") decide("approved")
-      else if (key === "d") decide("denied")
-      else if (key === "j") move(1)
-      else if (key === "k") move(-1)
-      else return
-      event.preventDefault()
-    }
-    window.addEventListener("keydown", onKey)
-    onCleanup(() => {
-      window.clearInterval(timer)
-      window.removeEventListener("keydown", onKey)
-    })
+    onCleanup(() => window.clearInterval(timer))
   })
+
+  const onKey = (event: KeyboardEvent) => {
+    if (event.defaultPrevented || event.repeat || event.isComposing || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
+    const target = event.target
+    if (!(target instanceof HTMLElement) || target.isContentEditable || target.closest("input, textarea, select, [role=dialog]")) return
+    const key = event.key.toLowerCase()
+    if (key === "enter" && target !== event.currentTarget) return
+    if (key === "enter" || key === "a") decide("approved")
+    else if (key === "d") decide("denied")
+    else if (key === "j") move(1)
+    else if (key === "k") move(-1)
+    else return
+    event.preventDefault()
+  }
 
   return (
     <section
       data-component="panacode-agent-approvals"
       data-panacode-feature="agent-approvals"
       class={props.class}
+      data-scrollable
+      tabIndex={0}
+      onKeyDown={onKey}
       aria-label={labels().title}
     >
       <header data-slot="approvals-header">
@@ -214,7 +218,7 @@ export function AgentApprovals(props: AgentApprovalsProps) {
                 <p data-slot="approval-reason">{request.reason}</p>
               </Show>
               <Show when={request.args.length > 0}>
-                <dl data-slot="approval-args" aria-label={labels().arguments}>
+                <dl data-scrollable data-slot="approval-args" aria-label={labels().arguments}>
                   <For each={request.args}>
                     {(arg) => (
                       <div data-slot="approval-arg" data-key={arg.key}>
@@ -225,6 +229,23 @@ export function AgentApprovals(props: AgentApprovalsProps) {
                   </For>
                 </dl>
               </Show>
+              <For each={request.patches}>
+                {(change) => (
+                  <details data-slot="approval-patch">
+                    <summary><bdi>{change.file}</bdi></summary>
+                    <pre dir="ltr" data-scrollable>{change.patch}</pre>
+                  </details>
+                )}
+              </For>
+              <details data-slot="approval-note">
+                <summary>{labels().denialNote}</summary>
+                <textarea
+                  aria-label={labels().denialNote}
+                  disabled={!!props.sending}
+                  value={note()?.id === request.id ? note()?.value : ""}
+                  onInput={(event) => setNote({ id: request.id, value: event.currentTarget.value })}
+                />
+              </details>
               <div data-slot="approval-decision">
                 <Switch>
                   <Match when={sending(request.id)}>
@@ -249,6 +270,7 @@ export function AgentApprovals(props: AgentApprovalsProps) {
                         {labels().deny}
                       </Button>
                       <span data-slot="approval-actions-end">
+                        <Show when={request.canAlways !== false}>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -258,6 +280,7 @@ export function AgentApprovals(props: AgentApprovalsProps) {
                         >
                           {labels().always}
                         </Button>
+                        </Show>
                         <Button
                           variant="primary"
                           size="sm"

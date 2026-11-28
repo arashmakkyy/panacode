@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createResource, onCleanup } from "solid-js"
+import { createMemo, createResource, onCleanup } from "solid-js"
 import { McpServers, type McpAddRequest, type McpServersLabels } from "@panacode/ui/features/mcp-servers"
 import { toMcpServerViews, type McpConfigLike } from "@panacode/ui/adapters/mcp-servers"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -8,8 +8,13 @@ import { useMcpController } from "@/providers/connect/mcp"
 import { mcpRowView } from "@/providers/connect/mcp-machine"
 import { showToast } from "@/shell/notifications/toast"
 
-// Servers added from this window, by name: the add API is runtime-only, so the config never lists them.
-const added = new Map<string, McpConfigLike>()
+import { runtimeMcpDetails } from "./mcp-runtime"
+
+const listStates = { unresolved: "loading", pending: "loading", refreshing: "loading", ready: "ready", errored: "error" } as const
+
+function sameLocation(a: { directory?: string; workspaceID?: string }, b: typeof a) {
+  return a.directory === b.directory && a.workspaceID === b.workspaceID
+}
 
 /**
  * The Arc MCP Servers block on real MCP state: the server list and its live status, each server's config entry
@@ -23,55 +28,61 @@ export function PanacodeMcpPanel(props: { directory?: string }) {
   const serverSdk = useServerSDK()
   const location = () => (props.directory ? { directory: props.directory } : data.location.default())
   const mcp = useMcpController(() => props.directory)
-  const t = (key: string, params?: Record<string, string | number>) =>
-    language.t(key as Parameters<typeof language.t>[0], params as never) ?? key
+  const t = language.t
 
-  const sync = () => {
-    void data.location.mcp.server.sync(data.location.default()).catch(() => undefined)
-    void data.location.mcp.resource.sync(location()).catch(() => undefined)
-    if (props.directory) void data.location.mcp.server.sync(location()).catch(() => undefined)
-  }
-  createEffect(() => {
-    if (serverSdk.connection.status() !== "connected") return
-    sync()
-  })
+  const [listLoad, { refetch: reloadList }] = createResource(
+    () => serverSdk.connection.status() === "connected" && location(),
+    async (ref) => {
+      await Promise.all([
+        data.location.mcp.server.sync(ref),
+        props.directory ? data.location.mcp.server.sync(data.location.default()) : undefined,
+      ])
+
+      return ref.directory
+    },
+  )
+
+  const syncResources = () => data.location.mcp.resource.sync(location()).catch(() => undefined)
+  createResource(() => serverSdk.connection.status() === "connected" && location(), syncResources)
 
   // Config entries say how each server is reached. Only the type, URL and command are read; headers and environment
   // never leave this function.
   const [config, { refetch }] = createResource(
     () => (serverSdk.connection.status() === "connected" ? (props.directory ?? "") : undefined),
     async (directory) => {
-      const entries = await serverSdk.api.config.get(directory ? { location: { directory } } : undefined).catch(() => [])
+      const entries = await serverSdk.api.config
+        .get(directory ? { location: { directory } } : undefined)
+        .catch(() => [])
+
       const servers = new Map<string, McpConfigLike>()
+
       for (const entry of entries)
         if (entry.type === "document")
           for (const [name, value] of Object.entries(entry.info.mcp?.servers ?? {})) {
-            const item = value as { type?: string; url?: string; command?: readonly string[] }
-            servers.set(
-              name,
-              item.type === "remote" && item.url
-                ? { type: "remote", url: item.url }
-                : item.type === "local" && item.command
-                  ? { type: "local", command: item.command }
-                  : { type: item.type },
-            )
+            servers.set(name, value.type === "remote" ? { type: "remote", url: value.url } : { type: "local", command: value.command })
           }
+
       return servers
     },
   )
+
   onCleanup(serverSdk.event.on("config.updated", () => void refetch()))
 
   const list = () => {
     const active = data.location.mcp.server.list(location())
     const defaults = data.location.mcp.server.list(data.location.default()) ?? []
     const merged = defaults.map((server) => active?.find((item) => item.name === server.name) ?? server)
+
     return [...merged, ...(active ?? []).filter((item) => !merged.some((server) => server.name === item.name))]
   }
+
   const raw = (id: string) => list().find((item) => item.name === id)
 
   const servers = createMemo(() =>
     toMcpServerViews(list(), {
-      config: (name) => config()?.get(name) ?? added.get(name),
+      config: (name) =>
+        (config.state === "ready" ? config()?.get(name) : undefined) ??
+        runtimeMcpDetails(serverSdk, location(), name).get(),
       resources: data.location.mcp.resource.list(location()) ?? [],
       busy: (name) => mcpRowView(mcp.state(), name, raw(name)?.status.status).busy,
     }),
@@ -83,46 +94,55 @@ export function PanacodeMcpPanel(props: { directory?: string }) {
   const refresh = async () => {
     data.location.mcp.server.invalidate(location())
     data.location.mcp.resource.invalidate(location())
-    await Promise.all([
-      data.location.mcp.server.sync(location()),
-      data.location.mcp.resource.sync(location()),
-      props.directory ? data.location.mcp.server.sync(data.location.default()) : undefined,
-    ]).catch(() => undefined)
+
+    if (props.directory) data.location.mcp.server.invalidate(data.location.default())
+    await Promise.all([reloadList(), syncResources()])
     void refetch()
   }
 
   const add = async (request: McpAddRequest) => {
-    added.set(request.name, request.transport === "remote" ? { type: "remote", url: request.url } : { type: "local", command: request.command })
-    await serverSdk.api.experimental.mcp.add({
-      server: request.name,
-      location: location(),
-      config: request.transport === "remote" ? { type: "remote", url: request.url } : { type: "local", command: request.command },
-    })
+    const ref = location()
+
+    const config =
+      request.transport === "remote"
+        ? { type: "remote" as const, url: request.url }
+        : { type: "local" as const, command: request.command }
+
+    await runtimeMcpDetails(serverSdk, ref, request.name).add(
+      config,
+      serverSdk.api.experimental.mcp.add({ server: request.name, location: ref, config }),
+    )
+
+    if (!sameLocation(ref, location())) return
     await refresh()
+
     // A server that needs OAuth starts its sign-in right away, as the Arc sheet's authorize step does.
     if (raw(request.name)?.status.status === "needs_auth") toggle(request.name, true)
   }
 
-  const remove = (id: string) =>
-    void serverSdk.api.experimental.mcp
-      .remove({ server: id, location: location() })
+  const remove = (id: string) => {
+    const ref = location()
+    void runtimeMcpDetails(serverSdk, ref, id)
+      .remove(serverSdk.api.experimental.mcp.remove({ server: id, location: ref }))
       .then(() => {
-        added.delete(id)
+        if (!sameLocation(ref, location())) return
+
         return refresh()
       })
-      .catch((error: unknown) =>
+      .catch((cause: unknown) =>
         showToast({
           variant: "error",
           title: t("common.requestFailed"),
-          description: error instanceof Error ? error.message : String(error),
+          description: cause instanceof Error ? cause.message : String(cause),
         }),
       )
+  }
 
   const labels = (): Partial<McpServersLabels> => ({
     title: t("panacode.mcp.title"),
     add: t("panacode.mcp.add"),
     summary: (connected, total) => t("panacode.mcp.summary", { connected, total }),
-    resources: (count) => t(count === 1 ? "panacode.mcp.resources.one" : "panacode.mcp.resources.other", { count }),
+    resources: (count) => language.plural("panacode.mcp.resources", count),
     status: {
       connected: t("panacode.mcp.status.connected"),
       connecting: t("panacode.mcp.status.connecting"),
@@ -163,6 +183,9 @@ export function PanacodeMcpPanel(props: { directory?: string }) {
     <div data-component="panacode-mcp-panel" class="settings-section">
       <McpServers
         servers={servers()}
+        listState={listStates[listLoad.state]}
+        listMessage={listLoad.state === "errored" ? t("common.requestFailed") : t("common.loading")}
+        onReload={() => void refresh()}
         labels={labels()}
         onToggle={toggle}
         onSignIn={(id) => toggle(id, true)}

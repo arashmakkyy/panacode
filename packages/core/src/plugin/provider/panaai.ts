@@ -1,7 +1,9 @@
 import { define } from "@opencode/plugin/effect/plugin"
 import type { Entry } from "@opencode/schema/config"
-import { Deferred, Duration, Effect, FiberSet, Option, Schedule, Schema, Semaphore, Stream } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
+import { Rpc } from "@opencode/schema/rpc"
+import { SharedCache } from "../../shared-cache.js"
+import { Clock, Deferred, Duration, Effect, FiberSet, Option, Schedule, Schema, Stream } from "effect"
+import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
 import type { ServerResponse } from "node:http"
 import { Config } from "../../config.js"
 import { Credential } from "../../credential.js"
@@ -45,8 +47,9 @@ type Discovered = typeof RemoteModel.Type
 
 const reasoningEfforts = ["low", "medium", "high"] as const
 
-const discovery = new Map<string, { checked: number; apiKey?: string; models?: readonly Discovered[] }>()
-const discoveryLocks = new Map<string, Semaphore.Semaphore>()
+const discovery = new Map<string, { checked: number; models: readonly Discovered[] }>()
+type ModelCatalog = { catalog: "ready" | "unavailable" | "unauthorized"; models: readonly Discovered[] }
+const discovering = new Map<string, Deferred.Deferred<ModelCatalog>>()
 
 export const PanaAIPlugin = define({
   id: "opencode.provider.panaai",
@@ -60,12 +63,13 @@ export const PanaAIPlugin = define({
       connected: false,
       apiKey: undefined as string | undefined,
       hash: "[]",
-      failing: false,
+      catalog: "idle" as "idle" | "ready" | "unavailable" | "unauthorized",
     }
 
     yield* ctx.integration.transform((integrations) => {
       integrations.update(integrationID, (integration) => {
         integration.name = Product.provider.name
+        integration.metadata = { ...integration.metadata, modelCatalog: loaded.catalog }
       })
       integrations.method.update({
         integrationID,
@@ -144,7 +148,7 @@ export const PanaAIPlugin = define({
     })
 
     yield* ctx.provider.transform((providers) => {
-      if (loaded.models.length === 0) return
+      if (!loaded.apiKey) return
       for (const model of providers.get(providerID)?.models.values() ?? []) {
         providers.models.remove(providerID, model.id)
       }
@@ -181,45 +185,55 @@ export const PanaAIPlugin = define({
     const discover = Effect.fn("PanaAIPlugin.discover")(function* () {
       const current = source.current
       if (!current.endpoint) return undefined
+      const endpoint = current.endpoint
       const active = yield* activeCredential(ctx, Product.provider.id)
       const connected = active.connection !== undefined
       const apiKey = apiKeyFrom(active.credential, current.apiKey)
-      if (!apiKey) return { source: current, connected, apiKey: undefined, models: [] as const }
-      const lock = discoveryLocks.get(current.baseURL) ?? Semaphore.makeUnsafe(1)
-      discoveryLocks.set(current.baseURL, lock)
-      return yield* lock.withPermit(
-        Effect.gen(function* () {
-          const cached = discovery.get(current.baseURL)
-          if (cached && cached.apiKey === apiKey && Date.now() - cached.checked < Duration.toMillis("30 seconds"))
-            return { source: current, connected, apiKey, models: cached.models ?? [] }
-          discovery.set(current.baseURL, {
-            checked: Date.now(),
-            apiKey,
-            models: cached && cached.apiKey === apiKey ? cached.models : undefined,
-          })
-          const response = yield* http
-            .execute(
-              HttpClientRequest.get(current.endpoint("/models")).pipe(
-                HttpClientRequest.acceptJson,
-                HttpClientRequest.bearerToken(apiKey),
-              ),
-            )
-            .pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(Response)), Effect.timeout(requestTimeout))
-          const models = response.data
-            .filter((model) => model.id.length > 0)
-            .toSorted((a, b) => a.id.localeCompare(b.id))
-          discovery.set(current.baseURL, { checked: Date.now(), apiKey, models })
-          return { source: current, connected, apiKey, models }
-        }),
-      )
+      if (!apiKey) return { source: current, connected, apiKey: undefined, models: [] as const, catalog: "idle" as const }
+      const key = JSON.stringify([current.baseURL, SharedCache.fingerprint(apiKey)])
+      const now = yield* Clock.currentTimeMillis
+      const cached = discovery.get(key)
+      const result = (catalog: ModelCatalog) => ({ source: current, connected, apiKey, ...catalog })
+      if (cached && now - cached.checked < Duration.toMillis("30 seconds"))
+        return result({ catalog: "ready", models: cached.models })
+      const pending = discovering.get(key)
+      if (pending) return result(yield* Deferred.await(pending))
+
+      const shared = Deferred.makeUnsafe<ModelCatalog>()
+      discovering.set(key, shared)
+      const load = Effect.gen(function* () {
+        const response = yield* Effect.result(
+          http.execute(HttpClientRequest.get(endpoint("/models")).pipe(
+            HttpClientRequest.acceptJson, HttpClientRequest.bearerToken(apiKey),
+          )).pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(Response)), Effect.timeout(requestTimeout)),
+        )
+        if (response._tag === "Failure") {
+          const error = response.failure
+          const auth = HttpClientError.isHttpClientError(error) && error.reason._tag === "StatusCodeError" &&
+            [401, 403].includes(error.reason.response.status)
+          if (auth) discovery.delete(key)
+          return { catalog: auth ? "unauthorized" as const : "unavailable" as const, models: auth ? [] : cached?.models ?? [] }
+        }
+        const models = response.success.data.filter((model) => model.id.length > 0).toSorted((a, b) => a.id.localeCompare(b.id))
+        discovery.delete(key)
+        discovery.set(key, { checked: yield* Clock.currentTimeMillis, models })
+        if (discovery.size > 256) discovery.delete(discovery.keys().next().value!)
+        return { catalog: "ready" as const, models }
+      })
+      return result(yield* load.pipe(Effect.onExit((exit) => {
+        discovering.delete(key)
+        return Deferred.done(shared, exit)
+      })))
     })
 
     const refresh = Effect.fn("PanaAIPlugin.refresh")(function* () {
       const result = yield* discover()
-      loaded.failing = false
       if (!result || result.source !== source.current) return
-      const hash = JSON.stringify([result.connected, result.apiKey, result.models])
+      const active = yield* activeCredential(ctx, Product.provider.id)
+      if (result.apiKey !== apiKeyFrom(active.credential, source.current.apiKey)) return
+      const hash = JSON.stringify([result.connected, result.apiKey, result.models, result.catalog])
       if (hash === loaded.hash) return
+      loaded.catalog = result.catalog
       loaded.models = result.models
       loaded.connected = result.connected
       loaded.apiKey = result.apiKey
@@ -232,8 +246,7 @@ export const PanaAIPlugin = define({
       const current = source.current
       return refresh().pipe(
         Effect.catch((cause) => {
-          if (current !== source.current || loaded.failing) return Effect.void
-          loaded.failing = true
+          if (current !== source.current) return Effect.void
           return Effect.logWarning(`failed to discover ${Product.provider.name} models`, {
             baseURL: current.baseURL,
             cause,
@@ -241,9 +254,25 @@ export const PanaAIPlugin = define({
         }),
       )
     })
+    yield* ctx.rpc.register(Rpc.define({
+      id: "opencode.provider.panaai",
+      methods: { refresh: { input: Schema.Struct({}), output: Schema.Null } }, events: {},
+    }), { refresh: () => attempt.pipe(Effect.as(null)) }).pipe(Effect.orDie)
     yield* attempt.pipe(Effect.repeat(Schedule.spaced("30 seconds")), Effect.forkScoped)
     const background = yield* FiberSet.make()
-    yield* ProviderRefresh.onSwitch(Product.provider.id, FiberSet.run(background, attempt))
+    yield* ProviderRefresh.onSwitch(Product.provider.id, Effect.gen(function* () {
+      const account = yield* activeCredential(ctx, Product.provider.id)
+      const nextKey = apiKeyFrom(account.credential, source.current.apiKey)
+      if (nextKey !== loaded.apiKey) {
+        loaded.apiKey = nextKey
+        loaded.models = []
+        loaded.hash = ""
+        loaded.catalog = "idle"
+        yield* ctx.integration.reload()
+        yield* ctx.provider.reload()
+      }
+      yield* FiberSet.run(background, attempt)
+    }))
     const reload = Effect.fn("PanaAIPlugin.reload")(function* () {
       const next = configured(yield* config.entries())
       if (next.baseURL === source.current.baseURL && next.apiKey === source.current.apiKey) return
@@ -252,7 +281,7 @@ export const PanaAIPlugin = define({
       loaded.connected = false
       loaded.apiKey = undefined
       loaded.hash = "[]"
-      loaded.failing = false
+      loaded.catalog = "idle"
       yield* ctx.integration.reload()
       yield* ctx.provider.reload()
       yield* FiberSet.run(background, attempt)

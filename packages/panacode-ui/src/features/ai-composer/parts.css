@@ -21,7 +21,8 @@
     transform var(--spring-snappy-duration, 0.2s) var(--spring-snappy, var(--ease-standard));
 }
 .pc-aic-send[data-state="ready"] {
-  background: var(--accent);
+  background: var(--primary-fill);
+  border: 1px solid var(--primary-border);
   color: var(--accent-foreground);
   cursor: pointer;
 }
@@ -34,7 +35,7 @@
 }
 @media (hover: hover) and (pointer: fine) {
   .pc-aic-send[data-state="ready"]:hover {
-    background: var(--accent-strong);
+    background: var(--primary-hover);
   }
   .pc-aic-send[data-state="generating"]:hover {
     background: color-mix(in oklab, var(--surface-muted), var(--foreground) 8%);

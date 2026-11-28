@@ -39,6 +39,25 @@ describe("PanaAIChat", () => {
     })
   })
 
+  test.each([
+    "",
+    "not JSON",
+    "{}",
+    '{"choices":[]}',
+    '{"choices":[{"message":{"role":"assistant"}}]}',
+    '{"choices":[{"message":{"content":""}}]}',
+    '{"choices":[{"message":{"tool_calls":[{}]}}]}',
+    '{"object":"chat.completion.chunk","choices":[{}]}',
+  ])("rejects incomplete completion %j", (body) => expect(() => completionToFrames(body)).toThrow())
+  test("passes provider errors to the protocol and preserves genuine length stops", () => {
+    const error = JSON.stringify({ error: { code: 429, message: "quota exhausted" } })
+    expect(completionToFrames(error)).toEqual([error])
+    const [chunk] = completionToFrames(
+      JSON.stringify({ choices: [{ message: { content: "half" }, finish_reason: "length" }] }),
+    )
+    expect(JSON.parse(chunk!).choices[0]).toMatchObject({ delta: { content: "half" }, finish_reason: "length" })
+  })
+
   test("indexes tool_calls on the synthetic delta", () => {
     const frames = completionToFrames(
       JSON.stringify({
@@ -81,6 +100,35 @@ describe("PanaAIChat", () => {
       expect(prepared.body).not.toHaveProperty("stream_options")
     }),
   )
+
+  for (const body of ["{}", '{"choices":[]}', '{"error":{"message":"catalog temporarily unavailable"}}']) {
+    it.effect("propagates the HTTP 200 failure " + body, () =>
+      Effect.gen(function* () {
+        const model = route
+          .with({
+            auth: Auth.bearer("fixture"),
+            endpoint: { baseURL: "https://panaai.test/v1" },
+          })
+          .model({ id: "demo" })
+        const events: string[] = []
+        const error = yield* LLMClient.stream(ai.request({ model, prompt: "hello" })).pipe(
+          Stream.tap((event) =>
+            Effect.sync(() => {
+              events.push(event.type)
+            }),
+          ),
+          Stream.runDrain,
+          Effect.provide(
+            dynamicResponse((input) => Effect.succeed(input.respond(body, { headers: { "content-type": "application/json" } }))),
+          ),
+          Effect.flip,
+        )
+        if (body.includes("temporarily unavailable")) expect(error.message).toContain("catalog temporarily unavailable")
+        else expect(error.reason._tag).toBe("InvalidProviderOutput")
+        expect(events).not.toContain("text-delta")
+      }),
+    )
+  }
 
   it.effect("accepts a JSON completion response through document framing", () =>
     Effect.gen(function* () {

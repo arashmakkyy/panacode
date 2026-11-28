@@ -78,7 +78,7 @@ export function routesDiff(handlers: number) {
  * Four completed edit tools on Core's own tool sources (edit, patch, read and shell; about 60 KB), each renaming
  * `context` to `invocation`, with full-context patches: the timeline groups them into one file-change group.
  */
-export async function editTools(): Promise<SessionMessageAssistantTool[]> {
+export async function editTools() {
   const names = ["edit", "patch", "read", "shell"]
 
   const sources = await Promise.all(
@@ -89,9 +89,13 @@ export async function editTools(): Promise<SessionMessageAssistantTool[]> {
     ),
   )
 
-  return sources.map((before, index) => {
+  const files = new Map<string, string>()
+
+  const tools = sources.map((before, index): SessionMessageAssistantTool => {
     const after = before.replaceAll(/\bcontext\b/g, "invocation")
     const file = `src/tool/plugin/${names[index]}.ts`
+
+    files.set(file, after)
 
     const counts = diffLines(before, after).reduce(
       (sum, part) => ({
@@ -123,6 +127,8 @@ export async function editTools(): Promise<SessionMessageAssistantTool[]> {
       time: { created: 1700000001100, ran: 1700000001100, completed: 1700000001200 },
     }
   })
+
+  return { tools, fileContent: (path: string) => files.get(path) }
 }
 
 function routes(count: number, revision: number) {

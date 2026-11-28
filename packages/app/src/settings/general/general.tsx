@@ -195,35 +195,6 @@ const TimelineWidthSetting = () => {
   )
 }
 
-const LanguageSetting = () => {
-  const language = useLanguage()
-
-  const options = createMemo(() =>
-    language.locales.map((locale) => ({
-      value: locale,
-      label: language.label(locale),
-    })),
-  )
-
-  return (
-    <SettingsRow
-      title={language.t("settings.general.row.language.title")}
-      description={language.t("settings.general.row.language.description")}
-    >
-      <Select
-        data-action="settings-language"
-        options={options()}
-        placement="bottom-end"
-        gutter={6}
-        current={options().find((option) => option.value === language.locale())}
-        value={(option) => option.value}
-        label={(option) => option.label}
-        onSelect={(option) => option && language.setLocale(option.value)}
-      />
-    </SettingsRow>
-  )
-}
-
 export const SettingsGeneral: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
@@ -252,7 +223,6 @@ export const SettingsGeneral: Component = () => {
       <h3 class="settings-section-title">{language.t("settings.general.section.general")}</h3>
       <SettingsList>
         <InterfaceModeSetting />
-        <LanguageSetting />
 
         <WorkspaceDestinationSetting />
         <AutoApprovePermissionsSetting />

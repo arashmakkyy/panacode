@@ -4,7 +4,7 @@ import { BrandLockup, BrandMark, brand } from "../brand"
 export function SidebarBrand() {
   return (
     <div data-component="panacode-sidebar-brand" data-tauri-drag-region title={brand.name}>
-      <BrandLockup size={20} />
+      <BrandLockup size={20} tone="mono" />
     </div>
   )
 }
@@ -13,7 +13,7 @@ export function SidebarBrand() {
 export function TitlebarBrand() {
   return (
     <div data-component="panacode-titlebar-brand" aria-label={brand.name} data-tauri-drag-region>
-      <BrandMark size={16} />
+      <BrandMark size={16} tone="mono" />
       <span data-slot="name">{brand.name}</span>
     </div>
   )

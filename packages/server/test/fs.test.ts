@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { expect } from "bun:test"
+import { ProductIdentity } from "@opencode/util/product-identity"
 import { Effect, Schedule } from "effect"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
@@ -20,7 +22,7 @@ it.live(
         await fs.writeFile(path.join(tmp.path, "root", "sibling", "file.txt"), "outside")
         await fs.writeFile(starts, "")
         await fs.writeFile(
-          path.join(tmp.path, "root", "opencode.json"),
+          path.join(tmp.path, "root", ProductIdentity.configFiles[0]),
           JSON.stringify({
             mcp: {
               servers: {
@@ -435,5 +437,29 @@ it.live("confines watch requests like read and reports a disabled watcher", () =
     expect(yield* watch("POST", "missing.ts")).toBe(404)
     expect(yield* watch("POST", "a.ts")).toBe(503)
     expect(yield* watch("DELETE", "a.ts")).toBe(204)
+  }),
+)
+
+it.live("two reviews of the same file cannot overwrite each other using a stale digest", () =>
+  Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    const file = path.join(tmp.path, "sample.txt")
+    const original = "\uFEFFunchanged\r\n"
+    yield* Effect.promise(() => fs.writeFile(file, original))
+    const server = yield* startServer(path.join(tmp.path, "config"))
+    const url = new URL("/api/experimental/fs/write", server.base)
+    url.searchParams.set("location[directory]", tmp.path)
+    url.searchParams.set("path", "sample.txt")
+    url.searchParams.set("expectedSha256", createHash("sha256").update(original).digest("hex"))
+    const write = (body: string) => fetch(url, {
+      method: "POST", headers: { ...server.headers, "Content-Type": "application/octet-stream" }, body,
+    })
+    const values = ["first\r\n", "second\n"]
+    const results = yield* Effect.promise(() => Promise.all(values.map(write)))
+    expect(results.map((res) => res.status).sort()).toEqual([200, 409])
+    const saved = values[results.findIndex((res) => res.status === 200)]
+    expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe(saved)
+    expect((yield* Effect.promise(() => write("stale"))).status).toBe(409)
+    expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe(saved)
   }),
 )

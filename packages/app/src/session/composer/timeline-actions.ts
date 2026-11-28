@@ -18,6 +18,7 @@ export type TimelinePendingActions = Omit<PendingActions, "status"> & {
 export function createTimelineActions(
   view: TimelineActionsView,
   actions: Required<Pick<SessionUserActions, "revert" | "fork" | "chooseModel" | "openAttachment">> & {
+    retry?: SessionUserActions["retry"]
     pending: TimelinePendingActions
   },
 ): SessionUserActions {
@@ -32,6 +33,9 @@ export function createTimelineActions(
   }
 
   return {
+    get retry() {
+      return view.isChild() ? undefined : actions.retry
+    },
     get revert() {
       return view.isChild() ? undefined : actions.revert
     },

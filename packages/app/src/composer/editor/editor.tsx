@@ -14,7 +14,6 @@ import {
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Portal } from "solid-js/web"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Key } from "@solid-primitives/keyed"
@@ -24,6 +23,7 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Loader } from "@opencode/ui/loader"
 import { ProviderModelIcon } from "@/providers/models/provider-group"
 import { useLanguage } from "@/runtime/i18n/language"
+import { hasAppLabel } from "@/runtime/i18n/app-label"
 import { AttachmentChip, EffortMenu, SendButton } from "@panacode/ui/features/ai-composer"
 import { ChatIcon } from "@panacode/ui/features/ai-chat"
 import { useI18n } from "@opencode/ui/context/i18n"
@@ -119,11 +119,6 @@ export function ComposerEditor(props: ComposerEditorProps) {
   const historyHeight = createMemo(() => composerHistoryPreviewHeight(state))
   // Phones and tablets, whatever their width: a narrow desktop window keeps the desktop composer.
   const touch = createMediaQuery("(hover: none) and (pointer: coarse)")
-  // The shell's slot at the bottom of the screen; without one (a story), the touch bar stays under the composer.
-  const [dock, setDock] = createSignal<HTMLElement>()
-
-  onMount(() => setDock(document.querySelector<HTMLElement>('[data-slot="composer-touch-bar-mount"]') ?? undefined))
-
   createEffect(() => {
     const preview = historyHeight() !== undefined
 
@@ -354,6 +349,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
                   prompt.length === 1 ? prompt[0]!.content : prompt.map((part) => part.content).join(""),
                   parts.some(isAttachment) ? [...prompt, ...parts.filter(isAttachment)] : prompt,
                   cursor,
+                  event.inputType,
                 )
               }}
               onKeyDown={(event) => {
@@ -538,7 +534,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
                 stopping={view.submit.stopping()}
                 busy={view.submit.busy?.() ?? false}
                 disabled={!props.controller.canSubmit()}
-                sendLabel={i18n.t("ui.promptInput.send")}
+                sendLabel={deliveryLabel(props.controller, i18n)}
                 stopLabel={i18n.t("ui.promptInput.stop")}
                 onSubmit={() => props.controller.submit()}
                 onStop={props.controller.stop}
@@ -546,16 +542,10 @@ export function ComposerEditor(props: ComposerEditorProps) {
             </div>
           </Show>
         </div>
-      </form>
-      <Show when={touch()}>
-        <Show when={dock()} fallback={<ComposerEditorTouchBar controller={props.controller} />}>
-          {(mount) => (
-            <Portal mount={mount()}>
-              <ComposerEditorTouchBar controller={props.controller} docked />
-            </Portal>
-          )}
+        <Show when={touch()}>
+          <ComposerEditorTouchBar controller={props.controller} />
         </Show>
-      </Show>
+      </form>
     </div>
   )
 }
@@ -1479,6 +1469,7 @@ function ComposerEditorSubmitButton(props: {
   // The Arc send button: muted while empty, accent when ready, and the stop square inside a spinning ring while the
   // turn runs (a live reply has no known length, so the ring spins rather than fills).
   const held = () => !!props.busy && !props.stopping
+
   return (
     <Tooltip
       placement="top"
@@ -1504,14 +1495,19 @@ function ComposerEditorSubmitButton(props: {
 // The Arc effort control: the model's variants as one segmented row under an "Effort" head with a hint per level.
 function ComposerEditorEffort(props: { control: ComposerSelectControl }) {
   const language = useLanguage()
+
   const hint = (id: string) => {
-    const key = `panacode.effort.hint.${id}`
-    return language.t(key as Parameters<typeof language.t>[0]) || undefined
+    const key = `panacode.effort.hint.${id}` as const
+
+    return hasAppLabel(key) ? language.t(key) : undefined
   }
+
   const label = (id: string, fallback: string) => {
-    const key = `panacode.effort.level.${id}`
-    return language.t(key as Parameters<typeof language.t>[0]) || fallback
+    const key = `panacode.effort.level.${id}` as const
+
+    return hasAppLabel(key) ? language.t(key) : fallback
   }
+
   return (
     <EffortMenu
       heading={language.t("panacode.effort.heading")}
@@ -1527,23 +1523,22 @@ function ComposerEditorEffort(props: { control: ComposerSelectControl }) {
   )
 }
 
-// The composer's actions on a touch device, where Return only adds a line: this bar is the one way to send, steer,
-// queue or stop, and every target is at least 44px. Docked, it spans the bottom of the shell, which is the top of the
-// keyboard while one is open. Buttons keep the editor focused so the keyboard stays open.
-function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked?: boolean }) {
+function deliveryLabel(controller: ComposerEditorModel, i18n: ReturnType<typeof useI18n>) {
+  const queue = controller.view.submit.queue
+
+  if (controller.mode() !== "normal" || !queue) return i18n.t("ui.promptInput.send")
+
+  if (queue.editing()) return i18n.t("ui.promptInput.queue")
+
+  if (!queue.alternate()) return i18n.t("ui.promptInput.send")
+
+  return queue.delivery() === "queue" ? i18n.t("ui.promptInput.queue") : i18n.t("ui.promptInput.steer")
+}
+
+function ComposerEditorTouchBar(props: { controller: ComposerEditorModel }) {
   const i18n = useI18n()
   const view = props.controller.view
   const keep = (event: MouseEvent) => event.preventDefault()
-
-  // Docked, the bar is the bottom edge and pads itself for the home indicator, so the shell's main area and a bottom
-  // titlebar stop doing so.
-  onMount(() => {
-    if (!props.docked) return
-    const root = document.documentElement
-
-    root.style.setProperty("--shell-safe-area-bottom", "0px")
-    onCleanup(() => root.style.removeProperty("--shell-safe-area-bottom"))
-  })
 
   // The delivery the desktop toolbar offers on Mod+Enter.
   const alternate = createMemo(() => {
@@ -1556,35 +1551,18 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
     return queue.alternate()
   })
 
-  const label = () => {
-    const queue = view.submit.queue
-
-    if (props.controller.mode() !== "normal" || !queue) return i18n.t("ui.promptInput.send")
-
-    // A submit while editing puts the prompt back in the queue; the alternate steers it.
-    if (queue.editing()) return i18n.t("ui.promptInput.queue")
-
-    if (!queue.alternate()) return i18n.t("ui.promptInput.send")
-
-    return queue.delivery() === "queue" ? i18n.t("ui.promptInput.queue") : i18n.t("ui.promptInput.steer")
-  }
-
   const busy = () => (view.submit.busy?.() ?? false) && !view.submit.stopping()
 
   return (
     <div
       data-slot="composer-touch-bar"
-      class="flex shrink-0 items-center gap-1 bg-v2-background-bg-base"
-      classList={{
-        "mt-2 h-14 rounded-xl border border-v2-border-border-base px-1.5": !props.docked,
-        "box-content h-14 border-t border-v2-border-border-base px-2 pb-[var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))]":
-          !!props.docked,
-      }}
+      class="flex flex-wrap items-center gap-1 p-1"
     >
       <Show
         when={props.controller.mode() === "normal"}
         fallback={
           <Button
+            type="button"
             data-action="composer-exit-shell"
             variant="ghost-muted"
             class="h-11 rounded-lg px-3 text-[15px] leading-5"
@@ -1599,6 +1577,7 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
         }
       >
         <IconButton
+          type="button"
           data-action="composer-attach-file"
           variant="ghost-muted"
           class="size-11 rounded-lg"
@@ -1619,6 +1598,7 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
         >
           {(key) => (
             <IconButton
+          type="button"
               data-action={key.action}
               variant="ghost-muted"
               class="size-11 rounded-lg"
@@ -1636,20 +1616,22 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
         when={!view.submit.stopping()}
         fallback={
           <Button
+            type="button"
             data-action="composer-submit"
             variant="neutral"
-            class="h-11 gap-2 rounded-xl px-4 text-[15px] leading-5"
+            class="size-11 shrink-0 rounded-full p-0"
             onMouseDown={keep}
             onClick={props.controller.stop}
           >
             <Icon name="stop" size="small" />
-            {i18n.t("ui.promptInput.stop")}
+            <span class="sr-only">{i18n.t("ui.promptInput.stop")}</span>
           </Button>
         }
       >
         <Show when={alternate()} keyed>
           {(delivery) => (
             <Button
+            type="button"
               data-action="composer-alternate-delivery"
               variant="neutral"
               class="h-11 rounded-xl px-4 text-[15px] leading-5"
@@ -1661,15 +1643,16 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
           )}
         </Show>
         <Button
+            type="button"
           data-action="composer-submit"
           variant="submit"
-          class="h-11 gap-1.5 rounded-xl px-4 text-[15px] leading-5"
+          class="size-11 shrink-0 rounded-full p-0"
           disabled={!props.controller.canSubmit()}
           aria-busy={busy()}
           onMouseDown={keep}
           onClick={() => props.controller.submit()}
         >
-          {label()}
+          <span class="sr-only">{deliveryLabel(props.controller, i18n)}</span>
           <Show
             when={busy()}
             fallback={<Icon name={props.controller.mode() === "shell" ? "arrow-undo-down" : "arrow-up"} />}

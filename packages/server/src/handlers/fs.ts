@@ -2,7 +2,7 @@ import { FileSystem } from "@opencode/core/filesystem"
 import { FileWatch } from "@opencode/core/filesystem/file-watch"
 import { Location } from "@opencode/core/location"
 import { RelativePath } from "@opencode/core/schema"
-import { FileNotFoundError, ServiceUnavailableError } from "@opencode/protocol/errors"
+import { ConflictError, FileNotFoundError, ServiceUnavailableError } from "@opencode/protocol/errors"
 import { Effect, Option, Stream } from "effect"
 import { type HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
@@ -55,7 +55,9 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
         response(
           Effect.gen(function* () {
             const fs = yield* FileSystem.Service
-            return yield* fs.write({ path: ctx.query.path, data: ctx.payload })
+            return yield* fs.write({ path: ctx.query.path, expectedSha256: ctx.query.expectedSha256, data: ctx.payload }).pipe(
+              Effect.mapError((error) => new ConflictError({ resource: error.path, message: "The file has changed" })),
+            )
           }),
         ),
       )

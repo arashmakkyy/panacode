@@ -305,7 +305,6 @@ export default function Layout(props: ParentProps) {
           class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-content"
           style={{
             "padding-top": bottomTitlebar() ? "env(safe-area-inset-top, 0px)" : "0px",
-            // A docked composer touch bar takes over the safe area.
             "padding-bottom":
               bottomTitlebar() || settings.active()
                 ? "0px"
@@ -321,9 +320,6 @@ export default function Layout(props: ParentProps) {
         </main>
         <CollapsedSidebarToggle />
       </div>
-      {/* On touch devices the active composer moves its actions here: the bottom edge, or the top of the keyboard.
-          Last in order, so it stays below a bottom titlebar (also order-last, but earlier in the DOM). */}
-      <div data-slot="composer-touch-bar-mount" class="order-last shrink-0" />
       <PluginSlot at="window.bottom" input={{}} />
       <ToastRegion />
       <UploadToastHost />

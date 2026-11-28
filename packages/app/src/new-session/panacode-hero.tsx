@@ -5,12 +5,14 @@ import { useLanguage } from "@/runtime/i18n/language"
 /** Panacode empty state for a new session: brand hero above the real composer. */
 export function PanacodeNewSessionHero() {
   const language = useLanguage()
+
   return <ComposerHero title={language.t("panacode.home.title")} />
 }
 
 /** Suggestion pills under the composer. A pick types its prompt into the real composer editor and focuses it. */
-export function PanacodeNewSessionSuggestions(props: { onPick?: () => void }) {
+export function PanacodeNewSessionSuggestions(props: { onPick: (prompt: string) => void }) {
   const language = useLanguage()
+
   const items = (): ComposerSuggestion[] => [
     {
       id: "explain",
@@ -31,19 +33,11 @@ export function PanacodeNewSessionSuggestions(props: { onPick?: () => void }) {
       icon: <Icon name="flask" size="small" />,
     },
   ]
+
   return (
     <SuggestionChips
       items={items()}
-      onPick={(item) => {
-        const editor = document.querySelector<HTMLElement>(
-          '[data-component="new-session"] [data-component="composer-editor"][contenteditable="true"]',
-        )
-        if (!editor) return
-        editor.focus()
-        document.execCommand("selectAll")
-        document.execCommand("insertText", false, item.prompt)
-        props.onPick?.()
-      }}
+      onPick={(item) => props.onPick(item.prompt)}
     />
   )
 }

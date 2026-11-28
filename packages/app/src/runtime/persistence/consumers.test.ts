@@ -4,7 +4,6 @@ import { WorkspaceOnboardingSchema, ProviderTipSchema } from "@/new-session/view
 import { ModelSelectionSchema } from "@/providers/models/selection"
 import { Persistence } from "@/runtime/persistence/schema"
 import { FileViewsSchema } from "@/workspaces/files/view-cache"
-import { languageSchema } from "@/runtime/i18n/language"
 import { HomeServersSchema } from "@/home/projects/controller"
 import { ModelProvidersSchema } from "@/settings/models/models"
 import { ProjectState, VcsState } from "@/runtime/server/persistence"
@@ -156,12 +155,4 @@ describe("persisted consumer schemas", () => {
     expect(state.file.invalid).toEqual({})
   })
 
-  test("language preserves runtime defaults and normalizes unsupported locales to English", () => {
-    const decode = Schema.decodeUnknownSync(Persistence.withInitial(languageSchema, { locale: "fr" }))
-    expect(decode({})).toEqual({ locale: "fr" })
-    expect(decode({ locale: undefined })).toEqual({ locale: "fr" })
-    expect(decode({ locale: 42 })).toEqual({ locale: "fr" })
-    expect(decode({ locale: "unsupported" })).toEqual({ locale: "en" })
-    expect(decode({ locale: "ar" })).toEqual({ locale: "ar" })
-  })
 })

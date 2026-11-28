@@ -5,6 +5,32 @@ import { mockPluginsActivating, type MockServerConfig } from "../utils/mock-serv
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] })
 
+for (const scheme of ["dark", "light"] as const) {
+  test.describe(`PanaAI composer controls in ${scheme}`, () => {
+    test.use({ hasTouch: scheme === "light", viewport: { width: scheme === "light" ? 390 : 1280, height: 800 } })
+
+    test("keeps the input edge quiet and paints the ready action in the dashboard colors", async ({ page }) => {
+      const { editor } = await openDraft(page, { name: "Composer colors", seed: { theme: { id: "panacode", scheme } } })
+      const form = page.locator('form[data-component="composer"]')
+      const send = form.getByRole("button", { name: "Send", exact: true })
+      const edge = scheme === "dark" ? "rgba(255, 255, 255, 0.094)" : "rgb(226, 220, 207)"
+
+      await expect(send).toBeDisabled()
+      await editor.fill("Review the code")
+      await expect(send).toBeEnabled()
+      await expect(form).toHaveCSS("border-top-color", edge)
+      await expect(form).toHaveCSS("box-shadow", "none")
+      await expect(send).toHaveCSS("background-image", "none")
+      await expect(send).toHaveCSS("background-color", "rgb(239, 193, 90)")
+      await expect(send).toHaveCSS("color", "rgb(36, 26, 7)")
+      await expect(send).toHaveCSS("border-radius", "10px")
+      await send.focus()
+      await expect(send).toBeFocused()
+      await expect(form).toHaveCSS("border-top-color", edge)
+    })
+  })
+}
+
 test("mention a session by title, send its stable token, and open its own tab", async ({ page }) => {
   const target = "ses_0123456789abcdefghijklmnop"
   const prompts: Parameters<NonNullable<MockServerConfig["onPrompt"]>>[0]["body"][] = []
@@ -196,7 +222,7 @@ test("the free usage limit opens the Go dialog once, swaps the composer for the 
           : []),
       ],
       connected: state.authorized ? ["opencode", "opencode-go"] : ["opencode"],
-      default: { build: "opencode/big-pickle" },
+      default: { providerID: "opencode", modelID: "big-pickle" },
     }),
     integrations: () => [
       {
@@ -379,7 +405,7 @@ for (const action of ["tray", "picker"] as const) {
           },
         ],
         connected: ["opencode", "opencode-go"],
-        default: { build: "opencode-go/glm-5-go" },
+        default: { providerID: "opencode-go", modelID: "glm-5-go" },
       }),
       pageMessages: () => ({
         items: [
@@ -1680,4 +1706,26 @@ test("pastes into the composer from the session view but not into other inputs",
   await expect(page.locator("#elsewhere")).toHaveValue("pasted from the timeline")
   await expect(page.locator("#elsewhere")).toBeFocused()
   await expect.poll(() => editor.innerText()).toBe("pasted from the timeline")
+})
+
+test("a starter suggestion appends to the draft, supports Undo, and sends only on request", async ({ page }) => {
+  const prompts: unknown[] = []
+  const { editor } = await openDraft(page, { name: "DraftSuggestions", onPrompt: (input) => prompts.push(input.body) })
+  await editor.fill("Notes already typed")
+  await editor.press("Home")
+  await editor.press("ArrowRight")
+  await editor.press("ArrowRight")
+  const chip = page.locator('[data-suggestion="explain"]')
+  await expect(chip).toHaveRole("button")
+  await chip.click()
+  const expanded = await editor.innerText()
+  expect(expanded).toMatch(/^Notes already typed\s+\S/)
+  expect(prompts).toEqual([])
+  await editor.press("Control+z")
+  await expect(editor).toHaveText("Notes already typed")
+  await expect.poll(() => editor.evaluate(() => window.getSelection()?.anchorOffset)).toBe(2)
+  await chip.click()
+  await page.locator('[data-action="composer-submit"]').first().click()
+  await expect.poll(() => prompts.length).toBe(1)
+  expect(prompts[0]).toMatchObject({ text: expanded })
 })

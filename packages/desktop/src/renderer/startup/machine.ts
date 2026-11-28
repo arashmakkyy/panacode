@@ -1,4 +1,4 @@
-import type { LayoutRoute, Locale } from "@opencode/app/desktop"
+import type { LayoutRoute } from "@opencode/app/desktop"
 import type { ServerReadyData } from "../../shared/ipc-contract"
 import { localServerStartupError } from "./initialization"
 
@@ -16,14 +16,12 @@ export const FADE_TIMEOUT_MS = 350
 
 export type StartupTimer = "sidecar" | "hydration" | "fade"
 
-export type LocaleGate = { readonly settled: false } | { readonly settled: true; readonly value: Locale | undefined }
-
 /** Only the first-launch onboarding preview (`OPENCODE_TEST_ONBOARDING` on `/`) waits for the wordmark to draw. */
 export type DrawingPhase = "not-needed" | "pending" | "running" | "done"
 
 /**
  * The window's startup splash, from the first render to the revealed app. The app interface mounts once the server,
- * the first-launch decision, the locale and the plugin servers are known (`hydrating`); the splash fades out once the
+ * the first-launch decision and the plugin servers are known (`hydrating`); the splash fades out once the
  * route, onboarding and tabs are ready. Every waiting phase has a timer, so the splash cannot stay up forever.
  */
 export type StartupState =
@@ -35,7 +33,6 @@ export type StartupState =
       readonly route: LayoutRoute
       /** `undefined` until a fresh install has asked main whether onboarding is pending. */
       readonly firstLaunch: boolean | undefined
-      readonly locale: LocaleGate
       readonly themeApplied: boolean
       readonly sidecar: ServerReadyData | undefined
       readonly pluginServersReady: boolean
@@ -48,7 +45,6 @@ export type StartupState =
       readonly reducedMotion: boolean
       readonly route: LayoutRoute
       readonly firstLaunch: boolean
-      readonly locale: LocaleGate
       readonly themeApplied: boolean
       readonly sidecar: ServerReadyData
       readonly routePreloaded: boolean
@@ -61,14 +57,12 @@ export type StartupState =
       readonly initialUrl: string
       readonly route: LayoutRoute
       readonly firstLaunch: boolean
-      readonly locale: LocaleGate
       readonly themeApplied: boolean
       readonly sidecar: ServerReadyData
     }
   | {
       readonly status: "revealed"
       readonly firstLaunch: boolean
-      readonly locale: LocaleGate
       readonly themeApplied: boolean
       readonly sidecar: ServerReadyData
     }
@@ -76,7 +70,6 @@ export type StartupState =
       readonly status: "failed"
       /** `undefined` when the error boundary already caught the error itself. */
       readonly failure: { readonly error: unknown } | undefined
-      readonly locale: LocaleGate
       readonly themeApplied: boolean
     }
   | { readonly status: "disposed" }
@@ -84,7 +77,6 @@ export type StartupState =
 export type StartupEvent =
   | { readonly type: "theme.applied" }
   | { readonly type: "first-launch.settled"; readonly pending: boolean }
-  | { readonly type: "locale.settled"; readonly locale: Locale | undefined }
   | { readonly type: "sidecar.ready"; readonly data: ServerReadyData }
   | { readonly type: "sidecar.changed"; readonly data: ServerReadyData }
   | { readonly type: "plugin-servers.ready" }
@@ -104,7 +96,6 @@ export type StartupEvent =
 
 export type StartupEffect =
   | { readonly type: "check-first-launch" }
-  | { readonly type: "preload-locale" }
   | { readonly type: "await-sidecar" }
   | { readonly type: "preload-route"; readonly url: string }
   | { readonly type: "notify-theme-ready" }
@@ -118,7 +109,6 @@ export type StartupTransition = {
 
 const DISPOSED: StartupState = Object.freeze({ status: "disposed" })
 
-const UNSETTLED: LocaleGate = Object.freeze({ settled: false })
 
 const TIMEOUTS: Record<StartupTimer, number> = {
   sidecar: SIDECAR_TIMEOUT_MS,
@@ -141,7 +131,6 @@ export function createStartupState(input: {
     reducedMotion: input.reducedMotion,
     route: input.route,
     firstLaunch: input.firstLaunch,
-    locale: UNSETTLED,
     themeApplied: false,
     sidecar: undefined,
     pluginServersReady: false,
@@ -155,7 +144,6 @@ export function createStartupState(input: {
       input.firstLaunch === undefined
         ? { type: "check-first-launch" }
         : { type: "preload-route", url: preloadTarget(input.initialUrl, input.firstLaunch) },
-      { type: "preload-locale" },
       { type: "await-sidecar" },
       { type: "start-timer", timer: "sidecar", timeoutMs: SIDECAR_TIMEOUT_MS },
     ],
@@ -193,12 +181,6 @@ function step(state: StartupState, event: StartupEvent): StartupTransition {
   if (event.type === "theme.applied")
     return state.themeApplied ? unchanged(state) : to({ ...state, themeApplied: true })
 
-  if (event.type === "locale.settled") {
-    if (state.locale.settled) return unchanged(state)
-    const locale = { settled: true, value: event.locale } as const
-
-    return state.status === "booting" ? mount({ ...state, locale }) : to({ ...state, locale })
-  }
 
   if (state.status === "failed") return unchanged(state)
 
@@ -217,7 +199,6 @@ function step(state: StartupState, event: StartupEvent): StartupTransition {
       return to({
         status: "revealed",
         firstLaunch: state.firstLaunch,
-        locale: state.locale,
         themeApplied: state.themeApplied,
         sidecar: state.sidecar,
       })
@@ -297,7 +278,7 @@ function boot(state: Extract<StartupState, { status: "booting" }>, event: Startu
 }
 
 function mount(state: Extract<StartupState, { status: "booting" }>): StartupTransition {
-  if (!state.sidecar || state.firstLaunch === undefined || !state.locale.settled || !state.pluginServersReady)
+  if (!state.sidecar || state.firstLaunch === undefined || !state.pluginServersReady)
     return to(state)
 
   return to({
@@ -306,7 +287,6 @@ function mount(state: Extract<StartupState, { status: "booting" }>): StartupTran
     reducedMotion: state.reducedMotion,
     route: state.route,
     firstLaunch: state.firstLaunch,
-    locale: state.locale,
     themeApplied: state.themeApplied,
     sidecar: state.sidecar,
     routePreloaded: state.routePreloaded,
@@ -329,7 +309,6 @@ function beginReveal(state: {
   readonly reducedMotion: boolean
   readonly route: LayoutRoute
   readonly firstLaunch: boolean
-  readonly locale: LocaleGate
   readonly themeApplied: boolean
   readonly sidecar: ServerReadyData
 }): StartupTransition {
@@ -338,7 +317,6 @@ function beginReveal(state: {
     return to({
       status: "revealed",
       firstLaunch: state.firstLaunch,
-      locale: state.locale,
       themeApplied: state.themeApplied,
       sidecar: state.sidecar,
     })
@@ -348,17 +326,16 @@ function beginReveal(state: {
     initialUrl: state.initialUrl,
     route: state.route,
     firstLaunch: state.firstLaunch,
-    locale: state.locale,
     themeApplied: state.themeApplied,
     sidecar: state.sidecar,
   })
 }
 
 function fail(
-  state: { readonly locale: LocaleGate; readonly themeApplied: boolean },
+  state: { readonly themeApplied: boolean },
   failure: { readonly error: unknown } | undefined,
 ): StartupTransition {
-  return to({ status: "failed", failure, locale: state.locale, themeApplied: state.themeApplied })
+  return to({ status: "failed", failure, themeApplied: state.themeApplied })
 }
 
 function to(state: StartupState): StartupTransition {
@@ -390,13 +367,6 @@ function drawingPhase(preview: boolean, firstLaunch: boolean | undefined, initia
 
 function preloadTarget(initialUrl: string, firstLaunch: boolean) {
   return firstLaunch && initialUrl === "/" ? "/new-session" : initialUrl
-}
-
-/** The locale the language provider starts with; it never suspends or throws. */
-export function selectStartupLocale(state: StartupState) {
-  if (state.status === "disposed" || !state.locale.settled) return undefined
-
-  return state.locale.value
 }
 
 /** The startup error to throw inside the app's error boundary. */

@@ -13,7 +13,6 @@ import {
   usePluginServers,
   useTabs,
   type LayoutRoute,
-  type Platform,
 } from "@opencode/app/desktop"
 import { useTheme } from "@opencode/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
@@ -23,7 +22,6 @@ import { DesktopFirstLaunchOnboarding } from "./onboarding"
 import { createDesktopPlatform } from "./platform"
 import { bindDesktopMenu } from "./platform/menu"
 import { createSidecarResolver, localServerStartupError, sidecarHttp } from "./startup/initialization"
-import { preloadStoredLocale } from "./startup/locale"
 import {
   createStartupState,
   selectDrawingPaused,
@@ -35,7 +33,6 @@ import {
   selectSidecar,
   selectSplashDeep,
   selectStartupFailure,
-  selectStartupLocale,
   selectStartupRevealed,
   transitionStartup,
   type StartupEffect,
@@ -57,7 +54,6 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
 
   const startup = createStartupDriver({
     api: props.api,
-    platform,
     initialUrl,
     route: currentRoute(url.pathname, url.search),
     // The window was created with the answers the shell gate needs; only a fresh install, which has no
@@ -138,7 +134,8 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
   return (
     <PlatformProvider value={platform}>
       <AppBaseProviders
-        locale={selectStartupLocale(startup.state())}
+        defaultColorScheme="system"
+        initialSystemMode={props.api.getWindowBootstrap().systemMode}
         onNativeTranslations={(bundle) => void props.api.setNativeTranslations(bundle).catch(() => undefined)}
         onThemeApplied={(mode, scheme) => {
           void props.api.setTitlebar({ mode, scheme })
@@ -174,7 +171,6 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
 /** Runs the window's startup machine for the owner's lifetime: its requests to main, its preloads and its timer. */
 function createStartupDriver(input: {
   readonly api: ElectronAPI
-  readonly platform: Platform
   readonly initialUrl: string
   readonly route: LayoutRoute
   readonly firstLaunch: boolean | undefined
@@ -220,13 +216,6 @@ function createStartupDriver(input: {
           console.error("[desktop-onboarding] first launch check failed", error)
           dispatch({ type: "first-launch.settled", pending: false })
         },
-      )
-
-    // A failed locale preload falls back to English; the language provider still hydrates from the store.
-    if (effect.type === "preload-locale")
-      return void preloadStoredLocale(input.platform).then(
-        (locale) => dispatch({ type: "locale.settled", locale }),
-        () => dispatch({ type: "locale.settled", locale: undefined }),
       )
 
     if (effect.type === "await-sidecar")
@@ -277,11 +266,10 @@ function DesktopEffects(props: { api: ElectronAPI }) {
   const theme = useTheme()
 
   createEffect(() => {
-    theme.themeId()
-    theme.mode()
+    const appearance = { id: theme.themeId(), mode: theme.mode(), scheme: theme.colorScheme() }
     const background = getComputedStyle(document.documentElement).getPropertyValue("--background-base").trim()
 
-    if (background) void props.api.setBackgroundColor(background)
+    if (background) void props.api.setBackgroundColor(background, appearance)
   })
 
   return null

@@ -22,6 +22,7 @@ export function configureApplication() {
 
   process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
 
+  app.commandLine.appendSwitch("lang", "en-US")
   app.setName(APP_NAME)
   app.setAppUserModelId(APP_ID)
   app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")

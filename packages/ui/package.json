@@ -41,6 +41,7 @@
     "./badge": "./src/data-display/badge/badge.tsx",
     "./button": "./src/actions/button/button.tsx",
     "./button.css": "./src/actions/button/button.css",
+    "./clipboard": "./src/clipboard.ts",
     "./checkbox": "./src/forms/checkbox/checkbox.tsx",
     "./dialog": "./src/overlays/dialog/dialog.tsx",
     "./diff-changes": "./src/data-display/diff-changes/diff-changes.tsx",

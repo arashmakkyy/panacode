@@ -22,7 +22,6 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   { tab: "shortcuts", label: "settings.shortcuts.title", keywords: "keybind keyboard hotkey" },
   { tab: "about", label: "settings.tab.about", keywords: "version license credits" },
   { tab: "experimental", label: "settings.tab.experimental", keywords: "experiments preview beta" },
-  { tab: "general", label: "settings.general.row.language.title", target: "settings-language" },
   {
     tab: "general",
     label: "settings.general.row.interfaceMode.title",

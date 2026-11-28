@@ -12,6 +12,7 @@ export type SegmentOption<T extends string = string> = {
 
 export interface SegmentedControlProps<T extends string = string> {
   options: readonly SegmentOption<T>[]
+  disabled?: boolean
   value: T
   onChange: (value: T) => void
   /** Called when the pointer or focus reaches an option, before it is chosen. */
@@ -85,8 +86,9 @@ export function SegmentedControl<T extends string>(props: SegmentedControlProps<
     const node = track
     if (!node) return
     const edges = () => {
-      const rest = node.scrollWidth - node.clientWidth - node.scrollLeft
-      node.toggleAttribute("data-fade-start", node.scrollLeft > 1)
+      const offset = Math.abs(node.scrollLeft)
+      const rest = node.scrollWidth - node.clientWidth - offset
+      node.toggleAttribute("data-fade-start", offset > 1)
       node.toggleAttribute("data-fade-end", rest > 1)
     }
     edges()
@@ -111,32 +113,20 @@ export function SegmentedControl<T extends string>(props: SegmentedControlProps<
     const node = track
     const button = node?.querySelector<HTMLElement>("[aria-pressed='true']")
     if (node && button && node.scrollWidth > node.clientWidth) {
-      const room = 20
-      const start = button.offsetLeft - room
-      const end = button.offsetLeft + button.offsetWidth + room - node.clientWidth
-      const left = node.scrollLeft > start ? start : node.scrollLeft < end ? end : node.scrollLeft
-      if (left !== node.scrollLeft) node.scrollTo({ left: Math.max(0, left), behavior: first || reduced() ? "auto" : "smooth" })
+      button.scrollIntoView({ inline: "nearest", block: "nearest", behavior: first || reduced() ? "instant" : "smooth" })
     }
     first = false
     kick()
   })
 
   const move = (event: KeyboardEvent, index: number) => {
-    const last = props.options.length - 1
-    const target =
-      event.key === "ArrowRight" || event.key === "ArrowDown"
-        ? index === last
-          ? 0
-          : index + 1
-        : event.key === "ArrowLeft" || event.key === "ArrowUp"
-          ? index === 0
-            ? last
-            : index - 1
-          : event.key === "Home"
-            ? 0
-            : event.key === "End"
-              ? last
-              : -1
+    const length = props.options.length
+    if (!length || !track) return
+    const right = getComputedStyle(track).direction === "rtl" ? -1 : 1
+    const steps: Record<string, number> = { ArrowRight: right, ArrowLeft: -right, ArrowUp: -1, ArrowDown: 1 }
+    const step = steps[event.key]
+    const target = event.key === "Home" ? 0 : event.key === "End" ? length - 1 :
+      step === undefined ? -1 : (index + step + length) % length
     if (target < 0) return
     const option = props.options[target]
     if (!option) return
@@ -159,6 +149,7 @@ export function SegmentedControl<T extends string>(props: SegmentedControlProps<
           {(option, index) => (
             <button
               type="button"
+              disabled={props.disabled}
               data-value={option.value}
               aria-pressed={props.value === option.value}
               tabIndex={index() === selectedIndex() ? 0 : -1}

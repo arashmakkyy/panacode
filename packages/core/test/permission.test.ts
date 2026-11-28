@@ -347,6 +347,21 @@ describe("Permission", () => {
     }),
   )
 
+  it.effect("limits a scoped denial to its selected request, including its feedback", () =>
+    Effect.gen(function* () {
+      const other = Session.ID.make("ses_other")
+      yield* setup()
+      yield* setup([], other)
+      const service = yield* Permission.Service
+      const ids = ["per_one", "per_two", "per_three"].map((id) => Permission.ID.create(id))
+      for (const [i, id] of ids.entries()) yield* service.ask(assertion({ id, sessionID: i === 2 ? other : Session.ID.make("ses_test") }))
+      yield* service.reply({ requestID: ids[0]!, reply: "reject", scope: "request", message: "فقط همین درخواست" })
+      expect((yield* service.list()).map((item) => item.id).sort()).toEqual(ids.slice(1).sort())
+      yield* service.reply({ requestID: ids[1]!, reply: "once" })
+      expect((yield* service.list()).map((item) => item.id)).toEqual([ids[2]!])
+    }),
+  )
+
   it.effect("defects when an asked permission is declined", () =>
     Effect.gen(function* () {
       yield* setup()

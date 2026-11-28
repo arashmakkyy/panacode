@@ -576,8 +576,8 @@ export function createNextTimelineRowRenderer(input: {
                 sources={turnSourcesValue()}
                 onOpenSources={() => sourcesHost?.open(row().userMessageID)}
                 onRetry={
-                  input.actions?.revert && latestSent() === row().userMessageID
-                    ? () => input.actions!.revert!({ sessionID: input.sessionID(), messageID: row().userMessageID })
+                  input.actions?.retry && latestSent() === row().userMessageID
+                    ? () => input.actions!.retry!({ sessionID: input.sessionID(), messageID: row().userMessageID })
                     : undefined
                 }
                 defaultOpen={defaultOpen()}
@@ -1203,7 +1203,7 @@ export function createNextTimelineRowRenderer(input: {
       return (
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-            <div data-slot="session-turn-assistant-content" aria-hidden={phase(current().userMessageID).live}>
+            <div data-slot="session-turn-assistant-content" aria-live="off">
               {content}
             </div>
           </div>

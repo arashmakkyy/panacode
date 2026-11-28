@@ -487,7 +487,7 @@ for (const transition of ["reasoning-end", "idle", "retry"] as const) {
     })
 
     const part = page.locator(`[data-timeline-part-id="${renderedPartID(id)}"]`)
-    const trigger = part.locator('[data-slot="collapsible-trigger"]')
+    const trigger = part.getByRole("button", { name: /^(Thinking|Thought)/ })
     await expect(page.locator('[data-timeline-row="Thinking"]')).toBeVisible()
     await expect(trigger).toHaveAttribute("aria-expanded", "false")
     await timeline.send(transition === "reasoning-end" ? partUpdated(reasoningPart(id, text)) : status(transition))
@@ -496,6 +496,7 @@ for (const transition of ["reasoning-end", "idle", "retry"] as const) {
     await expect(page.locator('[data-timeline-row="Retry"]')).toHaveCount(transition === "retry" ? 1 : 0)
     await trigger.click()
     await expect(trigger).toHaveAttribute("aria-expanded", "true")
+    await expect(part.getByRole("heading", { name: "Inspecting stability" })).toBeVisible()
     await expect(part.getByText("The timeline is ready for the next step.", { exact: true })).toBeVisible()
   })
 }
@@ -521,9 +522,9 @@ for (const shellDefault of ["collapsed", "expanded"] as const) {
       },
     })
 
-    const thought = page.locator(
-      `[data-timeline-part-id="${renderedPartID(reasoningID)}"] [data-slot="collapsible-trigger"]`,
-    )
+    const thought = page
+      .locator(`[data-timeline-part-id="${renderedPartID(reasoningID)}"]`)
+      .getByRole("button", { name: /^(Thinking|Thought)/ })
 
     const shellTrigger = page.locator(`[data-timeline-part-id="${shellID}"] [data-slot="collapsible-trigger"]`)
     const group = page.locator('[data-component="collapsed-tool-group"]')
@@ -1514,7 +1515,7 @@ test.describe("compaction", () => {
       sessionStatus: { [sessionID]: { type: "busy" } },
     })
 
-    await timeline.send(compactionStarted({ sessionID, reason: "manual", recent: "" }))
+    await timeline.send(compactionStarted({ sessionID, reason: "manual" }))
     const compaction = page.locator('[data-component="session-compaction-message"]')
     await expect(compaction.getByText("Session compaction started", { exact: true })).toBeVisible()
     await expect(compaction.getByRole("status").getByLabel("Compacting", { exact: true })).toBeVisible()
@@ -1546,7 +1547,6 @@ test.describe("compaction", () => {
         sessionID,
         reason: "manual",
         text: "## Checkpoint\n\nFinal implementation details.",
-        recent: "",
       }),
     )
     await expect(compaction).toContainText("Final implementation details.")
@@ -1636,7 +1636,7 @@ test.describe("compaction", () => {
 
       for (const [index, name] of names.entries()) {
         const outcome = outcomes[name]
-        await timeline.send(compactionStarted({ sessionID, reason: outcome.reason, recent: "" }))
+        await timeline.send(compactionStarted({ sessionID, reason: outcome.reason }))
         await timeline.send(compactionDelta({ sessionID, text: outcome.partial }))
         await expect(compactions).toHaveCount(index + 1)
         const compaction = compactions.nth(index)
@@ -3325,8 +3325,8 @@ function pauseExitAnimations(locator: Locator) {
   return locator.evaluateHandle((element) => {
     const animations: Animation[] = []
 
-    const pause = (event: AnimationEvent) => {
-      if (event.target !== element || event.animationName !== "exit") return
+    const pause = (event: Event) => {
+      if (!(event instanceof AnimationEvent) || event.target !== element || event.animationName !== "exit") return
 
       animations.push(...element.getAnimations())
       animations.forEach((animation) => animation.pause())

@@ -46,6 +46,7 @@ export const invocation = (context: Pick<Tool.Context, "sessionID" | "agent" | "
 export interface ReplyInput {
   readonly requestID: ID
   readonly reply: Reply
+  readonly scope?: "request"
   readonly message?: string
 }
 
@@ -308,6 +309,13 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           const existing = pending.get(input.requestID)
           if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
+          if (input.reply === "always" && existing.request.save?.length) {
+            yield* saved.add({
+              projectID: location.project.id,
+              action: existing.request.action,
+              resources: existing.request.save,
+            })
+          }
           yield* bus.publish(Permission.Event.Replied, {
             sessionID: existing.request.sessionID,
             requestID: existing.request.id,
@@ -320,6 +328,7 @@ const layer = Layer.effect(
               input.message ? new CorrectedError({ feedback: input.message }) : new DeclinedError(),
             )
             pending.delete(input.requestID)
+            if (input.scope === "request") return
             for (const [id, item] of pending) {
               if (item.request.sessionID !== existing.request.sessionID) continue
               yield* bus.publish(Permission.Event.Replied, {
@@ -337,13 +346,6 @@ const layer = Layer.effect(
             return
           }
 
-          if (input.reply === "always" && existing.request.save?.length) {
-            yield* saved.add({
-              projectID: location.project.id,
-              action: existing.request.action,
-              resources: existing.request.save,
-            })
-          }
           yield* Deferred.succeed(existing.deferred, undefined)
           pending.delete(input.requestID)
           if (input.reply !== "always" || !existing.request.save?.length) return

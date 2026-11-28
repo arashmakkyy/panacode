@@ -266,15 +266,18 @@ test("shows a pending permission dock", async ({ page }) => {
   await page.goto(sessionHref(sessionID))
   await expectSessionTitle(page, title)
 
-  const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
+  const permission = page.getByRole("region", { name: "Approvals", exact: true })
   await expect(permission).toBeVisible()
-  await expect(permission.getByText("git status")).toBeVisible()
-  await expect(permission.getByText("git diff")).toBeVisible()
-  await expect(permission.locator('[data-slot="permission-footer-actions"] button')).toHaveCount(3)
+  await expect(permission.locator('[data-key="resource"] dd')).toHaveText("git status git diff")
+  await expect(permission.locator('[data-slot="approval-actions"] button')).toHaveCount(2)
+  await expect(permission.locator('[data-action="approval-always"]')).toHaveCount(0)
   await expect(page.locator('[data-component="composer"]')).toHaveCount(0)
 
-  const reply = page.waitForResponse((response) => response.request().method() === "POST")
-  await permission.getByRole("button", { name: "Allow once" }).click()
+  const reply = page.waitForResponse((response) =>
+    response.request().method() === "POST" && new URL(response.url()).pathname.endsWith("/permission/permission-request/reply"),
+  )
+
+  await permission.getByRole("button", { name: "Approve" }).click()
   const response = await reply
   expect(new URL(response.url()).pathname).toBe(`/api/session/${sessionID}/permission/permission-request/reply`)
   expect(response.request().postDataJSON()).toEqual({ decision: "once" })
@@ -312,19 +315,45 @@ test("sends one permission reply and closes the dock when it lands, before permi
   await page.goto(sessionHref(sessionID))
   await expectSessionTitle(page, title)
 
-  const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
-  const actions = permission.locator('[data-slot="permission-footer-actions"]')
-  await permission.getByRole("button", { name: "Allow once" }).dblclick()
+  const permission = page.getByRole("region", { name: "Approvals", exact: true })
+  const actions = permission.locator('[data-slot="approval-actions"]')
+  await permission.getByRole("button", { name: "Approve" }).dblclick()
   await expect.poll(() => replies.length).toBe(1)
 
-  for (const name of ["Deny", "Allow always", "Allow once"])
-    await expect(actions.getByRole("button", { name, exact: true })).toBeDisabled()
+  await expect(permission.getByText("Sending your approval")).toBeVisible()
+  await expect(actions.getByRole("button")).toHaveCount(0)
 
   released.resolve()
   await expect(permission).toHaveCount(0)
   await expect(page.locator('[data-component="composer"]')).toBeVisible()
   await expect(page.getByText("Request failed", { exact: true })).toHaveCount(0)
   expect(replies).toEqual([{ decision: "once" }])
+})
+
+test("keeps a failed denial pending and records only the confirmed decision", async ({ page }) => {
+  const requests = ["first", "second"].map((id) => ({
+    id, sessionID, action: "shell", resources: [id], metadata: {}, save: [],
+  }))
+
+  const replies: unknown[] = []
+  await mockServer(page, { sessionPermissions: { [sessionID]: requests }, onPermissionReply: (reply) => replies.push(reply.body) })
+  await page.route(`**/permission/first/reply`, (route) => route.fulfill({ status: 503 }), { times: 1 })
+  await page.goto(sessionHref(sessionID))
+  const card = page.getByRole("region", { name: "Approvals" })
+  await expect(card.locator('[data-key="resource"] dd')).toHaveText("first")
+  await page.keyboard.press("a")
+  await expect(card.locator('[data-key="resource"] dd')).toHaveText("first")
+  await card.getByText("Add a reason for denying (optional)", { exact: true }).click()
+  await card.getByRole("textbox").fill("Use the project directory")
+  const deny = card.getByRole("button", { name: "Deny", exact: true })
+  await deny.click()
+  await expect(page.getByText("Request failed", { exact: true })).toBeVisible()
+  await expect(card.getByRole("button", { name: /Resolved/ })).toHaveCount(0)
+  await deny.click()
+  await expect(card.locator('[data-key="resource"] dd')).toHaveText("second")
+  await card.getByRole("button", { name: /Resolved.*1/ }).click()
+  await expect(card.locator('[data-slot="approvals-log-outcome"]')).toHaveText("Denied")
+  expect(replies).toEqual([{ decision: "reject", scope: "request", message: "Use the project directory" }])
 })
 
 test("shows an auto-accepted permission in the dock once its replies stop answering", async ({ page }) => {
@@ -350,7 +379,7 @@ test("shows an auto-accepted permission in the dock once its replies stop answer
 
   await page.goto(sessionHref(sessionID))
   await expectSessionTitle(page, title)
-  const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
+  const permission = page.getByRole("region", { name: "Approvals", exact: true })
 
   // Each reply times out, then the next one starts after its retry delay.
   await expect.poll(() => attempts.count).toBe(1)
@@ -363,7 +392,7 @@ test("shows an auto-accepted permission in the dock once its replies stop answer
   await expect(permission).toHaveCount(0)
 
   await page.clock.fastForward(15_000)
-  await expect(permission.getByText("git status")).toBeVisible()
+  await expect(permission.locator('[data-key="resource"] dd')).toHaveText("git status")
   expect(attempts.count).toBe(3)
 })
 
@@ -394,10 +423,10 @@ test("keeps a typed MCP elicitation answer across a session switch and submits i
   const input = dock.getByRole("textbox", { name: "Environment", exact: true })
   await input.fill("staging")
 
-  await page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(other.id)}"])`).click()
+  await page.getByRole("complementary").getByRole("button", { name: /Other request session/ }).click()
   await expectSessionTitle(page, other.title)
   await expect(dock).toHaveCount(0)
-  await page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(sessionID)}"])`).click()
+  await page.getByRole("complementary").getByRole("button", { name: /Request dock regression/ }).click()
   await expectSessionTitle(page, title)
   await expect(input).toHaveValue("staging")
 
@@ -477,17 +506,17 @@ test("names the MCP tool, the hook's message and the full input in the permissio
   await page.goto(sessionHref(sessionID))
   await expectSessionTitle(page, title)
 
-  const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
-  const input = permission.locator('[data-slot="permission-input"]')
-  await expect(permission.getByText("linear_save_comment")).toBeVisible()
+  const permission = page.getByRole("region", { name: "Approvals", exact: true })
+  const input = permission.locator('[data-slot="approval-args"]')
+  await expect(permission.getByText("linear_save_comment", { exact: true })).toBeVisible()
   await expect(permission.getByText("Posts a comment on a Linear issue")).toBeVisible()
-  await expect(input.getByText("issueId: ENG-1")).toBeVisible()
-  await expect(input.getByText('labels: ["bug"]')).toBeVisible()
+  await expect(input.locator('[data-key="input.issueId"] dd')).toHaveText("ENG-1")
+  await expect(input.locator('[data-key="input.labels"] dd')).toHaveText('["bug"]')
   // The user approves these arguments, so a long one stays whole and scrolls inside the dock instead of being cut
-  await expect(input.getByText(`body: ${body}`, { exact: true })).toBeVisible()
+  await expect(input.locator('[data-key="input.body"] dd')).toHaveText(body)
   await expect.poll(() => input.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
   // "Allow always" saves the wildcard, so its scope stays visible next to this call's input
-  await expect(permission.locator('[data-slot="permission-patterns"]').getByText("*", { exact: true })).toBeVisible()
+  await expect(input.locator('[data-key="pattern"] dd')).toHaveText("linear_save_comment *")
 })
 
 test("loads a running subagent's question without polling idle subagents on every update", async ({ page }) => {
@@ -625,3 +654,24 @@ test("restores the draft caret before typing after a request dock closes", async
 function mockServer(page: Page, requests: Pick<WorkspaceInput, "sessionPermissions" | "onPermissionReply" | "forms">) {
   return mockWorkspace(page, { name: "RequestDocks", directory, sessions: [{ id: sessionID, title }], ...requests })
 }
+
+test("a Persian denial note applies only to the selected request", async ({ page }) => {
+  const replies: unknown[] = []
+  const ids = ["permission_first", "permission_second"]
+  await mockWorkspace(page, {
+    name: "Requests", directory, seed: { locale: "fa" }, sessions: [{ id: sessionID, title }],
+    sessionPermissions: { [sessionID]: ids.map((id) => ({ id, sessionID, action: "read", resources: [id], save: [], metadata: {} })) },
+    onPermissionReply: (reply) => replies.push(reply),
+  })
+  await page.goto(sessionHref(sessionID))
+  const card = page.locator('[data-component="panacode-agent-approvals"]')
+  await card.locator('[data-slot="approvals-queue-item"] button').click()
+  await expect(card.locator('[data-action="approval-always"]')).toHaveCount(0)
+  await card.getByText("Add a reason for denying (optional)", { exact: true }).click()
+  await card.getByRole("textbox").fill("این فایل را تغییر نده")
+  await card.getByRole("button", { name: "Deny", exact: true }).click()
+  await expect.poll(() => replies).toEqual([{ sessionID, permissionID: ids[1], body: {
+    decision: "reject", scope: "request", message: "این فایل را تغییر نده",
+  } }])
+  await expect(card).toContainText(ids[0])
+})

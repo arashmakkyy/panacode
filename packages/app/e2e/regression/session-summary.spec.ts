@@ -987,7 +987,7 @@ test.describe("remote configuration", () => {
   })
 })
 
-test("long MCP lists stay in the viewport in a real RTL locale", async ({ page }) => {
+test("long MCP names with mixed-direction text stay in the viewport", async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 600 })
   await mockStressTimeline(page, {
     mcp: Array.from({ length: 30 }, (_, index) => ({
@@ -997,8 +997,8 @@ test("long MCP lists stay in the viewport in a real RTL locale", async ({ page }
   })
   await seed(page, { locale: "he", theme: { id: "oc-2", scheme: "dark" } })
   await page.goto(sessionHref(fixture.targetID))
-  await page.getByRole("button", { name: "פרטי ההפעלה", exact: true }).click()
-  const summary = page.getByRole("dialog", { name: "פרטי ההפעלה", exact: true })
+  await page.getByRole("button", { name: "Session details", exact: true }).click()
+  const summary = page.getByRole("dialog", { name: "Session details", exact: true })
   await summary.getByRole("button", { name: "MCP", exact: true }).click()
   const menu = page.getByRole("group", { name: "MCP", exact: true })
   await expect(menu.locator(".session-mcp-row")).toHaveCount(30)

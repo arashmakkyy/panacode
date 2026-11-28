@@ -113,6 +113,7 @@ export function createComposerEditor(input: {
   attachments?: ComposerAttachmentConfig
 }) {
   let editor: HTMLElement | undefined
+  let suggestionUndo: { text: string; cursor: number } | undefined
   let fileInput: HTMLInputElement | undefined
   let focusFrame: number | undefined
   let focusCursor: number | undefined
@@ -726,8 +727,35 @@ export function createComposerEditor(input: {
       input.onEditor?.(element)
     },
     restoreFocus,
-    onInput(value: string, prompt?: ComposerPersistedState["prompt"], cursor?: number) {
+    appendSuggestion(text: string) {
+      const end = promptLength(draft.state.prompt)
+      const addition = end ? "\n" + text : text
+
+      if (editor) {
+        suggestionUndo = {
+          text: draft.state.prompt.filter((part) => !isAttachment(part)).map((part) => part.content).join(""),
+          cursor: draft.state.cursor ?? end,
+        }
+        editor.focus({ preventScroll: true })
+        setCursorPosition(editor, end)
+
+        // One native editor transaction keeps Undo, existing mentions and attachments.
+        if (insertEditorText(addition)) return
+        suggestionUndo = undefined
+      }
+
+      draft.setCursor(end)
+      draft.addText(addition)
+      restoreFocus(end + addition.length)
+    },
+    onInput(value: string, prompt?: ComposerPersistedState["prompt"], cursor?: number, inputType?: string) {
       cancelFocus()
+
+      if (inputType === "historyUndo" && suggestionUndo?.text === value) {
+        cursor = suggestionUndo.cursor
+        suggestionUndo = undefined
+        restoreFocus(cursor)
+      }
 
       if (prompt) draft.setPrompt(prompt, cursor)
 
@@ -779,17 +807,8 @@ export function createComposerEditor(input: {
       // insertText emits input events per line, repeatedly parsing and saving the draft.
       // Escaped HTML inserts multiline text once and preserves native selection and undo.
       const normalized = text.replace(/\r\n?/g, "\n")
-      const multiline = normalized.includes("\n")
 
-      const value = multiline
-        ? normalized.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
-        : normalized
-
-      if (
-        Predicate.isFunction(document.execCommand) &&
-        document.execCommand(multiline ? "insertHTML" : "insertText", false, value)
-      )
-        return
+      if (insertEditorText(normalized)) return
       const target = event.currentTarget
       const selection = window.getSelection()
 
@@ -849,4 +868,14 @@ export function shouldHandlePasteAsAttachment(clipboard: DataTransfer | null, re
   if (Array.from(clipboard?.types ?? []).some((type) => type.startsWith("text/"))) return false
 
   return readClipboardImage
+}
+
+// Insert literal text in one browser editing transaction, including line breaks parsed by the composer.
+function insertEditorText(text: string) {
+  if (!Predicate.isFunction(document.execCommand)) return false
+
+  if (!text.includes("\n")) return document.execCommand("insertText", false, text)
+  const html = text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll("\n", "<br>")
+
+  return document.execCommand("insertHTML", false, html)
 }

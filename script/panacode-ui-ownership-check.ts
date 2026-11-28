@@ -49,7 +49,7 @@ if (!appEntry.includes("PANACODE_THEME_ID") || !appEntry.includes("defaultTheme"
 if (!appEntry.includes('dataset.brand = "panacode"') && !appEntry.includes("data-brand")) {
   failures.push("packages/app/src/app.tsx must mark the document with Panacode brand hooks")
 }
-if (!appEntry.includes('defaultColorScheme="dark"')) {
+if (!appEntry.includes('defaultColorScheme={props.defaultColorScheme ?? "dark"}')) {
   failures.push('packages/app/src/app.tsx must default the color scheme to dark')
 }
 

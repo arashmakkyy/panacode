@@ -264,7 +264,7 @@ describe("schema-backed persistence", () => {
 
   test("cross-window updates use the same migration and validation boundary", async () => {
     const target = { ...Persist.global("schema-sync-channel"), sync: true }
-    const channel = new BroadcastChannel(`opencode.persist:${target.storage}:${target.key}`)
+    const channel = new BroadcastChannel(`panacode.persist:${target.storage}:${target.key}`)
     const received = Promise.withResolvers<void>()
     const values: unknown[] = []
 

@@ -1,0 +1,34 @@
+.pc-manual-copy {
+  margin: auto;
+  width: min(32rem, calc(100% - 2rem));
+  max-height: 85dvh;
+  overflow: auto;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  color: var(--foreground);
+  font-family: var(--font-body);
+}
+.pc-manual-copy::backdrop {
+  background: rgb(0 0 0 / 40%);
+}
+.pc-manual-copy label,
+.pc-manual-copy textarea {
+  display: block;
+}
+.pc-manual-copy textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: min(12rem, 40dvh);
+  margin: 0.75rem 0;
+  padding: 0.5rem;
+  background: var(--surface-muted);
+  color: inherit;
+  font-family: var(--font-family-mono, monospace);
+  white-space: pre-wrap;
+}
+.pc-manual-copy button {
+  min-height: 44px;
+  padding-inline: 0.75rem;
+}

@@ -569,3 +569,8 @@
   font-size: var(--text-xs);
   line-height: 1.5;
 }
+
+.cs-fold-row button { color: var(--text-secondary); font: inherit; cursor: pointer; padding-inline: 8px; }
+.cs-fold-row button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.cs-feedback { padding: 4px 12px 8px; color: var(--text-secondary); }
+:root[dir="rtl"] .cs-bar { direction: rtl; }

@@ -55,11 +55,14 @@ function PanacodeBrandMark() {
     document.documentElement.dataset.brand = "panacode"
     document.documentElement.classList.add("panacode-ui")
   })
+
   return null
 }
 
 export function AppBaseProviders(
   props: ParentProps<{
+    defaultColorScheme?: "dark" | "system"
+    initialSystemMode?: "light" | "dark"
     locale?: Locale
     onNativeTranslations?: Parameters<typeof LanguageProvider>[0]["onNativeTranslations"]
     onThemeApplied?: (mode: "light" | "dark", scheme: "system" | "light" | "dark") => void
@@ -71,7 +74,8 @@ export function AppBaseProviders(
       <Font />
       <ThemeProvider
         defaultTheme={PANACODE_THEME_ID}
-        defaultColorScheme="dark"
+        initialSystemMode={props.initialSystemMode}
+        defaultColorScheme={props.defaultColorScheme ?? "dark"}
         onThemeApplied={(mode, scheme) => props.onThemeApplied?.(mode, scheme)}
       >
         <LanguageProvider locale={props.locale} onNativeTranslations={props.onNativeTranslations}>

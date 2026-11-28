@@ -74,6 +74,7 @@ type TimelineOptions = {
   collapsedEdits?: boolean
   /** The last assistant turn's tool parts, in place of its one small edit. */
   tools?: SessionMessageAssistant["content"]
+  fileContent?: (path: string) => string | undefined
   /** Events arrive from a real SSE endpoint (`source`); otherwise the mock's own stream stays idle. */
   stream?: boolean
 }
@@ -128,15 +129,16 @@ export async function mockTimelineSession(page: Page, options: TimelineOptions) 
     provider: provider(),
     sessions: [session()],
     vcsDiff: options.vcsDiff,
+    fileContent: options.fileContent,
     sessionStatus: options.busy ? { [sessionID]: { type: "busy" } } : undefined,
     pageMessages: () => ({ items: messages }),
   })
   await page.addInitScript((general) => localStorage.setItem("settings.v3", JSON.stringify({ general })), {
-    editToolPartsExpanded: true,
+    editToolPartsExpanded: !options.collapsedEdits,
     shellToolPartsExpanded: true,
     showReasoningSummaries: true,
     timelineDetail: options.collapsedEdits
-      ? { ...timelinePresets[2].value, edit: { placement: "separate", details: "collapsed" } }
+      ? timelinePresets[2].value
       : undefined,
   })
 

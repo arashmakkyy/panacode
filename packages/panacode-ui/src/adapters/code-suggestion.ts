@@ -1,97 +1,131 @@
 import type { CodeSuggestionHunk } from "../features/code-suggestion"
+import type { Decisions } from "../features/code-suggestion/apply"
 
 type PatchLine = { sign: " " | "-" | "+"; text: string }
-type PatchHunk = { oldStart: number; newStart: number; lines: PatchLine[] }
+type PatchHunk = { start: number; lines: PatchLine[] }
 
-/** Parses the hunks of a unified diff for one file. "\ No newline" markers are ignored. */
+/** Keep the line terminator as part of each token. The no-newline marker applies only to the preceding side. */
 export function parsePatchHunks(patch: string): PatchHunk[] {
   const hunks: PatchHunk[] = []
   let current: PatchHunk | undefined
   for (const raw of patch.split("\n")) {
-    const header = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw)
+    const header = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(raw)
     if (header) {
-      current = { oldStart: Number(header[1]), newStart: Number(header[2]), lines: [] }
+      current = { start: Number(header[1]) - (header[2] === "0" ? 0 : 1), lines: [] }
       hunks.push(current)
       continue
     }
     if (!current) continue
     const sign = raw[0]
-    if (sign === " " || sign === "-" || sign === "+") current.lines.push({ sign, text: raw.slice(1) })
-    else if (raw === "") current.lines.push({ sign: " ", text: "" })
+    if (sign === " " || sign === "-" || sign === "+") current.lines.push({ sign, text: raw.slice(1) + "\n" })
+    if (raw.startsWith("\\ No newline")) {
+      const last = current.lines.at(-1)
+      if (last) last.text = last.text.slice(0, -1)
+    }
   }
-  // A trailing empty line from the split is not part of the last hunk.
-  const last = hunks[hunks.length - 1]
-  if (last && last.lines.length && last.lines[last.lines.length - 1].sign === " " && last.lines[last.lines.length - 1].text === "" && patch.endsWith("\n"))
-    last.lines.pop()
   return hunks
 }
 
-export type SuggestionFromPatch = {
-  /** The file before the edit (reconstructed from the current file). */
-  code: string
-  /** Arc hunks in `code` line coordinates. */
-  hunks: CodeSuggestionHunk[]
-  /** Hunks the file already has reverted (rejected earlier), so the card opens with them settled. */
-  rejected: string[]
-  /** The current file matches neither what the edit wrote nor what it replaced. */
-  conflict: boolean
-}
+const matches = (lines: string[], at: number, values: readonly string[]) =>
+  at >= 0 && at + values.length <= lines.length && values.every((value, i) => lines[at + i] === value)
 
-const matches = (after: string[], at: number, lines: string[]) => lines.every((line, i) => after[at + i] === line)
-
-/**
- * Builds the Code Suggestion input from an applied edit: the unified patch plus the file as it is on disk now.
- * Each change is found by its new side (kept) or its old side (already rejected). Anything else means the file
- * changed after the edit, so per-hunk reject must not write it.
- */
-export function suggestionFromPatch(patch: string, current: string): SuggestionFromPatch {
-  const after = current.split("\n")
+export function suggestionFromPatch(patch: string, current: string) {
+  const bom = current.startsWith("\uFEFF") ? "\uFEFF" : ""
+  const after = current.slice(bom.length).match(/[^\n]*\n|[^\n]+$/g) ?? []
   const before: string[] = []
   const hunks: CodeSuggestionHunk[] = []
+  const inserts: string[][] = []
   const rejected: string[] = []
+  let cursor = 0
+  let shift = 0
   let conflict = false
-  let cursor = 0 // index in `after`
-  let shift = 0 // how far already rejected changes moved the file from the patch's new side
-  for (const [index, hunk] of parsePatchHunks(patch).entries()) {
-    const start = Math.max(0, hunk.newStart - 1) + shift
-    if (start < cursor) {
+  const patches = parsePatchHunks(patch)
+  // Git may produce an LF patch for an entirely CRLF worktree. An explicit CR on either side of
+  // the diff describes a real line-ending change and takes precedence over this conversion.
+  if (
+    after.some((line) => line.endsWith("\r\n")) &&
+    after.every((line) => !line.endsWith("\n") || line.endsWith("\r\n")) &&
+    !patches.some((hunk) => hunk.lines.some((line) => line.text.endsWith("\r\n")))
+  ) {
+    for (const hunk of patches)
+      for (const line of hunk.lines) {
+        if (line.text.endsWith("\n")) line.text = line.text.slice(0, -1) + "\r\n"
+      }
+  }
+  for (const [index, hunk] of patches.entries()) {
+    const start = Math.max(0, hunk.start) + shift
+    if (start < cursor || start > after.length) {
       conflict = true
       break
     }
-    before.push(...after.slice(cursor, start))
-    let a = start
+    while (cursor < start) before.push(after[cursor++])
     let part = 0
     const lines = hunk.lines
+    // Some edit tools include the BOM in their patch and others strip it while reading the file.
+    if (start === 0 && bom) {
+      for (const sign of ["-", "+"] as const) {
+        const first = lines.find((line) => line.sign === sign || line.sign === " ")
+        if (first) first.text = first.text.replace(/^\uFEFF/, "")
+      }
+    }
     for (let i = 0; i < lines.length; ) {
       if (lines[i].sign === " ") {
-        if (after[a] !== lines[i].text) conflict = true
-        before.push(lines[i].text)
-        a++
-        i++
+        const text = lines[i++].text
+        if (after[cursor++] !== text) conflict = true
+        before.push(text)
         continue
       }
       const removed: string[] = []
       const added: string[] = []
       while (i < lines.length && lines[i].sign !== " ") {
-        if (lines[i].sign === "-") removed.push(lines[i].text)
-        else added.push(lines[i].text)
-        i++
+        const line = lines[i++]
+        ;(line.sign === "-" ? removed : added).push(line.text)
       }
-      const run: CodeSuggestionHunk = { id: `h${index}-${part++}`, start: before.length, remove: removed.length, insert: added }
-      hunks.push(run)
-      before.push(...removed)
-      if (matches(after, a, added)) a += added.length
-      else if (matches(after, a, removed)) {
-        rejected.push(run.id)
-        a += removed.length
+      const context: string[] = []
+      for (let j = i; j < lines.length && lines[j].sign === " "; j++) context.push(lines[j].text)
+      const fits = (side: string[]) => matches(after, cursor, side) && matches(after, cursor + side.length, context)
+      let applied = fits(added)
+      let reverted = fits(removed)
+      if (
+        applied &&
+        reverted &&
+        i === lines.length &&
+        index === patches.length - 1 &&
+        (cursor + added.length === after.length || cursor + removed.length === after.length)
+      ) {
+        applied = cursor + added.length === after.length
+        reverted = cursor + removed.length === after.length
+      }
+      if (applied === reverted) conflict = true
+      const id = `h${index}-${part++}`
+      hunks.push({
+        id,
+        start: before.length,
+        remove: removed.length,
+        insert: added.map((line) => line.replace(/\r?\n$/, "")),
+      })
+      inserts.push(added)
+      for (const line of removed) before.push(line)
+      if (reverted && !applied) {
+        rejected.push(id)
+        cursor += removed.length
         shift += removed.length - added.length
-      } else {
-        conflict = true
-        a += added.length
-      }
+      } else cursor += added.length
     }
-    cursor = a
   }
-  before.push(...after.slice(Math.min(cursor, after.length)))
-  return { code: before.join("\n"), hunks, rejected, conflict }
+  while (cursor < after.length) before.push(after[cursor++])
+  function render(decisions: Decisions) {
+    const output = [bom]
+    let pos = 0
+    for (const [i, hunk] of hunks.entries()) {
+      while (pos < hunk.start) output.push(before[pos++])
+      if (decisions[hunk.id] === "rejected") {
+        for (let n = 0; n < hunk.remove!; n++) output.push(before[pos + n])
+      } else for (const line of inserts[i]) output.push(line)
+      pos += hunk.remove!
+    }
+    while (pos < before.length) output.push(before[pos++])
+    return output.join("")
+  }
+  return { code: before.join(""), hunks, rejected, conflict: conflict || !patches.length, render }
 }

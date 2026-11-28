@@ -26,13 +26,16 @@ export function applyDecisions(lines: string[], hunks: CodeSuggestionHunk[], dec
   const out: string[] = []
   let cursor = 0
   for (const hunk of normalizeHunks(hunks, lines.length)) {
-    out.push(...lines.slice(cursor, hunk.start))
+    while (cursor < hunk.start) out.push(lines[cursor++])
     const decision = decisions[hunk.id]
-    if (decision === "accepted" || (keepPending && !decision)) out.push(...hunk.insert)
-    else out.push(...lines.slice(hunk.start, hunk.start + hunk.remove))
+    if (decision === "accepted" || (keepPending && !decision)) {
+      for (const line of hunk.insert) out.push(line)
+    } else {
+      for (let i = 0; i < hunk.remove; i++) out.push(lines[hunk.start + i])
+    }
     cursor = hunk.start + hunk.remove
   }
-  out.push(...lines.slice(cursor))
+  while (cursor < lines.length) out.push(lines[cursor++])
   return out.join("\n")
 }
 

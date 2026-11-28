@@ -35,8 +35,16 @@ export const AppResolveAppPath = Rpc.make("AppResolveAppPath", {
   success: Schema.NullOr(Schema.String),
 })
 
+export const BackgroundTheme = Schema.Struct({
+  id: Schema.String,
+  scheme: Schema.Literals(["light", "dark", "system"]),
+  mode: Schema.Literals(["light", "dark"]),
+})
+
+export type BackgroundTheme = typeof BackgroundTheme.Type
+
 export const AppSetBackgroundColor = Rpc.make("AppSetBackgroundColor", {
-  payload: { color: Schema.String },
+  payload: { color: Schema.String, theme: Schema.optionalKey(BackgroundTheme) },
 })
 
 export const AppExportDebugLogs = Rpc.make("AppExportDebugLogs", { success: Schema.String })

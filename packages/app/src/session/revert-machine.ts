@@ -24,6 +24,7 @@ export type SessionRevertOperation =
   /** An undelivered prompt has no history to rewind, so it is withdrawn from the inbox instead. */
   | { readonly type: "withdraw"; readonly message: SessionMessageUser }
   | { readonly type: "rewind"; readonly message: SessionMessageUser; readonly prior: string | undefined }
+  | { readonly type: "retry"; readonly message: SessionMessageUser }
   | { readonly type: "redo" }
   /** The Rewound toast's Undo: restage the earlier boundary and put the draft from before the rewind back. */
   | { readonly type: "undo-rewind"; readonly prior: string | undefined; readonly draft: RevertDraftSnapshot }
@@ -67,6 +68,8 @@ export type SessionRevertEvent =
       readonly messageID: string
       readonly revertMessageID: string | undefined
     } & RevertMessages)
+  | ({ readonly type: "retry.requested"; readonly messageID: string } & RevertMessages)
+  | { readonly type: "retry.succeeded"; readonly attempt: number }
   | ({ readonly type: "undo.requested"; readonly revertMessageID: string | undefined } & RevertMessages)
   | { readonly type: "redo.requested"; readonly revertMessageID: string | undefined }
   | { readonly type: "toast.undo"; readonly attempt: number }
@@ -106,6 +109,19 @@ export function createSessionRevertState(): SessionRevertState {
 }
 
 export function transitionSessionRevert(state: SessionRevertState, event: SessionRevertEvent): SessionRevertTransition {
+  if (event.type === "retry.requested") {
+    if (state.status === "running" || event.inboxIDs.has(event.messageID)) return unchanged(state)
+    const message = event.messages.find((item) => item.id === event.messageID)
+
+    return message ? start(state, { type: "retry", message }) : unchanged(state)
+  }
+
+  if (event.type === "retry.succeeded") {
+    if (state.status !== "running" || state.attempt !== event.attempt || state.operation.type !== "retry") return unchanged(state)
+
+    return changed(idle(state.attempt, [], { boundary: undefined }))
+  }
+
   if (event.type === "rewind.to") {
     if (state.status === "running") return unchanged(state)
     const message = event.messages.find((item) => item.id === event.messageID)
@@ -308,7 +324,7 @@ function start(state: SessionRevertState, operation: SessionRevertOperation): Se
 }
 
 function echoOf(operation: Exclude<SessionRevertOperation, { type: "withdraw" }>): RevertEcho {
-  if (operation.type === "rewind") return operation.message.id
+  if (operation.type === "rewind" || operation.type === "retry") return operation.message.id
 
   if (operation.type === "undo-rewind") return operation.prior
 

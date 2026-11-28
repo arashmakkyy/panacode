@@ -48,7 +48,6 @@ import { resolveSessionComposerSelection } from "./selection"
 import { composerModelLabelKey, composerModelLabels, composerProviderName } from "@/composer/model-label"
 import { useProviders } from "@/providers/catalog/providers"
 import { SubagentBar } from "./subagent-bar"
-import { PanacodeAgentRun } from "../panacode-agent-run"
 import { createSessionRequestModel } from "../requests/model"
 import type { Region } from "@/runtime/plugin/panels"
 import { SessionLocationMissing } from "./location-missing"
@@ -403,6 +402,7 @@ export function createActiveSessionRegion(input: {
       // Each timeline passes its own session and child flag, which a kept timeline holds while another is routed.
       timeline: (view: TimelineActionsView) =>
         createTimelineActions(view, {
+          retry: (target) => revert.retry(target.messageID, target.sessionID),
           revert: revertMessage,
           fork: forkMessage,
           pending: pendingSteer,
@@ -578,16 +578,6 @@ export function ActiveSessionComposerRegion(props: {
       }
       above={
         <Show when={!missing() && !props.session.data.isChild()}>
-          <div class="mb-2 empty:hidden" data-slot="panacode-agent-run">
-            <PanacodeAgentRun
-              sessionID={props.session.identity.params.id}
-              directory={props.session.data.info()?.location.directory ?? location().directory}
-              messages={props.session.history.messages()}
-              working={props.session.data.working()}
-              requests={props.model.region.state}
-              model={subagentModel()?.name}
-            />
-          </div>
           <SessionComposerLane>
             <SessionActivityChips
               subagents={subagents()}

@@ -7,9 +7,7 @@
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-panel);
-  background:
-    radial-gradient(120% 140% at 0% 0%, var(--brand-glow, transparent) 0%, transparent 55%),
-    var(--surface);
+  background: var(--surface);
 }
 
 [data-component="panacode-provider-spotlight"] [data-slot="spotlight-head"] {
@@ -25,7 +23,7 @@
   width: 42px;
   height: 42px;
   border-radius: 12px;
-  background: var(--brand-gradient, var(--accent));
+  background: var(--primary-fill);
   color: var(--accent-foreground);
   font-family: var(--font-display);
   font-size: 16px;
@@ -141,18 +139,13 @@
 }
 
 [data-component="panacode-provider-spotlight"] [data-slot="spotlight-primary"] {
-  border: 1px solid transparent;
-  background: var(--foreground);
-  color: var(--background);
-}
-
-[data-component="panacode-provider-spotlight"][data-status="disconnected"] [data-slot="spotlight-primary"] {
-  background: var(--accent);
+  border: 1px solid var(--primary-border);
+  background: var(--primary-fill);
   color: var(--accent-foreground);
 }
 
 [data-component="panacode-provider-spotlight"] [data-slot="spotlight-primary"]:hover {
-  filter: brightness(1.08);
+  background: var(--primary-hover);
 }
 
 [data-component="panacode-provider-spotlight"] [data-slot="spotlight-models"] {

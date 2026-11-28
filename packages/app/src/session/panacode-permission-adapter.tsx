@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup, Show } from "solid-js"
 import type { PermissionRequest } from "@opencode/client/promise"
 import {
   AgentApprovals,
@@ -8,12 +8,13 @@ import {
 } from "@panacode/ui/features/agent-approvals"
 import { fromPermissionRequest, toPermissionReply, type PermissionCopy } from "@panacode/ui/adapters/agent-approvals"
 import { useLanguage } from "@/runtime/i18n/language"
+import { hasAppLabel } from "@/runtime/i18n/app-label"
 import { SessionPermissionDock } from "@/session/requests/session-permission-dock"
 import { markToolWaiting } from "@/session/panacode-tool-state"
 
-// First time each request was shown, and this window's decisions per session (memory only, real events).
-const seen = new Map<string, number>()
-const [log, setLog] = createSignal<Record<string, ApprovalResolved[]>>({})
+import type { ConfirmedPermission } from "./requests/model"
+
+const outcomes = { always: "allowed", once: "approved", reject: "denied" } as const
 
 /**
  * Presentation bridge: OpenCode permission requests render as the Arc Agent Approvals block.
@@ -21,22 +22,27 @@ const [log, setLog] = createSignal<Record<string, ApprovalResolved[]>>({})
  */
 export function PanacodePermissionAdapter(props: {
   request: PermissionRequest
+  requests?: PermissionRequest[]
+  sessionTitle?: (id: string) => string
   responding: boolean
-  onDecide: (response: "once" | "always" | "reject") => void
+  history: readonly ConfirmedPermission[]
+  onDecide: (response: "once" | "always" | "reject", message?: string, requestID?: string) => void
   presentation?: "classic" | "panacode"
 }) {
   const language = useLanguage()
   const mode = () => props.presentation ?? "panacode"
   // The waiting tool row in the transcript shows the approval state while this request is open.
   createEffect(() => {
-    const callID = props.request.source?.type === "tool" ? props.request.source.id : undefined
-    markToolWaiting(callID, true)
-    onCleanup(() => markToolWaiting(callID, false))
+    for (const request of props.requests ?? [props.request]) {
+      if (request.source?.type !== "tool") continue
+      const id = request.source.id
+      markToolWaiting(id, true)
+      onCleanup(() => markToolWaiting(id, false))
+    }
   })
   const [pending, setPending] = createSignal<{ id: string; decision: ApprovalDecision }>()
 
-  const t = (key: string, params?: Record<string, string | number>) =>
-    language.t(key as Parameters<typeof language.t>[0], params as never)
+  const t = language.t
 
   const copy = (): PermissionCopy => ({
     title: {
@@ -49,9 +55,9 @@ export function PanacodePermissionAdapter(props: {
       tool: t("panacode.approvals.title.tool"),
     },
     tool: (action) => {
-      const key = `settings.permissions.tool.${action === "shell" ? "bash" : action}.title`
-      const value = t(key)
-      return value === key ? undefined : value
+      const key = `settings.permissions.tool.${action === "shell" ? "bash" : action}.title` as const
+
+      return hasAppLabel(key) ? t(key) : undefined
     },
     command: t("panacode.approvals.arg.command"),
     path: t("panacode.approvals.arg.path"),
@@ -83,25 +89,32 @@ export function PanacodePermissionAdapter(props: {
     hintApprove: t("panacode.approvals.approve"),
     hintDeny: t("ui.permission.deny"),
     arguments: t("panacode.approvals.arguments"),
+    denialNote: t("panacode.approvals.denialNote"),
   })
 
-  const card = () => {
-    if (!seen.has(props.request.id)) seen.set(props.request.id, Date.now())
-    return fromPermissionRequest(props.request, copy(), seen.get(props.request.id))
-  }
+  const requestedAt = createMemo(on(() => props.request.id, () => Date.now()))
 
-  const decide = (id: string, decision: ApprovalDecision) => {
-    if (id !== props.request.id || props.responding) return
-    const current = card()
+  const cards = createMemo(() => (props.requests ?? [props.request]).map((request) => ({
+    ...fromPermissionRequest(request, copy(), requestedAt()),
+    sourceDetail: props.sessionTitle?.(request.sessionID),
+  })))
+
+  const history = createMemo<ApprovalResolved[]>(() =>
+    props.history
+      .filter((entry) => entry.request.sessionID === props.request.sessionID)
+      .map((entry) => {
+        const item = fromPermissionRequest(entry.request, copy())
+
+        return { id: item.id, summary: item.summary ?? item.title, icon: item.icon, at: entry.at, outcome: outcomes[entry.decision] }
+      }),
+  )
+
+  const decide = (id: string, decision: ApprovalDecision, message?: string) => {
+    const card = cards().find((item) => item.id === id)
+
+    if (!card || props.responding || (decision === "always" && !card.canAlways)) return
     setPending({ id, decision })
-    const outcome: ApprovalResolved["outcome"] =
-      decision === "approved" ? "approved" : decision === "always" ? "allowed" : "denied"
-    const session = props.request.sessionID
-    setLog((all) => ({
-      ...all,
-      [session]: [{ id, summary: current.summary ?? current.title, outcome, at: Date.now(), icon: current.icon }, ...(all[session] ?? [])].slice(0, 20),
-    }))
-    props.onDecide(toPermissionReply(decision))
+    props.onDecide(toPermissionReply(decision), message, id)
   }
 
   return (
@@ -112,8 +125,8 @@ export function PanacodePermissionAdapter(props: {
       }
     >
       <AgentApprovals
-        requests={[card()]}
-        resolved={log()[props.request.sessionID] ?? []}
+        requests={cards()}
+        resolved={history()}
         sending={props.responding ? pending() : undefined}
         onDecision={decide}
         labels={labels()}

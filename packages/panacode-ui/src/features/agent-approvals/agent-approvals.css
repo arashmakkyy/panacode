@@ -10,14 +10,15 @@
   width: 100%;
   min-width: 0;
   border: 1px solid var(--border);
-  border-radius: 24px;
+  border-radius: 12px;
   background: var(--surface);
   color: var(--foreground);
   font-family: var(--font-body);
   font-size: var(--text-sm, 13px);
   line-height: var(--leading-body, 1.5);
   letter-spacing: var(--tracking-body, 0);
-  box-shadow: var(--shadow-raised, none);
+  max-height: 65dvh;
+  overflow-y: auto;
 }
 
 [data-component="panacode-agent-approvals"] *,
@@ -46,7 +47,7 @@
 [data-component="panacode-agent-approvals"] [data-slot="approvals-title"] {
   margin: 0;
   color: var(--foreground);
-  font-size: var(--text-base, 14px);
+  font-size: var(--pc-text-body-size, 14px);
   font-weight: 500;
 }
 
@@ -206,6 +207,39 @@
   letter-spacing: 0;
 }
 
+[data-slot="approval-note"],
+[data-slot="approval-patch"] {
+  margin-block-start: 8px;
+  color: var(--text-secondary);
+}
+
+[data-slot="approval-patch"] pre {
+  max-height: 12rem;
+  overflow: auto;
+  background: var(--input-base);
+  font-family: var(--font-mono);
+}
+
+[data-slot="approval-patch"] summary,
+[data-slot="approval-note"] summary {
+  cursor: pointer;
+}
+
+[data-slot="approval-note"] textarea {
+  width: 100%;
+  margin-block-start: 4px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--input-base);
+  color: var(--foreground);
+}
+
+[data-component="panacode-agent-approvals"] :is(summary, textarea):focus-visible,
+[data-component="panacode-agent-approvals"]:focus-visible {
+  outline: 2px solid var(--focus-ring);
+}
+
 [data-component="panacode-agent-approvals"] [data-slot="approval-decision"] {
   display: flex;
   align-items: center;
@@ -234,7 +268,11 @@
   margin-left: auto;
 }
 
-[data-component="panacode-agent-approvals"] [data-action="approval-deny"],
+[data-component="panacode-agent-approvals"] [data-action="approval-deny"] {
+  color: var(--danger);
+  font-weight: 400;
+}
+
 [data-component="panacode-agent-approvals"] [data-action="approval-always"] {
   color: var(--text-secondary);
   font-weight: 400;
@@ -242,10 +280,7 @@
 
 [data-component="panacode-agent-approvals"] [data-action="approval-approve"] {
   gap: 8px;
-  padding-right: 8px;
-  border-color: var(--foreground);
-  background: var(--foreground);
-  color: var(--background);
+  padding-inline-end: 8px;
 }
 
 [data-component="panacode-agent-approvals"] [data-slot="approval-kbd"] {
@@ -271,9 +306,9 @@
 }
 
 [data-component="panacode-agent-approvals"] [data-action="approval-approve"] [data-slot="approval-kbd"] kbd {
-  border-color: color-mix(in oklab, var(--background) 25%, transparent);
-  background: color-mix(in oklab, var(--background) 10%, transparent);
-  color: var(--background);
+  border-color: color-mix(in oklab, currentColor 35%, transparent);
+  background: transparent;
+  color: inherit;
 }
 
 [data-component="panacode-agent-approvals"] [data-slot="approval-line"] {

@@ -3,6 +3,8 @@
 export type WindowBootstrap = {
   id: string
   firstLaunchPending?: boolean
+  /** Native window tone when this window was created, available before renderer media queries settle. */
+  systemMode?: "light" | "dark"
   /** The app runs packaged (`app.isPackaged`), as plugins' `App.packaged` reports in both processes. */
   packaged?: boolean
 }

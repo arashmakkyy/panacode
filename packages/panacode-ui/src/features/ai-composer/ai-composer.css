@@ -18,7 +18,7 @@
   background: transparent;
   color: var(--foreground, inherit);
   font: inherit;
-  font-size: var(--text-base, 1rem);
+  font-size: var(--pc-text-body-size, 1rem);
   line-height: var(--leading-body, 1.4);
   letter-spacing: var(--tracking-body, -0.01em);
 }
@@ -53,6 +53,7 @@
   place-items: center;
   width: 48px;
   height: 48px;
+  color: var(--brand-highlight, var(--accent));
 }
 
 [data-component="panacode-composer-hero"] [data-slot="hero-mark"]::before {

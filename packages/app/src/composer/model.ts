@@ -587,7 +587,6 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       onSelect: () => controller.attach(),
     },
     {
-      // panacode: sends what is in the composer; the reply Retry action rewinds the turn, then runs this.
       id: "prompt.submit",
       title: language.t("command.prompt.submit"),
       category: language.t("command.category.session"),

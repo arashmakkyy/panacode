@@ -106,13 +106,13 @@ export function NewSessionView(props: {
       <div
         ref={panel}
         data-component="new-session"
-        class="relative isolate flex-1 min-h-0 overflow-hidden rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
+        class="relative isolate flex-1 min-h-0 overflow-y-auto overflow-x-hidden rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
       >
         <ComposerDropzone
           active={props.composer.state.drag === "active"}
           input={props.composer.model.selection.current()?.capabilities.input}
         />
-        <div class="absolute inset-x-0 top-[18%] flex justify-center px-6">
+        <div data-slot="new-session-content" class="flex justify-center px-3 sm:px-6">
           <div class={NEW_SESSION_CONTENT_WIDTH}>
             {/* panacode: brand hero replaces the upstream pixel wordmark (and its easter-egg games). */}
             <PanacodeNewSessionHero />
@@ -145,7 +145,7 @@ export function NewSessionView(props: {
                 <PromptProjectAddButton controller={props.project} />
               </Show>
               <Show when={!props.project.empty()}>
-                <PanacodeNewSessionSuggestions />
+                <PanacodeNewSessionSuggestions onPick={props.composer.appendSuggestion} />
               </Show>
             </div>
           </div>
@@ -223,7 +223,7 @@ function NewSessionTips(props: { selection: ComposerModel["model"]["selection"];
 
   return (
     <Show when={presence.present()}>
-      <div class="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-10">
+      <div class="pointer-events-none flex justify-center px-4 py-4">
         <div
           ref={setRef}
           data-component="new-session-tip"

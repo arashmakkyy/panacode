@@ -33,6 +33,28 @@ describe("fromOpenCodeTool", () => {
     expect(call.durationMs).toBeUndefined()
   })
 
+  test("distinguishes permission decisions from failures inside a running tool", () => {
+    const tool = (type: string, message: string) => fromOpenCodeTool({
+      id: "tool_read", name: "read", time: { created: 1 },
+      state: { status: "error", input: {}, error: { type, message } },
+    }, { mark })
+    expect(tool("permission.rejected", "Only read the project directory").status).toBe("denied")
+    const failed = tool("system", "EACCES: permission denied, open README.md")
+    expect(failed.status).toBe("error")
+    expect(failed.message).toContain("EACCES")
+  })
+
+  test("copy keeps complete input and output even when the preview is truncated", () => {
+    const command = "x".repeat(650)
+    const text = "y".repeat(21000) + "\n"
+    const call = fromOpenCodeTool({
+      id: "tool_copy", name: "shell", time: { created: 1 },
+      state: { status: "completed", input: { command }, content: [{ type: "text", text }] },
+    }, { mark })
+    expect(JSON.parse(call.copyInput!()).command).toBe(command)
+    expect(call.copyOutput!()).toBe(text)
+  })
+
   test("a rejected permission is denied and keeps no output", () => {
     const call = fromOpenCodeTool(
       {

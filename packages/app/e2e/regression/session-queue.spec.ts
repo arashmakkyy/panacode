@@ -505,7 +505,7 @@ for (const row of [
       data: { sessionID, agent: "plan" },
     })
     const notices = page.locator('[data-slot="session-timeline-notice"]')
-    await expect(notices).toHaveText([/^Agent changed\s*Build → Plan$/])
+    await expect(notices).toHaveText(["Switched to Plan"])
     await expect(prompt).toHaveCount(1)
   })
 }

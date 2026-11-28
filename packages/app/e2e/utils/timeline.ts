@@ -124,6 +124,7 @@ type TimelineServerInput = Partial<
     | "vcsDiff"
     | "fileList"
     | "fileContent"
+    | "onFileWrite"
     | "findFiles"
     | "keepalive"
     | "onPermissionReply"

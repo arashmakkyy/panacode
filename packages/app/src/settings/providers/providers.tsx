@@ -36,6 +36,8 @@ type ProviderSource = "env" | "api" | "account" | "config" | "custom"
 
 type ProviderItem = ReturnType<ReturnType<typeof useProviders>["connected"]>[number]
 
+type AccountProvider = Pick<ProviderItem, "id" | "integrationID" | "name">
+
 const PROVIDER_NOTES = [
   { match: (id: string) => id === "opencode", key: "dialog.provider.opencode.note" },
   { match: (id: string) => id === "opencode-go", key: "dialog.provider.opencodeGo.tagline" },
@@ -172,7 +174,7 @@ export const SettingsProviders: Component<{
 
   // Console-managed providers (`opencode-go`, `console-*`) connect through the `opencode`
   // integration, so the lookup must follow `integrationID` rather than the provider id.
-  const integration = (item: ProviderItem) => {
+  const integration = (item: AccountProvider) => {
     const id = item.integrationID ?? item.id
 
     return integrations.list().find((entry) => entry.id === id)
@@ -228,6 +230,25 @@ export const SettingsProviders: Component<{
 
   // panacode: PanaAI is featured in its own card, so the lists below leave it out and hide when empty.
   const panaai = createMemo(() => connected().find((item) => item.id === PANAAI_PROVIDER_ID))
+  const panaIntegration = createMemo(() => integrations.list().find((item) => item.id === PANAAI_PROVIDER_ID))
+  const panaAccount = { id: PANAAI_PROVIDER_ID, name: "PanaAI" }
+
+  const panaSource = () => {
+    const item = panaai()
+
+    if (item) return source(item) ?? "config"
+    const connections = panaIntegration()?.connections ?? []
+    const credential = connections.find((entry) => entry.type === "credential")
+
+    if (credential) return credential.method === "key" ? "api" : "account"
+
+    if (connections.some((entry) => entry.type === "env")) return "env"
+  }
+
+  const refreshPana = () => serverSdk.api.rpc.call({
+    rpcID: "opencode.provider.panaai", method: "refresh", input: {}, location: props.directory ? { directory: props.directory } : undefined,
+  }).then(() => accountActions.refresh())
+
   const others = createMemo(() => displayed().filter((item) => item.id !== PANAAI_PROVIDER_ID))
 
   const popular = createMemo(() => {
@@ -298,7 +319,7 @@ export const SettingsProviders: Component<{
     return currentSource !== "env" && currentSource !== "config"
   }
 
-  const canManageAccounts = (item: ProviderItem) => providerAccounts(integration(item)).length > 0
+  const canManageAccounts = (item: AccountProvider) => providerAccounts(integration(item)).length > 0
 
   const note = (id: string) => PROVIDER_NOTES.find((item) => item.match(id))?.key
 
@@ -312,7 +333,7 @@ export const SettingsProviders: Component<{
     })
   }
 
-  const activate = (provider: ProviderItem, providerName: string, account: ProviderAccount) =>
+  const activate = (provider: AccountProvider, providerName: string, account: ProviderAccount) =>
     dispatch({
       type: "account.activate.requested",
       integrationID: provider.integrationID ?? provider.id,
@@ -322,7 +343,7 @@ export const SettingsProviders: Component<{
       catalog: untrack(available),
     })
 
-  const remove = (provider: ProviderItem, providerName: string, account: ProviderAccount) =>
+  const remove = (provider: AccountProvider, providerName: string, account: ProviderAccount) =>
     dispatch({
       type: "account.remove.requested",
       integrationID: provider.integrationID ?? provider.id,
@@ -332,7 +353,7 @@ export const SettingsProviders: Component<{
       catalog: untrack(available),
     })
 
-  function AccountMenu(menuProps: { provider: ProviderItem; name?: string }) {
+  function AccountMenu(menuProps: { provider: AccountProvider; name?: string }) {
     const accounts = () => providerAccounts(integration(menuProps.provider))
     const active = () => activeProviderAccount(integration(menuProps.provider))
     const name = () => menuProps.name ?? menuProps.provider.name
@@ -358,7 +379,7 @@ export const SettingsProviders: Component<{
   }
 
   function AccountMenuTrigger(menuProps: {
-    provider: ProviderItem
+    provider: AccountProvider
     name: string
     accounts: ProviderAccount[]
     active: ProviderAccount | undefined
@@ -460,10 +481,13 @@ export const SettingsProviders: Component<{
 
       <div class="settings-tab-body settings-tab-body--sectioned settings-providers">
         <PanaAISpotlight
-          connected={panaai() ? (source(panaai()!) ?? "config") : undefined}
+          catalog={panaIntegration()?.metadata?.modelCatalog}
+          onRefresh={refreshPana}
+          sourceLabel={panaai() ? type(panaai()!) : undefined}
+          connected={panaSource()}
           models={panaai() ? Object.values(panaai()!.models).map((model) => model.name) : []}
           onConnect={() => connect(PANAAI_PROVIDER_ID)}
-          onDisconnect={panaai() && canDisconnect(panaai()!) ? () => disconnect(panaai()!, panaai()!.name) : undefined}
+          accounts={<Show when={canManageAccounts(panaAccount)}><AccountMenu provider={panaAccount} /></Show>}
         />
 
         <Show when={others().length > 0}>

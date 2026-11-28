@@ -1,3 +1,4 @@
+import { usePlatform } from "@/runtime/platform/platform"
 import { createMemo, Show } from "solid-js"
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
 import {
@@ -9,12 +10,15 @@ import {
 import { useData } from "@opencode/session-ui/context"
 import { ToolCallGroup, type ToolCallData, type ToolCallLabels } from "@panacode/ui/features/tool-call"
 import { ToolMark } from "@panacode/ui/features/tool-call/marks"
-import { fromOpenCodeTool, type OpenCodeToolLike, type ToolCallCopy } from "@panacode/ui/adapters/tool-call"
+import { fromOpenCodeTool, toolKind, type ToolCallCopy } from "@panacode/ui/adapters/tool-call"
 import { useLanguage } from "@/runtime/i18n/language"
 import { PanacodeCodeSuggestions, toolFileChanges } from "./panacode-code-suggestion"
 import { toolWaitingApproval } from "./panacode-tool-state"
 
 const isTool = (part: ActivityGroupPart): part is SessionMessageAssistantTool => part.type === "tool"
+
+const nativeTools = new Set(["shell", "subagent", "question", "execute"])
+
 const changesFiles = (kind: string) => kind === "edit" || kind === "write" || kind === "patch"
 
 /**
@@ -23,22 +27,27 @@ const changesFiles = (kind: string) => kind === "edit" || kind === "write" || ki
  */
 function useToolCopy() {
   const language = useLanguage()
-  const t = (key: string, params?: Record<string, string | number>) => language.t(key as never, params as never) as string
+  const t = language.t
+
   const copy: ToolCallCopy = {
     name: (kind, raw) => t(`panacode.tool.${kind}.name`, { name: raw }),
     title: (kind, status, subject, raw) => {
       const base = t(`panacode.tool.${kind}.${status}`, { name: raw })
+
       return subject ? `${base} ${subject}` : base
     },
     exitCode: (code) => t("panacode.tool.exit", { code }),
     timedOut: t("panacode.tool.timedOut"),
     stopped: t("panacode.tool.stopped"),
   }
+
   const labels = (): Partial<ToolCallLabels> => ({
     input: t("panacode.tool.input"),
     output: t("panacode.tool.output"),
     copy: t("panacode.tool.copy"),
     copied: t("panacode.tool.copied"),
+    manualCopy: t("panacode.clipboard.manual"),
+    close: t("common.close"),
     copyFailed: t("panacode.tool.copyFailed"),
     allow: t("panacode.tool.allow"),
     deny: t("panacode.tool.deny"),
@@ -55,25 +64,37 @@ function useToolCopy() {
     },
     status: (status, summary, duration, message) => {
       if (status === "success") return [t("panacode.tool.status.done"), summary, duration].filter(Boolean).join(", ")
+
       if (status === "error") return [t("panacode.tool.status.failed"), message].filter(Boolean).join(". ")
+
       if (status === "approval") return [t("panacode.tool.status.approval"), message].filter(Boolean).join(". ")
+
       return t(`panacode.tool.status.${status}`)
     },
-    used: (count, working) => t(`panacode.tool.${working ? "using" : "used"}.${count === 1 ? "one" : "other"}`, { count }),
+    used: (count, working) => language.plural(working ? "panacode.tool.using" : "panacode.tool.used", count),
     count: (count, unit) => t(`panacode.tool.count.${unit}`, { count }),
   })
+
   return { copy, labels }
 }
 
 function PanacodeToolGroup(props: ContextGroupProps) {
   const data = useData()
   const i18n = useToolCopy()
+  const platform = usePlatform()
   const tools = createMemo(() => props.parts.filter(isTool))
-  const rest = createMemo(() => props.parts.filter((part) => !isTool(part)))
+
+  // The native group preserves interleaved events, child-session links and rich tool results.
+  const native = () => props.parts.some((part) =>
+    !isTool(part) || nativeTools.has(toolKind(part.name)) ||
+    ("content" in part.state && part.state.content?.some((item) => item.type !== "text")),
+  )
+
   const byId = createMemo(() => new Map(tools().map((tool) => [tool.id, tool])))
+
   const calls = createMemo(() =>
-    tools().map((tool) =>
-      fromOpenCodeTool(tool as unknown as OpenCodeToolLike, {
+    (native() ? [] : tools()).map((tool) =>
+      fromOpenCodeTool(tool, {
         root: data.directory,
         copy: i18n.copy,
         approval: toolWaitingApproval(tool.id) && (tool.state.status === "running" || tool.state.status === "streaming"),
@@ -81,35 +102,48 @@ function PanacodeToolGroup(props: ContextGroupProps) {
       }),
     ),
   )
+
   const renderOutput = (call: ToolCallData) => {
     const tool = byId().get(call.id)
-    if (!tool || !changesFiles((call as ToolCallData & { kind: string }).kind)) return undefined
+
+    if (!tool || !changesFiles(toolKind(tool.name))) return undefined
+
     if (tool.state.status !== "completed") return undefined
+
     return <PanacodeCodeSuggestions tool={tool} title={call.title} />
   }
 
   return (
-    <div data-component="panacode-activity" class="contents">
-      <Show when={rest().length > 0}>
-        <ContextGroup {...props} parts={rest()} />
-      </Show>
-      <Show when={calls().length > 0}>
+    <Show when={!native()} fallback={<ContextGroup {...props} />}>
+      <div data-component="panacode-activity" data-timeline-part-ids={tools().map((tool) => tool.id).join(",")}>
         <ToolCallGroup
+          nativeCopy={platform.writeClipboardText}
           calls={calls()}
-          defaultOpen={props.open || undefined}
+          open={props.open}
+          autoCollapse={false}
           onOpenChange={(open) => {
             props.onOpenChange(open)
+            props.onSizeChange?.()
+          }}
+          callOpen={(id) => {
+            const tool = byId().get(id)
+
+            return props.toolOpen?.(id) ?? (tool && props.toolDefaultOpen?.(tool))
+          }}
+          onCallOpenChange={(id, open) => {
+            props.onToolOpenChange?.(id, open)
             props.onSizeChange?.()
           }}
           renderOutput={renderOutput}
           hasOutput={(call) => {
             const tool = byId().get(call.id)
-            return !!tool && changesFiles((call as ToolCallData & { kind: string }).kind) && toolFileChanges(tool).length > 0
+
+            return !!tool && changesFiles(toolKind(tool.name)) && toolFileChanges(tool).length > 0
           }}
           labels={i18n.labels()}
         />
-      </Show>
-    </div>
+      </div>
+    </Show>
   )
 }
 

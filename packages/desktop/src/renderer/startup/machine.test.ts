@@ -9,7 +9,6 @@ import {
   selectOverlayMounted,
   selectSidecar,
   selectStartupFailure,
-  selectStartupLocale,
   selectStartupRevealed,
   transitionStartup,
   type StartupEffect,
@@ -57,7 +56,6 @@ const fade: StartupEffect[] = [cancel, { type: "start-timer", timer: "fade", tim
 // Everything a returning launch waits for before the app interface mounts.
 const mounted: StartupEvent[] = [
   { type: "theme.applied" },
-  { type: "locale.settled", locale: "de" },
   { type: "plugin-servers.ready" },
   { type: "route.preloaded" },
   { type: "sidecar.ready", data: sidecar },
@@ -91,7 +89,6 @@ describe("desktop startup", () => {
 
   test.each([
     ["plugin servers", mounted.filter((event) => event.type !== "plugin-servers.ready"), "booting"],
-    ["the locale", mounted.filter((event) => event.type !== "locale.settled"), "booting"],
     ["the route", mounted.filter((event) => event.type !== "route.preloaded"), "hydrating"],
     ["tabs", mounted, "hydrating"],
   ] satisfies [string, StartupEvent[], string][])(
@@ -158,16 +155,6 @@ describe("desktop startup", () => {
     expect(drawn.state.status).toBe("fading")
   })
 
-  test("falls back to English when the stored locale fails to load", () => {
-    const result = replay(
-      mounted.map((event) => (event.type === "locale.settled" ? { ...event, locale: undefined } : event)),
-    )
-
-    expect(result.state.status).toBe("hydrating")
-    expect(selectStartupLocale(result.state)).toBeUndefined()
-    expect(selectStartupLocale(replay(mounted).state)).toBe("de")
-  })
-
   test("onboards a fresh install on the new-session route", () => {
     const fresh = start({ firstLaunch: undefined })
 
@@ -185,14 +172,12 @@ describe("desktop startup", () => {
 
     expect(fresh.effects).toEqual([
       { type: "check-first-launch" },
-      { type: "preload-locale" },
       { type: "await-sidecar" },
       { type: "start-timer", timer: "sidecar", timeoutMs: 300_000 },
     ])
     expect(result.effects).toEqual([
       [],
       [{ type: "preload-route", url: "/new-session" }, notify],
-      [],
       [],
       [],
       hydration,

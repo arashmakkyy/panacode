@@ -1,5 +1,6 @@
 import type { DesktopMenuAction, DesktopZoomLevel } from "@opencode/app/desktop-menu"
 import type { DesktopNativeBundle } from "@opencode/app/i18n/desktop-native"
+import type { BackgroundTheme } from "../shared/ipc-rpc/app"
 import type { StorageSnapshot } from "../shared/ipc-transport"
 import type { WindowBootstrap } from "../shared/window-bootstrap"
 import type {
@@ -73,7 +74,7 @@ export type ElectronAPI = {
   setTitlebar(theme: TitlebarTheme): Promise<void>
   setTrafficLightsPosition(position: { x: number; y: number }): Promise<void>
   runDesktopMenuAction(action: DesktopMenuAction): Promise<void>
-  setBackgroundColor(color: string): Promise<void>
+  setBackgroundColor(color: string, theme?: BackgroundTheme): Promise<void>
   exportDebugLogs(): Promise<string>
   setForceFocus(enabled: boolean): Promise<void>
   getSpellcheckEnabled(): Promise<boolean>

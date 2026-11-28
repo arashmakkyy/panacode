@@ -1,4 +1,5 @@
-import { createEffect, createMemo, createSignal, createUniqueId, For, Match, on, onCleanup, Show, Switch as Branch, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, createUniqueId, For, Match, on, onCleanup, onMount, Show, Switch as Branch, type JSX } from "solid-js"
+import { parseMcpCommand } from "./command"
 import { Switch } from "../../primitives/switch"
 import { SegmentedControl } from "../../primitives/segmented-control"
 import { brandGlyphs, mcpGlyph, type McpBrand } from "./brand-glyphs"
@@ -25,6 +26,9 @@ export { guessBrand } from "./brand-glyphs"
  * drawn; the meter shows each server's state instead.
  */
 export interface McpServersProps {
+  listState?: "loading" | "ready" | "error"
+  listMessage?: string
+  onReload?: () => void
   servers: readonly McpServerView[]
   labels?: Partial<McpServersLabels>
   onToggle: (id: string, enabled: boolean) => void
@@ -150,7 +154,7 @@ export function suggestMcpName(transport: McpTransport, value: string) {
       return ""
     }
   }
-  const words = value.trim().split(/\s+/).filter((word) => !word.startsWith("-"))
+  const words = (parseMcpCommand(value) ?? []).filter((word) => !word.startsWith("-"))
   const pkg = words.find((word) => word.includes("/") || word.includes("server")) ?? words[0] ?? ""
   return slug(pkg.split("/").at(-1)?.replace(/@.*$/, "").replace(/\.[a-z]+$/i, "").replace(/^server-|-server$/g, "") ?? "")
 }
@@ -163,6 +167,15 @@ export function McpServers(props: McpServersProps) {
   const [sheet, setSheet] = createSignal(false)
   const [announce, setAnnounce] = createSignal("")
   let timer: ReturnType<typeof setTimeout> | undefined
+  let opener: HTMLButtonElement | undefined
+  const open = (event: MouseEvent & { currentTarget: HTMLButtonElement }) => {
+    opener = event.currentTarget
+    setSheet(true)
+  }
+  const close = () => {
+    setSheet(false)
+    queueMicrotask(() => opener?.focus({ preventScroll: true }))
+  }
   let key = 0
   const rows = new Map<string, HTMLElement>()
 
@@ -219,14 +232,14 @@ export function McpServers(props: McpServersProps) {
 
   return (
     <section class={`pc-mcp ${props.class ?? ""}`} data-component="panacode-mcp-servers" data-sheet={sheet() ? "" : undefined}>
-      <div class="pc-mcp-body" inert={sheet() || undefined}>
+      <div class="pc-mcp-body">
         <header class="pc-mcp-header">
           <h2 class="pc-mcp-title">
             <McpMark size={18} />
             {labels().title}
           </h2>
           <Show when={props.onAdd}>
-            <button type="button" class="pc-mcp-button" data-action="mcp-add" aria-haspopup="dialog" onClick={() => setSheet(true)}>
+            <button type="button" class="pc-mcp-button" data-action="mcp-add" aria-haspopup="dialog" onClick={open}>
               <Lucide>{icons.plus()}</Lucide>
               {labels().add}
             </button>
@@ -270,13 +283,21 @@ export function McpServers(props: McpServersProps) {
           </For>
         </ul>
 
-        <Show when={visible().length === 0}>
+        <Show when={props.listState === "loading" || props.listState === "error"}>
+          <div class="pc-mcp-empty" role={props.listState === "error" ? "alert" : "status"}>
+            <p>{props.listMessage}</p>
+            <Show when={props.listState === "error"}>
+              <button type="button" class="pc-mcp-button" onClick={props.onReload}>{labels().retry}</button>
+            </Show>
+          </div>
+        </Show>
+        <Show when={visible().length === 0 && (props.listState ?? "ready") === "ready"}>
           <div class="pc-mcp-empty">
             <McpMark size={28} class="pc-mcp-emptyMark" />
             <p class="pc-mcp-emptyTitle">{labels().emptyTitle}</p>
             <p class="pc-mcp-emptyText">{labels().emptyBody}</p>
             <Show when={props.onAdd}>
-              <button type="button" class="pc-mcp-button" aria-haspopup="dialog" onClick={() => setSheet(true)}>
+              <button type="button" class="pc-mcp-button" aria-haspopup="dialog" onClick={open}>
                 <Lucide>{icons.plus()}</Lucide>
                 {labels().add}
               </button>
@@ -310,10 +331,10 @@ export function McpServers(props: McpServersProps) {
           <AddSheet
             labels={labels()}
             taken={(name) => props.servers.some((server) => server.id === name)}
-            onClose={() => setSheet(false)}
+            onClose={close}
             onSubmit={async (request) => {
               await add()(request)
-              setSheet(false)
+              close()
               setAnnounce(request.name)
               setExpanded((all) => new Set([...all, request.name]))
               queueMicrotask(() => rows.get(request.name)?.querySelector<HTMLElement>(".pc-mcp-rowMain")?.focus())
@@ -466,22 +487,39 @@ function AddSheet(props: {
   const id = createUniqueId()
   const [transport, setTransport] = createSignal<McpTransport>("remote")
   const [name, setName] = createSignal("")
-  const [target, setTarget] = createSignal("")
+  const [targets, setTargets] = createSignal({ local: "", remote: "" })
+  const target = () => targets()[transport()]
+  const setTarget = (value: string) => setTargets((drafts) => ({ ...drafts, [transport()]: value }))
   const [error, setError] = createSignal("")
   const [busy, setBusy] = createSignal(false)
-  let sheet: HTMLDivElement | undefined
+  let modal!: HTMLDialogElement
   let field: HTMLInputElement | undefined
 
   const suggested = () => suggestMcpName(transport(), target())
   const finalName = () => name().trim() || suggested()
 
+  const valid = createMemo(() => {
+    if (transport() === "local") return !!parseMcpCommand(target())
+    try { return ["http:", "https:"].includes(new URL(target()).protocol) } catch { return false }
+  })
   const onKey = (event: KeyboardEvent) => {
-    if (event.key === "Escape" && !busy()) {
+    if (event.key === "Escape") {
+      event.preventDefault()
       event.stopPropagation()
-      props.onClose()
+      if (!busy()) { modal.close(); props.onClose() }
+      return
     }
+    if (event.key !== "Tab") return
+    const stops = [...modal.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled)")].filter((item) => item.tabIndex >= 0)
+    const first = stops[0], last = stops.at(-1)
+    if (!first || (event.shiftKey ? document.activeElement !== first : document.activeElement !== last)) return
+    event.preventDefault()
+    ;(event.shiftKey ? last : first)?.focus()
   }
-  createEffect(() => queueMicrotask(() => field?.focus()))
+  onMount(() => {
+    modal.showModal()
+    field?.focus()
+  })
 
   const submit = async (event: SubmitEvent) => {
     event.preventDefault()
@@ -495,7 +533,7 @@ function AddSheet(props: {
         ok = url.protocol === "http:" || url.protocol === "https:"
       } catch {}
       if (!ok) return setError(props.labels.invalidUrl)
-    } else if (!value) return setError(props.labels.invalidCommand)
+    } else if (!parseMcpCommand(value)) return setError(props.labels.invalidCommand)
     if (!NAME.test(label)) return setError(props.labels.invalidName)
     if (props.taken(label)) return setError(props.labels.nameTaken)
     setError("")
@@ -504,7 +542,7 @@ function AddSheet(props: {
       await props.onSubmit(
         transport() === "remote"
           ? { name: label, transport: "remote", url: value }
-          : { name: label, transport: "local", command: value.split(/\s+/).filter(Boolean) },
+          : { name: label, transport: "local", command: parseMcpCommand(value)! },
       )
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
@@ -514,9 +552,11 @@ function AddSheet(props: {
   }
 
   return (
-    <div class="pc-mcp-layer" onKeyDown={onKey}>
+    <dialog ref={modal} class="pc-mcp-layer" aria-labelledby={`${id}-title`} onKeyDown={onKey}
+      onCancel={(event) => { event.preventDefault(); event.stopPropagation(); if (!busy()) props.onClose() }}>
+
       <div class="pc-mcp-scrim" aria-hidden="true" onClick={() => !busy() && props.onClose()} />
-      <div ref={sheet} class="pc-mcp-sheet" role="dialog" aria-modal="true" aria-labelledby={`${id}-title`}>
+      <div class="pc-mcp-sheet">
         <header class="pc-mcp-sheetHead">
           <span />
           <h3 id={`${id}-title`}>{props.labels.sheetTitle}</h3>
@@ -526,6 +566,7 @@ function AddSheet(props: {
         </header>
         <form class="pc-mcp-form" onSubmit={submit} novalidate>
           <SegmentedControl
+            disabled={busy()}
             aria-label={props.labels.sheetTitle}
             options={[
               { value: "remote", label: props.labels.transport.remote },
@@ -546,6 +587,7 @@ function AddSheet(props: {
               data-action="mcp-add-target"
               value={target()}
               placeholder={transport() === "remote" ? props.labels.urlPlaceholder : props.labels.commandPlaceholder}
+              disabled={busy()}
               spellcheck={false}
               autocomplete="off"
               onInput={(event) => {
@@ -561,6 +603,7 @@ function AddSheet(props: {
               data-action="mcp-add-name"
               value={name()}
               placeholder={suggested() || props.labels.namePlaceholder}
+              disabled={busy()}
               spellcheck={false}
               autocomplete="off"
               onInput={(event) => {
@@ -574,7 +617,7 @@ function AddSheet(props: {
           </p>
           <footer class="pc-mcp-sheetFoot">
             <p class="pc-mcp-muted">{props.labels.sheetNote}</p>
-            <button type="submit" class="pc-mcp-button is-primary" data-action="mcp-add-submit" disabled={busy() || !target().trim()} aria-busy={busy()}>
+            <button type="submit" class="pc-mcp-button is-primary" data-action="mcp-add-submit" disabled={busy() || !valid()} aria-busy={busy()}>
               <Show when={busy()}>
                 <Lucide size={15} class="pc-mcp-spin">
                   {icons.loader()}
@@ -585,6 +628,6 @@ function AddSheet(props: {
           </footer>
         </form>
       </div>
-    </div>
+    </dialog>
   )
 }

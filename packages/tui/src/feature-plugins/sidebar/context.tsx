@@ -26,7 +26,7 @@ export function SidebarContext(props: { context: Plugin.Context; sessionID: stri
         <Show when={state()}>
           {(value) => (
             <>
-              <text fg={theme.text.muted}>{value().tokens.toLocaleString()} tokens</text>
+              <text fg={theme.text.muted}>{value().tokens.toLocaleString("en")} tokens</text>
               <Show when={value().percent !== undefined}>
                 <text fg={theme.text.muted}>{value().percent}% used</text>
               </Show>

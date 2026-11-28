@@ -1,3 +1,5 @@
+import { ManualCopy } from "../../primitives/manual-copy"
+import { writeClipboard } from "@opencode/ui/clipboard"
 import { createEffect, createMemo, createSignal, createUniqueId, For, Index, on, onCleanup, Show, untrack, type JSX } from "solid-js"
 import { Collapse } from "../../motion/presence"
 import { prefersReducedMotion } from "../../motion/reduced"
@@ -39,6 +41,8 @@ export interface ToolCallData {
   status: ToolCallStatus
   input?: Record<string, ToolCallValue>
   output?: ToolCallOutput
+  copyInput?: () => string
+  copyOutput?: () => string
   summary?: string
   message?: string
   durationMs?: number
@@ -50,6 +54,8 @@ export type ToolCallLabels = {
   copy: string
   copied: string
   copyFailed: string
+  manualCopy: string
+  close: string
   allow: string
   deny: string
   retry: string
@@ -70,6 +76,8 @@ export const defaultToolCallLabels: ToolCallLabels = {
   copy: "Copy",
   copied: "Copied",
   copyFailed: "Copy failed",
+  manualCopy: "Select and copy the text",
+  close: "Close",
   allow: "Allow",
   deny: "Deny",
   retry: "Retry",
@@ -118,8 +126,9 @@ export function formatDuration(ms?: number): string | undefined {
     const seconds = ms / 1000
     return `${seconds < 10 ? seconds.toFixed(1).replace(/\.0$/, "") : Math.round(seconds)}s`
   }
-  const minutes = Math.floor(ms / 60000)
-  const seconds = Math.round((ms % 60000) / 1000)
+  const totalSeconds = Math.round(ms / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
   return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`
 }
 
@@ -158,15 +167,6 @@ function outputText(output: ToolCallOutput): string {
       return JSON.stringify(output.value, null, 2)
     case "text":
       return output.text
-  }
-}
-
-async function copyText(text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-    return true
-  } catch {
-    return false
   }
 }
 
@@ -221,14 +221,22 @@ export function Shimmer(props: { children: string; active: boolean; class?: stri
       }
     } else if (sweep > 0 && sweep < 1 && !reduced()) sweep = Math.min(1, sweep + dt / 0.42)
     setImage(shimmerImage(sweep, settle))
-    if (props.active || progress < 1) frame = requestAnimationFrame(tick)
+    if (!reduced() && (props.active || progress < 1)) frame = requestAnimationFrame(tick)
     else frame = 0
   }
 
   createEffect(
     on(
-      () => props.active,
-      () => {
+      [() => props.active, reduced],
+      ([active, reduce]) => {
+        if (reduce) {
+          cancelAnimationFrame(frame)
+          frame = 0
+          sweep = 0
+          settle = active ? 0 : 1
+          setImage(shimmerImage(0, settle))
+          return
+        }
         settleFrom = settle
         settleAt = performance.now()
         last = 0
@@ -328,18 +336,19 @@ function StatusIcon(props: { status: ToolCallStatus; draw: boolean }) {
   )
 }
 
-function CopyButton(props: { text: string; what: string; labels: ToolCallLabels; announce: (text: string) => void }) {
+function CopyButton(props: { text: string; nativeCopy?: (text: string) => Promise<void>; what: string; labels: ToolCallLabels; announce: (text: string) => void }) {
   const [state, setState] = createSignal<"idle" | "copied" | "failed">("idle")
   let timer: ReturnType<typeof setTimeout> | undefined
   onCleanup(() => clearTimeout(timer))
   const click = async () => {
-    const ok = await copyText(props.text)
+    const ok = await writeClipboard(props.text, props.nativeCopy)
     setState(ok ? "copied" : "failed")
     props.announce(ok ? `${props.labels.copied} ${props.what}` : `${props.labels.copyFailed} ${props.what}`)
     clearTimeout(timer)
-    timer = setTimeout(() => setState("idle"), 1800)
+    if (ok) timer = setTimeout(() => setState("idle"), 1800)
   }
   return (
+    <>
     <button type="button" class="pc-tc-copy" data-state={state()} onClick={click} aria-label={`${props.labels.copy} ${props.what}`}>
       <span class="pc-tc-copyIcon" aria-hidden="true">
         <Show when={state() === "copied"} fallback={<Glyph name={state() === "failed" ? "alert" : "copy"} />}>
@@ -352,6 +361,10 @@ function CopyButton(props: { text: string; what: string; labels: ToolCallLabels;
         <span data-active={state() === "failed"}>{props.labels.copyFailed}</span>
       </span>
     </button>
+    <Show when={state() === "failed"}>
+      <ManualCopy label={props.labels.manualCopy} close={props.labels.close} text={props.text} onClose={() => setState("idle")} />
+    </Show>
+    </>
   )
 }
 
@@ -520,6 +533,7 @@ export interface ToolCallProps extends ToolCallData {
    * loads data (a file read) is only created while the row is open.
    */
   hasOutput?: (call: ToolCallData) => boolean
+  nativeCopy?: (text: string) => Promise<void>
   labels?: Partial<ToolCallLabels>
   class?: string
 }
@@ -663,7 +677,7 @@ export function ToolCall(props: ToolCallProps) {
           </div>
         </Show>
 
-        <Show when={props.message && (props.status === "error" || props.status === "approval")}>
+        <Show when={props.message && (props.status === "error" || props.status === "approval" || props.status === "denied")}>
           <p class="pc-tc-message">{props.message}</p>
         </Show>
 
@@ -676,7 +690,7 @@ export function ToolCall(props: ToolCallProps) {
                     <span class="pc-tc-sectionLabel" id={`${uid}-input`}>
                       {labels().input}
                     </span>
-                    <CopyButton text={JSON.stringify(input(), null, 2)} what={labels().input.toLowerCase()} labels={labels()} announce={announce} />
+                    <CopyButton nativeCopy={props.nativeCopy} text={props.copyInput?.() ?? JSON.stringify(input(), null, 2)} what={labels().input.toLowerCase()} labels={labels()} announce={announce} />
                   </div>
                   <div class="pc-tc-well">
                     <dl class="pc-tc-kv pc-tc-mono" aria-labelledby={`${uid}-input`}>
@@ -697,7 +711,7 @@ export function ToolCall(props: ToolCallProps) {
               <div class="pc-tc-sectionHead">
                 <span class="pc-tc-sectionLabel">{labels().output}</span>
                 <Show when={props.output && !hasCustom() && props.status !== "denied" && props.status !== "approval"}>
-                  <CopyButton text={outputText(props.output!)} what={labels().output.toLowerCase()} labels={labels()} announce={announce} />
+                  <CopyButton nativeCopy={props.nativeCopy} text={props.copyOutput?.() ?? outputText(props.output!)} what={labels().output.toLowerCase()} labels={labels()} announce={announce} />
                 </Show>
               </div>
               <div class="pc-tc-well">
@@ -728,6 +742,8 @@ export function ToolCall(props: ToolCallProps) {
 
 export interface ToolCallGroupProps {
   calls: ToolCallData[]
+  callOpen?: (id: string) => boolean | undefined
+  onCallOpenChange?: (id: string, open: boolean) => void
   /** The agent is still working in this turn. Defaults to any call running. */
   active?: boolean
   defaultOpen?: boolean
@@ -744,6 +760,7 @@ export interface ToolCallGroupProps {
   renderCall?: (call: ToolCallData) => JSX.Element | undefined
   /** Extra rows appended after the calls (events, notices). */
   after?: JSX.Element
+  nativeCopy?: (text: string) => Promise<void>
   labels?: Partial<ToolCallLabels>
   class?: string
 }
@@ -813,11 +830,14 @@ export function ToolCallGroup(props: ToolCallGroupProps) {
     return total > 0 ? formatDuration(total) : undefined
   }
   const headline = () => labels().used(props.calls.length, working())
-  const initial = new Set(props.calls.map((call) => call.id))
+  // Stream updates replace call objects. Key by server ID to keep the focused row and its disclosure alive.
+  const byId = createMemo(() => new Map(props.calls.map((call) => [call.id, call])))
+  const ids = createMemo(() => Array.from(byId().keys()))
+  const initial = new Set(ids())
 
   return (
     <div data-component="panacode-tool-call-group" class={`pc-tc-group ${props.class ?? ""}`}>
-      <button type="button" class="pc-tc-groupHead" aria-expanded={open()} aria-controls={listId} onClick={() => setOpen(!open(), true)}>
+      <button type="button" class="pc-tc-groupHead" aria-label={headline()} aria-expanded={open()} aria-controls={listId} onClick={() => setOpen(!open(), true)}>
         <span class="pc-tc-stack" aria-hidden="true" style={{ width: `${stackWidth()}px` }}>
           <For each={tools()}>
             {(tool, index) => (
@@ -839,27 +859,36 @@ export function ToolCallGroup(props: ToolCallGroupProps) {
       </button>
       <Collapse open={open()} id={listId} class="pc-tc-groupList" appear>
         <div class="pc-tc-listBody">
-          <For each={props.calls}>
-            {(call, index) => (
-              <div
-                class="pc-tc-listRow"
-                data-enter={initial.has(call.id) ? "stagger" : "grow"}
-                style={{ "--pc-tc-index": index() }}
-              >
-                {props.renderCall?.(call) ?? (
-                  <ToolCall
-                    {...call}
-                    labels={props.labels}
-                    onOpenChange={() => (touched = true)}
-                    onApprove={props.onApprove ? () => props.onApprove!(call) : undefined}
-                    onDeny={props.onDeny ? () => props.onDeny!(call) : undefined}
-                    onRetry={props.onRetry ? () => props.onRetry!(call) : undefined}
-                    renderOutput={props.renderOutput}
-                    hasOutput={props.hasOutput}
-                  />
-                )}
-              </div>
-            )}
+          <For each={ids()}>
+            {(id, index) => {
+              const call = () => byId().get(id)!
+              return (
+                <div
+                  class="pc-tc-listRow"
+                  data-timeline-part-id={id}
+                  data-enter={initial.has(id) ? "stagger" : "grow"}
+                  style={{ "--pc-tc-index": index() }}
+                >
+                  {props.renderCall?.(call()) ?? (
+                    <ToolCall
+                      {...call()}
+                      nativeCopy={props.nativeCopy}
+                      open={props.callOpen?.(id)}
+                      labels={props.labels}
+                      onOpenChange={(open) => {
+                        touched = true
+                        props.onCallOpenChange?.(id, open)
+                      }}
+                      onApprove={props.onApprove ? () => props.onApprove!(call()) : undefined}
+                      onDeny={props.onDeny ? () => props.onDeny!(call()) : undefined}
+                      onRetry={props.onRetry ? () => props.onRetry!(call()) : undefined}
+                      renderOutput={props.renderOutput}
+                      hasOutput={props.hasOutput}
+                    />
+                  )}
+                </div>
+              )
+            }}
           </For>
           {props.after}
         </div>

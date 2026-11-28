@@ -365,8 +365,6 @@ test("the dialog chooses the base branch for a new worktree", async ({ page }) =
   const screen = page.locator('[data-component="new-session"]')
   const dialog = page.getByRole("dialog")
   const search = dialog.getByRole("combobox", { name: "Search branches", exact: true })
-  const options = dialog.getByRole("option")
-
   await expect(newSessionBranch(page)).toHaveText("timeline-quotes")
   await expect(page.locator('[data-slot="new-session-location-path"]')).toHaveText(view.directory)
   await expect(screen).not.toContainText("from ")

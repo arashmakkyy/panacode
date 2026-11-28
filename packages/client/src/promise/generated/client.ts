@@ -1332,10 +1332,10 @@ export function make(options: ClientOptions) {
             {
               method: "POST",
               path: `/api/experimental/fs/write`,
-              query: { location: input["location"], path: input["path"] },
+              query: { expectedSha256: input["expectedSha256"], location: input["location"], path: input["path"] },
               body: input["payload"],
               successStatus: 200,
-              declaredStatuses: [400, 401, 404],
+              declaredStatuses: [400, 401, 404, 409],
               empty: false,
               binaryBody: true,
             },
@@ -2188,7 +2188,7 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/permission/${encodeURIComponent(input.requestID)}/reply`,
-            body: { decision: input["decision"], message: input["message"] },
+            body: { decision: input["decision"], scope: input["scope"], message: input["message"] },
             successStatus: 204,
             declaredStatuses: [400, 401, 404],
             empty: true,

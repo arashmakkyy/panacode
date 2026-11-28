@@ -1,3 +1,5 @@
+import { ManualCopy } from "../../primitives/manual-copy"
+import { writeClipboard } from "@opencode/ui/clipboard"
 import { createMemo, createSignal, createUniqueId, For, onCleanup, Show, type JSX } from "solid-js"
 import { Collapse } from "../../motion/presence"
 import { Shimmer } from "../tool-call"
@@ -44,6 +46,8 @@ export type ChatLabels = {
   copy: string
   copied: string
   copyFailed: string
+  manualCopy: string
+  close: string
   retry: string
   stopped: string
   stoppedBeforeAnswer: string
@@ -63,6 +67,8 @@ export const defaultChatLabels: ChatLabels = {
   copy: "Copy",
   copied: "Copied",
   copyFailed: "Copy failed",
+  manualCopy: "Select and copy the text",
+  close: "Close",
   retry: "Retry",
   stopped: "Stopped",
   stoppedBeforeAnswer: "Stopped before answering",
@@ -335,23 +341,21 @@ export function ChatAction(props: {
   )
 }
 
-export function ChatCopyAction(props: { text: string; label?: string; labels?: Partial<ChatLabels> }) {
+export function ChatCopyAction(props: { text: string; nativeCopy?: (text: string) => Promise<void>; label?: string; labels?: Partial<ChatLabels> }) {
   const labels = () => merge(props.labels)
   const [state, setState] = createSignal<"idle" | "copied" | "error">("idle")
   let timer: ReturnType<typeof setTimeout> | undefined
   onCleanup(() => clearTimeout(timer))
   const copy = async () => {
     clearTimeout(timer)
-    const ok = await navigator.clipboard.writeText(props.text).then(
-      () => true,
-      () => false,
-    )
-    setState(ok ? "copied" : "error")
-    timer = setTimeout(() => setState("idle"), 1400)
+    const copied = await writeClipboard(props.text, props.nativeCopy)
+    setState(copied ? "copied" : "error")
+    if (copied) timer = setTimeout(() => setState("idle"), 1400)
   }
   const label = () =>
     state() === "copied" ? labels().copied : state() === "error" ? labels().copyFailed : (props.label ?? labels().copy)
   return (
+    <>
     <ChatAction label={label()} onClick={() => void copy()} class="pc-ac-copyIcon">
       <span class="pc-ac-iconCell">
         <Show when={state()} keyed>
@@ -363,6 +367,11 @@ export function ChatCopyAction(props: { text: string; label?: string; labels?: P
         </Show>
       </span>
     </ChatAction>
+    <span class="pc-ac-srOnly" role="status">{state() === "copied" ? labels().copied : ""}</span>
+    <Show when={state() === "error"}>
+      <ManualCopy label={labels().manualCopy} close={labels().close} text={props.text} onClose={() => setState("idle")} />
+    </Show>
+    </>
   )
 }
 
@@ -405,6 +414,7 @@ export function ChatVersions(props: {
 
 /** Arc reply actions: copy and retry, quiet until the turn is hovered (always shown on the last turn). */
 export function ChatReplyActions(props: {
+  nativeCopy?: (text: string) => Promise<void>
   copyText: string
   onRetry?: () => void
   retryDisabled?: boolean
@@ -421,7 +431,7 @@ export function ChatReplyActions(props: {
     <div class="pc-ac-actions" data-component="panacode-chat-actions" data-hidden={props.hidden || undefined}>
       {props.lead}
       <div class="pc-ac-actionGroup pc-ac-hoverable">
-        <ChatCopyAction text={props.copyText} labels={props.labels} />
+        <ChatCopyAction nativeCopy={props.nativeCopy} text={props.copyText} labels={props.labels} />
         <Show when={props.onRetry}>
           <ChatAction label={labels().retry} disabled={props.retryDisabled} onClick={() => props.onRetry?.()}>
             <ChatIcon name="rotate" size={15} />

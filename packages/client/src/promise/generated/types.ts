@@ -4316,6 +4316,7 @@ export type PermissionReplyInput = {
   readonly sessionID: string
   readonly requestID: string
   readonly decision: "once" | "always" | "reject"
+  readonly scope?: "request" | undefined
   readonly message?: string | undefined
 }
 
@@ -4345,6 +4346,7 @@ export type FileFindInput = {
 export type FileFindOutput = { location: LocationPublicRef; data: Array<FileSystemEntry> }
 
 export type ExperimentalFileWriteInput = {
+  readonly expectedSha256?: string | undefined
   readonly location?: { readonly directory?: string | undefined } | undefined
   readonly path: string
   readonly payload: globalThis.Uint8Array

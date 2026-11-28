@@ -8,6 +8,7 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
 
 import { extractPromptContext, extractPromptFromMessage } from "@/composer/prompt"
+import { storedFileUri } from "@/composer/stored-file-uri"
 import { pinPromptMedia } from "@/composer/media"
 import { clonePrompt, promptLength } from "@/composer/prompt-parts"
 import { showToast } from "@/shell/notifications/toast"
@@ -241,13 +242,35 @@ export function createSessionRevert(input: {
       return { type: "withdraw.succeeded", attempt, prompt: restored, ...snapshot(sessionID) }
     }
 
-    if (operation.type === "rewind") {
+    if (operation.type === "rewind" || operation.type === "retry") {
       // Interrupt acknowledges before the execution settles, and staging a busy Session fails. The local status can
       // lag the server either way, so always settle first; both are idle no-ops. Like the TUI, stop at the first
       // failure instead of waiting on work that was never interrupted.
       await server.api.session.interrupt({ sessionID }, { signal })
       await server.api.experimental.session.wait({ sessionID }, { signal })
       await server.api.session.revert.stage({ sessionID, messageID: operation.message.id }, { signal })
+
+      if (operation.type === "retry") {
+        const message = operation.message
+
+        try {
+          signal.throwIfAborted()
+          await server.api.session.prompt({
+            sessionID, text: message.text, agents: message.agents, skills: message.skills, metadata: message.metadata,
+            files: message.files?.map((file) => ({
+              uri: storedFileUri(file), name: file.name, mention: file.mention, description: file.description,
+            })),
+          }, { signal })
+        } catch (error) {
+          // Restore the original turn if admission failed and still owns this boundary.
+          const session = await server.api.session.get({ sessionID })
+
+          if (session.revert?.messageID === message.id) await server.api.session.revert.clear({ sessionID })
+          throw error
+        }
+
+        return { type: "retry.succeeded", attempt }
+      }
 
       // Like the TUI, pending inputs are left alone: the revert hides them, committing it drops them, and redo
       // delivers them.
@@ -278,6 +301,8 @@ export function createSessionRevert(input: {
   }
 
   return {
+    retry: (messageID: string, sessionID = input.session.identity.params.id) =>
+      request(sessionID, (id) => ({ type: "retry.requested", messageID, ...snapshot(id) })),
     to: (messageID: string, sessionID = input.session.identity.params.id) =>
       request(sessionID, (id) => ({
         type: "rewind.to",

@@ -15,6 +15,7 @@ describe("desktop native translations", () => {
   test("accepts the exact typed bundle", () => {
     const bundle = createDesktopNativeBundle("en", (key) => DESKTOP_NATIVE_ENGLISH[key])
     expect(parseDesktopNativeBundle(bundle)).toEqual(bundle)
+    expect(parseDesktopNativeBundle({ ...bundle, locale: "fa" })).toBeUndefined()
   })
 
   test("rejects unsupported locales and mismatched key sets", () => {
@@ -44,27 +45,8 @@ describe("desktop native translations", () => {
 })
 
 describe("desktop native locale detection", () => {
-  test("follows preference order and skips invalid or unsupported tags", () => {
-    expect(detectDesktopNativeLocale(["not_a_locale", "fr-FR"])).toBe("fr")
-    expect(detectDesktopNativeLocale(["eo", "de-DE"])).toBe("de")
-  })
-
-  test.each([
-    [["zh-TW"], "zht"],
-    [["zh-SG"], "zh"],
-    [["pa-PK"], "pa"],
-    [["pa-IN", "fr"], "fr"],
-    [["az-Cyrl", "de"], "de"],
-    [["sr-Cyrl"], "sr"],
-    [["sr-Latn", "en"], "en"],
-    [["uz-Latn"], "uz"],
-    [["no"], "no"],
-    [["nb-NO"], "no"],
-    [["nn-NO"], "no"],
-    [["he"], "he"],
-    [["he-IL"], "he"],
-  ])("uses Unicode likely subtags to map %p to %p", (tags, locale) => {
-    expect<string | undefined>(detectDesktopNativeLocale([...tags])).toBe(locale)
+  test("uses the English menu on a non-English operating system", () => {
+    expect(detectDesktopNativeLocale(["fa-IR", "de-DE"])).toBe("en")
   })
 })
 

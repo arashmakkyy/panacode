@@ -3,7 +3,7 @@ import { Location } from "@opencode/schema/location"
 import { PositiveInt } from "@opencode/schema/schema"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
-import { FileNotFoundError, ServiceUnavailableError } from "../errors.js"
+import { ConflictError, FileNotFoundError, ServiceUnavailableError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 const ListQuery = Schema.Struct({
@@ -14,6 +14,7 @@ const ListQuery = Schema.Struct({
 })
 
 const WriteQuery = Schema.Struct({
+  expectedSha256: Schema.optional(Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/))),
   ...LocationQuery.fields,
   path: Schema.String.annotate({
     description:
@@ -84,6 +85,7 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
       query: WriteQuery,
       payload: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
       success: Location.response(FileSystem.Write),
+      error: ConflictError,
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(

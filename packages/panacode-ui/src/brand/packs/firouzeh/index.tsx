@@ -8,7 +8,6 @@ export const brand = {
   name: meta.name,
   direction: meta.direction,
   tagline: meta.tagline,
-  taglineFa: meta.taglineFa,
   publisher: meta.publisher,
 } as const
 

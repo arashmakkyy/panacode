@@ -143,6 +143,7 @@ export const makePermissionGroup = <
         params: { sessionID: Session.ID, requestID: Permission.ID },
         payload: Schema.Struct({
           decision: Permission.Reply,
+          scope: Schema.optional(Schema.Literal("request")),
           message: Schema.String.pipe(Schema.optional),
         }),
         success: HttpApiSchema.NoContent,

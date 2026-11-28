@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import type { ConfigEntry, OpenCodeEvent, SessionMessageInfo, WorktreeDirectory } from "@opencode/client/promise"
+import type { ConfigEntry, OpenCodeEvent, WorktreeDirectory } from "@opencode/client/promise"
 import { NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project, seed, session } from "../utils/app"
 import { mockMissingLocation, mockOpenCodeServer } from "../utils/mock-server"
 import { mockRemoteServer, mockWorkspace, openSession, openSettings, type WorkspaceInput } from "../utils/workspace"
@@ -57,6 +57,48 @@ const patched = (page: Page) =>
     (request) => request.method() === "PATCH" && new URL(request.url()).pathname === `/api/project/${projectID}`,
   )
 
+test("keeps the selected theme and follows the OS when the color scheme is System", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" })
+  const { settings } = await openSettings(page, { name: "Appearance", seed: { theme: { id: "panacode", scheme: "dark" } } })
+  const root = page.locator("html")
+  const appearance = settings.getByRole("tab", { name: "Appearance", exact: true })
+  const scheme = settings.getByLabel("Color scheme")
+  await appearance.click()
+  await expect(root).toHaveCSS("background-color", "rgb(11, 14, 23)")
+  await scheme.getByRole("button", { name: "Light" }).click()
+  await expect(root).toHaveCSS("background-color", "rgb(245, 243, 238)")
+  await page.reload()
+  await expect(root).toHaveAttribute("data-color-scheme", "light")
+
+  if (!(await settings.isVisible())) await page.getByRole("button", { name: "Settings", exact: true }).click()
+  await appearance.click()
+  await scheme.getByRole("button", { name: "System" }).click()
+  await expect(root).toHaveAttribute("data-color-scheme", "dark")
+  await page.emulateMedia({ colorScheme: "light" })
+  await expect(root).toHaveAttribute("data-color-scheme", "light")
+  await settings.locator('[data-action="settings-theme"]').click()
+  await page.getByRole("option", { name: "Dracula", exact: true }).click()
+  await expect(root).toHaveAttribute("data-theme", "dracula")
+  await settings.getByRole("tab", { name: "Providers" }).click()
+  const connect = settings.getByRole("button", { name: "Connect PanaAI" })
+  const fill = await root.evaluate((el) => getComputedStyle(el).getPropertyValue("--v2-background-bg-accent").trim())
+
+  const chosen = await page.evaluate((color) => {
+    const node = document.createElement("span")
+    node.style.color = color
+    document.body.append(node)
+    const resolved = getComputedStyle(node).color
+    node.remove()
+
+    return resolved
+  }, fill)
+
+  await expect(connect).toHaveCSS("background-color", chosen)
+  await page.reload()
+  await expect(root).toHaveAttribute("data-theme", "dracula")
+  await expect(root).toHaveAttribute("data-color-scheme", "light")
+})
+
 test("settings has its own route and returns through app history", async ({ page }) => {
   const { settings } = await open(page)
   const home = page.getByRole("button", { name: "Home", exact: true })
@@ -97,41 +139,20 @@ test("a settings page survives refresh", async ({ page }) => {
   await expect(page).toHaveURL("/settings?tab=appearance")
 })
 
-// The Arabic dictionary chunks: built (`_assets/ar-<hash>.js`) and dev (`.../i18n/ar.ts`), for the app and the UI.
-const arabic = /\/(?:_assets\/ar-[\w-]+\.js|i18n\/ar\.ts)(?:\?|$)/
+test.describe("English-only app preferences", () => {
+  test.use({ locale: "fa-IR" })
 
-async function pickArabic(page: Page) {
-  const { settings } = await open(page)
-  await settings.locator('[data-action="settings-language"]').click()
-  await page.getByRole("listbox").getByRole("option", { name: "العربية", exact: true }).click()
+  test("opens and reloads in English with a legacy Persian preference", async ({ page }) => {
+    const { settings } = await open(page, { seed: { locale: "fa" } })
+    const preferences = settings.getByRole("heading", { name: "Preferences", exact: true })
 
-  return settings
-}
-
-test("a language switch keeps settings on screen and flips direction only with the new strings", async ({ page }) => {
-  const chunks = await holdRoute(page, arabic)
-  const html = page.locator("html")
-  const settings = await pickArabic(page)
-  await chunks.arrived
-
-  await expect(settings.getByText("Language", { exact: true })).toBeVisible()
-  await expect(html).toHaveAttribute("dir", "ltr")
-  await expect(html).toHaveAttribute("lang", "en")
-
-  chunks.release()
-  await expect(settings.getByText("اللغة", { exact: true })).toBeVisible()
-  await expect(html).toHaveAttribute("dir", "rtl")
-  await expect(html).toHaveAttribute("lang", "ar")
-})
-
-test("a language whose chunk fails to load keeps English and says so", async ({ page }) => {
-  await page.route(arabic, (route) => route.abort("failed"))
-  const settings = await pickArabic(page)
-
-  await expect(page.getByText("Failed to load العربية", { exact: true })).toBeVisible()
-  await expect(settings.getByText("Language", { exact: true })).toBeVisible()
-  await expect(page.locator("html")).toHaveAttribute("dir", "ltr")
-  await expect(settings.locator('[data-action="settings-language"]')).toContainText("English")
+    await expect(preferences).toBeVisible()
+    await expect(page.locator("html")).toHaveAttribute("lang", "en")
+    await expect(settings.getByText("Language", { exact: true })).toHaveCount(0)
+    await page.reload()
+    await expect(preferences).toBeVisible()
+    await expect(page.locator("html")).toHaveAttribute("dir", "ltr")
+  })
 })
 
 test("Questions settings default independently of old Permissions settings and survive reload", async ({ page }) => {
@@ -294,7 +315,7 @@ for (const locale of ["en", "ar"]) {
       ],
       sessionStatus: { [id]: { type: "busy" }, [childID]: { type: "busy" } },
       seed: { locale },
-      pageMessages: () => ({
+      pageMessages: (): ReturnType<NonNullable<WorkspaceInput["pageMessages"]>> => ({
         items: [
           { id: "msg_activity_user", type: "user", text: "Inspect the activity capsule", time: { created: 1 } },
           {
@@ -2773,3 +2794,30 @@ for (const viewport of [
     }
   })
 }
+
+test("MCP setup traps focus, preserves each transport's draft and returns to its opener", async ({ page }) => {
+  const { settings } = await openSettings(page, { name: "Transport" })
+  await settings.getByRole("tab", { name: "Extensions" }).click()
+  const add = page.locator('[data-action="mcp-add"]')
+  await add.click()
+  const dialog = page.getByRole("dialog")
+  const field = dialog.locator('[data-action="mcp-add-target"]')
+  await expect(field).toBeFocused()
+  await field.fill("https://tools.example.test/mcp")
+  await dialog.getByRole("button", { name: "Local", exact: true }).click()
+  await expect(field).toHaveValue("")
+  await field.fill('node "/folder with spaces/service.js"')
+  await dialog.getByRole("button", { name: "Remote", exact: true }).click()
+  await expect(field).toHaveValue("https://tools.example.test/mcp")
+
+  for (const key of ["Tab", "Shift+Tab"]) {
+    for (let i = 0; i < 9; i++) {
+      await page.keyboard.press(key)
+      expect(await dialog.evaluate((el) => el.contains(document.activeElement))).toBe(true)
+    }
+  }
+
+  await page.keyboard.press("Escape")
+  await expect(dialog).toHaveCount(0)
+  await expect(add).toBeFocused()
+})

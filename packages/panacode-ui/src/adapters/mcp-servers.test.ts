@@ -1,3 +1,4 @@
+import { parseMcpCommand } from "../features/mcp-servers/command"
 import { describe, expect, test } from "bun:test"
 import { toMcpServerViews } from "./mcp-servers"
 import { toToolCallStatus } from "./tool-call"
@@ -45,4 +46,13 @@ describe("panacode adapters", () => {
     expect(toApprovalDecision("approve")).toBe("once")
     expect(toApprovalDecision("reject")).toBe("reject")
   })
+})
+
+test.each([
+  ['node "/demo/My Tools/service.js" --label "two words"', ["node", "/demo/My Tools/service.js", "--label", "two words"]],
+  ['"C:\\Program Files\\node.exe" "C:\\Users\\user\\my server.js" --empty ""', ["C:\\Program Files\\node.exe", "C:\\Users\\user\\my server.js", "--empty", ""]],
+  ["node one\\ two 'سه چهار'", ["node", "one two", "سه چهار"]],
+  ["node 'unfinished", undefined], [" ", undefined], ["https://example.test", undefined],
+] as const)("parses a local command as literal argv: %s", (command, expected) => {
+  expect(parseMcpCommand(command)).toEqual(expected)
 })

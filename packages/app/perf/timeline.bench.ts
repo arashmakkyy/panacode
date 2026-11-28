@@ -11,9 +11,9 @@ const find = '[data-component="timeline-search-bar"] input'
 const count = '[data-slot="timeline-search-count"]'
 
 // The first of four edits of Core's tool sources (edit.ts), listed one per file and collapsed.
-const edit = '[data-scope="apply-patch"] [data-slot="accordion-trigger"]'
+const edit = '.pc-tc-row[aria-label*="edit.ts"]'
 
-const diff = '[data-component="apply-patch-file-diff"] diffs-container >>> [data-line]'
+const diff = ".cs-code .cs-row"
 
 const drag = "drag the review's edge"
 
@@ -30,17 +30,21 @@ export default bench({
 
   targets: {
     web: web({
-      expect: { title: "OpenCode" },
+      expect: { title: "Panacode" },
       viewport: { width: 1366, height: 768 },
-      prepare: async (ctx) =>
-        mockTimelineSession(cached(ctx), {
+      prepare: async (ctx) => {
+        const edits = ctx.setupKey === "edits"
+
+        const options = {
           server: new URL(ctx.url).origin,
-          // The edits alone, so the case measures the diff, not the history around it.
-          historyTurns: ctx.setupKey === "edits" ? 0 : 120,
-          collapsedEdits: ctx.setupKey === "edits",
-          tools: ctx.setupKey === "edits" ? await editTools() : undefined,
+          // The edit case measures the diff in a session with no preceding history.
+          historyTurns: edits ? 0 : 120,
+          collapsedEdits: edits,
           vcsDiff: ctx.setupKey === "review" ? reviewDiffs() : undefined,
-        }),
+        }
+
+        return mockTimelineSession(cached(ctx), edits ? { ...options, ...await editTools() } : options)
+      },
       url: ({ prepared }) => prepared.path,
     }),
   },
@@ -48,6 +52,14 @@ export default bench({
   async setup({ setupKey, page }) {
     await page.waitFor(timeline, { timeout: 60_000 })
     await page.waitFor(composer)
+
+    if (setupKey === "edits") {
+      await page.waitFor(".pc-tc-groupHead")
+      const group = '.pc-tc-groupHead[aria-expanded="false"]'
+
+      if (await page.eval(() => !!document.querySelector('.pc-tc-groupHead[aria-expanded="false"]')))
+        await page.click(group, { until: edit })
+    }
 
     if (setupKey === "review") {
       await openReview(page)

@@ -246,6 +246,9 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
         },
       } satisfies WebSearchRequestModel,
       permissionRequest: () => (state.request?.type === "permission" ? state.request.value : undefined),
+      permissionRequests: () => state.request?.type === "permission" ? [state.request.value] : [],
+      permissionSessionTitle: (id: string) => id,
+      permissionHistory: () => [],
       permissionResponding: () => false,
       decide: (response) => {
         setState("request", undefined)

@@ -21,7 +21,7 @@ packs/<id>/
   brand.ts       pack manifest: id, name, tagline(Fa), publisher, theme { dark, light } palettes
   geometry.ts    MARK_PATH / WORDMARK_PATH (outlined, so no font is needed to draw the logo)
   index.tsx      BrandMark, BrandWordmark, BrandLockup, brand, brandIcon
-  tokens.css     colour + font tokens only (dark default, [data-theme="light"])
+  tokens.css     aliases for active workbench roles, logo colours and fonts
   fonts.css      @font-face for the pack fonts, fonts/ holds the OFL files
   assets/        icon-1024.png (desktop icon + favicon source), mark*.svg, wordmark.svg, lockups
   BRAND.md       rationale and usage notes
@@ -31,10 +31,12 @@ packs/<id>/
 
 1. Copy `packs/firouzeh` to `packs/<id>` and replace `brand.ts` palette, `geometry.ts` paths,
    `tokens.css` colours/fonts, `fonts/`, and `assets/` (icon-1024.png at least).
-   Keep `tokens.css` free of `--radius-*`, font weights and letter-case rules.
+   The light and dark workbench colours live in `brand.ts`. Its `palette`, `overrides` and `v2Overrides` feed the app, editor and terminal.
+   Alias those theme roles in `tokens.css` so users can switch themes.
 2. Run `bun script/panacode-brand-apply.ts <id>`. It rewrites `active.ts` and `active.css` (the only files that
    name a pack), regenerates `packages/ui/src/theme/themes/panacode.json`, the desktop icons and favicons, and the
    brand seed in `packages/app/public/oc-theme-preload.js` (first-paint colours).
+   For palette changes in the current pack, use `bun script/panacode-brand-apply.ts firouzeh --colors-only` to keep the existing artwork.
 3. Check: `bun script/panacode-brand-scan.ts`, `bun run panacode:ui-ownership`, `bun run typecheck` and
    `bun test` in packages/panacode-ui and packages/app (theme-preload.test.ts follows the seed automatically).
 

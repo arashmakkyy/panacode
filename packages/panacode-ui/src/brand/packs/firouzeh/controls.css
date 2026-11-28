@@ -1,0 +1,78 @@
+/* The dashboard's primary action is a flat fill with a one-pixel inset highlight.
+ * The workbench and Panacode components render different controls for the same action. */
+[data-brand="panacode"][data-theme="panacode"] {
+  :is(
+    [data-component="button-v2"]:is([data-variant="submit"], [data-variant="contrast"]),
+    [data-component="icon-button-v2"][data-variant="submit"],
+    [data-component="panacode-button"][data-variant="primary"],
+    [data-component="panacode-provider-spotlight"] [data-slot="spotlight-primary"],
+    [data-slot="sidebar-actions"] > [data-action="vertical-tabs-new-session"],
+    .pc-aic-send[data-state="ready"],
+    .pc-ac-send:enabled,
+    .pc-mcp-button.is-primary,
+    .pc-ar-button-primary,
+    .pc-ao-primary
+  ) {
+    border: 1px solid var(--primary-border);
+    border-radius: var(--radius-control);
+    background: var(--primary-fill);
+    color: var(--accent-foreground);
+    box-shadow: var(--pana-button-shadow);
+    text-shadow: none;
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover:enabled:not([aria-disabled="true"]) {
+        background: var(--primary-hover);
+        border-color: var(--pana-button-hover-border);
+      }
+    }
+
+    &:active:enabled:not([aria-disabled="true"]) {
+      background: var(--primary-hover);
+      border-color: var(--pana-button-hover-border);
+    }
+  }
+
+  /* Keyboard hints are printed on the action itself. */
+  [data-action="vertical-tabs-new-session"] [data-slot="keybind-v2-key"] {
+    background: color-mix(in srgb, var(--accent-foreground) 10%, transparent);
+  }
+
+  [data-action="vertical-tabs-new-session"] [data-slot="keybind-v2-label"] {
+    color: var(--accent-foreground);
+  }
+
+  :is(.pc-aic-send[data-state="empty"], [data-action="composer-submit"][data-variant="submit"]:disabled, .pc-ac-send:disabled) {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--surface-muted);
+    color: var(--text-muted);
+    box-shadow: none;
+    opacity: 1;
+  }
+
+  :is(
+    [data-component="text-input-v2"]:not([data-surface="invisible"], [data-disabled], [data-invalid]),
+    [data-component="panacode-field"] [data-slot="field-control"]:enabled:not([aria-invalid="true"]),
+    [data-component="home-session-search"] > label,
+    .pc-mcp-input:enabled
+  ) {
+    border: 1px solid var(--field-border);
+    border-radius: var(--radius-control);
+    background-color: var(--field-surface);
+    box-shadow: none;
+    outline: 0;
+
+    &:focus-within {
+      border-color: var(--focus-ring);
+      box-shadow: var(--field-focus-shadow);
+    }
+  }
+
+  @media (forced-colors: active) {
+    :is([data-component="text-input-v2"], [data-component="panacode-field"] [data-slot="field-control"], [data-component="home-session-search"] > label, .pc-mcp-input):focus-within {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+  }
+}

@@ -79,7 +79,7 @@
 
 [data-brand="panacode"] .settings-tab-body [data-component="text-input-v2"]:focus-within,
 [data-brand="panacode"] [data-component="settings-list"] [data-component="text-input-v2"]:focus-within {
-  border-color: var(--foreground);
+  border-color: var(--focus-ring);
   box-shadow: none;
 }
 

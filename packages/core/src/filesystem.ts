@@ -2,6 +2,8 @@ export * as FileSystem from "./filesystem.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import path from "path"
+import { createHash } from "node:crypto"
+import { withLock } from "./file-mutation.js"
 import { Context, Effect, Layer, type Option, type PlatformError, Schema, type Stream } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "./location.js"
@@ -18,7 +20,10 @@ export interface WriteInput {
   /** Absolute, or relative to the location directory. */
   readonly path: string
   readonly data: Uint8Array
+  readonly expectedSha256?: string
 }
+
+export class FileChanged extends Schema.TaggedError<FileChanged>()("FileSystem.FileChanged", { path: Schema.String }) {}
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("FileSystem.NotFoundError", {
   path: RelativePath,
@@ -100,7 +105,7 @@ export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<Entry[], NotFoundError>
   readonly find: (input: FindInput) => Effect.Effect<Entry[]>
   /** Writes a file at an absolute path or one relative to the location; not confined to it. */
-  readonly write: (input: WriteInput) => Effect.Effect<Write>
+  readonly write: (input: WriteInput) => Effect.Effect<Write, FileChanged>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileSystem") {}
@@ -202,8 +207,16 @@ const baseLayer = Layer.effect(
       // server tmp directory, which the model is already told to prefer and permitted to access.
       write: Effect.fn("FileSystem.write")(function* (input) {
         const target = path.resolve(location.directory, input.path)
-        yield* fs.writeWithDirs(target, input.data).pipe(Effect.orDie)
-        return Write.make({ path: AbsolutePath.make(target) })
+        return yield* withLock([target])(Effect.gen(function* () {
+          if (input.expectedSha256 !== undefined) {
+            const changed = () => new FileChanged({ path: input.path })
+            const existing = yield* resolve(RelativePath.make(input.path)).pipe(Effect.mapError(changed))
+            const bytes = yield* fs.readFile(existing.real).pipe(Effect.mapError(changed))
+            if (createHash("sha256").update(bytes).digest("hex") !== input.expectedSha256) return yield* changed()
+          }
+          yield* fs.writeWithDirs(target, input.data).pipe(Effect.orDie)
+          return Write.make({ path: AbsolutePath.make(target) })
+        }))
       }),
     })
   }),

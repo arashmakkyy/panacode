@@ -1,8 +1,8 @@
 export default {
-  "tab.title": "بررسی کنید",
+  "tab.title": "بازبینی تغییرات",
   "tab.count.one": "{{count}} فایل تغییر کرد",
   "tab.count.other": "{{count}} فایل تغییر کرد",
-  "mobile.title.one": "تغییر دهید",
+  "mobile.title.one": "تغییر",
   "mobile.title.other": "تغییرات",
   "empty.git": "هنوز هیچ تغییری انجام نشده است",
   "empty.branch": "هنوز شعبه ای تغییر نکرده است",

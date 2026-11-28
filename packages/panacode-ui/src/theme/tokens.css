@@ -46,6 +46,10 @@
   --accent-subtle: oklch(33% 0 0 / 0.1);
   --accent-foreground: var(--background);
 
+  --primary-fill: var(--accent);
+  --primary-hover: var(--accent-strong);
+  --primary-border: var(--accent-strong);
+
   /* Controls */
   --control-on: oklch(23% 0 0);
   --control-glyph: oklch(100% 0 0);
@@ -56,7 +60,7 @@
   --control-thumb-shadow: 0 0 0 0.5px oklch(0% 0 0 / 0.07), 0 1px 2px oklch(0% 0 0 / 0.14), 0 2px 6px oklch(0% 0 0 / 0.06);
   --control-on-subtle: var(--control-on);
   --control-fill: var(--control-on);
-  --focus-ring: transparent;
+  --focus-ring: var(--v2-border-border-focus);
 
   /* Semantic tones */
   --tone-teal: oklch(50% 0.095 182);
@@ -108,7 +112,7 @@
   --font-body: var(--font-inter, "Inter Variable"), sans-serif;
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
-  --text-base: 1rem;
+  --pc-text-body-size: 0.875rem;
   --text-lg: 1.125rem;
   --text-xl: 1.375rem;
   --text-2xl: 1.75rem;
@@ -134,30 +138,7 @@
   --ease-spring: linear(0, 0.0213, 0.0739, 0.1443, 0.2235, 0.305, 0.3849, 0.4606, 0.5305, 0.594, 0.6508, 0.7011, 0.7452, 0.7836, 0.8168, 0.8454, 0.8699, 0.8907, 0.9084, 0.9234, 0.9361, 0.9467, 0.9557, 0.9632, 0.9694, 0.9747, 0.979, 0.9826, 0.9857, 0.9882, 0.9902, 0.992, 0.9934, 0.9946, 0.9955, 0.9963, 1);
 }
 
-[data-brand="panacode"][data-color-scheme="dark"] {
-  /* Beats the preload inline color-scheme, which otherwise keeps native controls on the light palette. */
-  color-scheme: dark !important;
-
-  /* App surfaces and inputs. The dark grey ramp still starts at white, so these
-   * semantics are pinned to the dark end here instead of per component. */
-  --background-base: var(--v2-grey-1200);
-  --background-strong: var(--v2-grey-1100);
-  --background-stronger: var(--v2-grey-1100);
-  --background-weak: var(--v2-grey-1000);
-  --surface-base: var(--v2-grey-1000);
-  --input-base: var(--v2-grey-1000);
-  --v2-background-bg-base: var(--v2-grey-1100);
-  --v2-background-bg-deep: var(--v2-grey-1200);
-  --v2-background-bg-layer-01: var(--v2-grey-1000);
-  --v2-background-bg-layer-02: var(--v2-grey-900);
-  --v2-background-bg-layer-03: var(--v2-grey-800);
-  --v2-background-bg-layer-04: var(--v2-grey-700);
-  --v2-background-bg-button-neutral: var(--v2-grey-900);
-  --v2-background-bg-icon-button-contrast: var(--v2-grey-800);
-  --v2-text-text-inverse: var(--v2-grey-100);
-  /* Submit actions wash this alpha across the contrast fill. 60% white turns that fill into a white bar. */
-  --v2-alpha-light-60: #ffffff14;
-
+[data-brand="panacode"]:where([data-color-scheme="dark"]) {
   --background: oklch(19% 0 0);
   --surface: oklch(21.5% 0 0);
   --surface-raised: oklch(24% 0 0);
@@ -181,7 +162,7 @@
   --control-thumb-on: oklch(19% 0 0);
   --control-fill: oklch(62% 0 0);
   --control-thumb-shadow: 0 0 0 0.5px oklch(0% 0 0 / 0.3), 0 1px 2px oklch(0% 0 0 / 0.35), 0 2px 6px oklch(0% 0 0 / 0.2);
-  --focus-ring: transparent;
+  --focus-ring: var(--v2-border-border-focus);
 
   --tone-teal: oklch(79% 0.13 182);
   --tone-sky: oklch(79% 0.095 236);

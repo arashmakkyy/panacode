@@ -13,11 +13,13 @@ import {
   credentialFromExchange,
   PanaAIPlugin,
 } from "@opencode/core/plugin/provider/panaai"
+import { Rpc } from "@opencode/core/rpc"
 import { Provider } from "@opencode/core/provider"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer, Schedule, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
+import { TestClock } from "effect/testing"
 import { eventually } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -104,6 +106,51 @@ describe("PanaAIPlugin", () => {
         { type: "key", label: "Paste pana-… platform API key" },
         { type: "env", names: ["PANAAI_API_KEY"] },
       ])
+    }),
+  )
+
+  it.effect("a failed initial catalog can recover immediately and caches only a validated success", () =>
+    Effect.gen(function* () {
+      const config = yield* Config.Test
+      const integrations = yield* Integration.Service
+      const rpc = yield* Rpc.Service
+      const key = "fixture-catalog"
+      yield* config.setEntries([new Document({ type: "document", info: decode({ providers: { panaai: {
+        settings: { baseURL: "https://catalog-recovery.test/v1", apiKey: key },
+      } } }) })])
+      let requests = 0
+      let status = 503
+      let ids = ["recovered"]
+      const http = HttpClient.make((request) => Effect.sync(() => {
+        requests++
+        return HttpClientResponse.fromWeb(request, status === 200
+          ? Response.json({ data: ids.map((id) => ({ id })) })
+          : new Response("", { status }))
+      }))
+      yield* addPlugins(http)
+      const catalog = integrations.get(integrationID).pipe(Effect.map((item) => item?.metadata?.modelCatalog))
+      yield* eventually(catalog, (status) => status === "unavailable")
+      status = 200
+      yield* rpc.call("opencode.provider.panaai", "refresh", {})
+      expect(yield* catalog).toBe("ready")
+      yield* rpc.call("opencode.provider.panaai", "refresh", {})
+      expect(requests).toBe(2)
+      const modelState = yield* Model.Service
+      const current = modelState.get(Provider.ID.make("panaai"), Model.ID.make("recovered"))
+      expect(yield* current).toBeDefined()
+      status = 503
+      yield* TestClock.adjust("31 seconds")
+      yield* eventually(catalog, (value) => value === "unavailable")
+      expect(yield* current).toBeDefined()
+      status = 401
+      yield* rpc.call("opencode.provider.panaai", "refresh", {})
+      expect(yield* catalog).toBe("unauthorized")
+      expect(yield* current).toBeUndefined()
+      status = 200
+      ids = []
+      yield* rpc.call("opencode.provider.panaai", "refresh", {})
+      expect(yield* catalog).toBe("ready")
+      expect(yield* current).toBeUndefined()
     }),
   )
 

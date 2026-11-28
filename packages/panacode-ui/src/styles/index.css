@@ -10,8 +10,6 @@
 @import "../primitives/surface.css";
 @import "../features/ai-chat/ai-chat.css";
 @import "../features/ai-composer/ai-composer.css";
-@import "../features/agent-run/agent-run.css";
-@import "../features/agent-orchestrator/agent-orchestrator.css";
 @import "../features/agent-approvals/agent-approvals.css";
 @import "../features/tool-call/tool-call.css";
 @import "../features/code-suggestion/code-suggestion.css";

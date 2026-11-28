@@ -68,7 +68,7 @@ const clip = (value: string, max = 72) => (value.length > max ? `${value.slice(0
 const base = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path
 const str = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value))
 
-type FilePreview = { file?: unknown; additions?: unknown; deletions?: unknown; status?: unknown }
+type FilePreview = { file?: unknown; additions?: unknown; deletions?: unknown; status?: unknown; patch?: unknown }
 const files = (metadata: PermissionLike["metadata"]): FilePreview[] =>
   Array.isArray(metadata?.files) ? (metadata.files as unknown[]).filter((f): f is FilePreview => !!f && typeof f === "object") : []
 
@@ -98,7 +98,7 @@ export function fromPermissionRequest(request: PermissionLike, copy: PermissionC
     for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
       const text = str(value)
       if (!text || resources.includes(text)) continue
-      args.push({ key: `input.${key}`, label: key, value: clip(text, 400), mono: true })
+      args.push({ key: `input.${key}`, label: key, value: text, mono: true })
     }
   }
   const save = (request.save ?? []).filter(Boolean)
@@ -106,6 +106,7 @@ export function fromPermissionRequest(request: PermissionLike, copy: PermissionC
 
   return {
     id: request.id,
+    canAlways: save.length > 0,
     title,
     summary: title.replaceAll("`", ""),
     reason: request.message,
@@ -116,6 +117,9 @@ export function fromPermissionRequest(request: PermissionLike, copy: PermissionC
     sourceDetail: undefined,
     requestedAt,
     args,
+    patches: previews.flatMap((file) => typeof file.file === "string" && typeof file.patch === "string" && file.patch
+      ? [{ file: file.file, patch: file.patch }]
+      : []),
   }
 }
 

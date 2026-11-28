@@ -434,7 +434,18 @@
   animation-play-state: paused;
 }
 .pc-mcp-layer {
-  position: absolute;
+  position: fixed;
+  width: min(480px, 100%);
+  max-width: 100%;
+  max-height: 95dvh;
+  padding: 0;
+  border: none;
+  margin: auto;
+  background: transparent;
+  color: inherit;
+}
+.pc-mcp-layer::backdrop { background: rgb(0 0 0 / 48%); }
+.pc-mcp-layer[open] {
   z-index: 5;
   inset: 0;
   display: flex;

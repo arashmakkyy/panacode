@@ -165,18 +165,19 @@ function applyThemeCss(theme: DesktopTheme, themeId: string, mode: "light" | "da
 }`
 
   document.getElementById("oc-theme-preload")?.remove()
+  document.getElementById("oc-theme-preload-seed")?.remove()
   ensureThemeStyleElement().textContent = fullCss
   document.documentElement.dataset.theme = themeId
   document.documentElement.dataset.colorScheme = mode
   // Preload writes an inline color-scheme from the OS preference. It outranks the
   // stylesheet, so native inputs and buttons stay on the light palette until this matches.
   document.documentElement.style.colorScheme = mode
-  document.documentElement.style.backgroundColor = isDark ? "#080808" : "#fafafa"
+  document.documentElement.style.backgroundColor = "var(--v2-background-bg-deep)"
 
   // Update theme-color meta tag to match light/dark mode
   const meta = document.querySelector('meta[name="theme-color"]')
 
-  if (meta) meta.setAttribute("content", isDark ? "#080808" : "#fafafa")
+  if (meta) meta.setAttribute("content", getComputedStyle(document.documentElement).backgroundColor)
 }
 
 function cacheThemeVariants(theme: DesktopTheme) {
@@ -195,19 +196,21 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   init: (props: {
     defaultTheme?: string
     /**
-     * Scheme used when nothing is stored yet. Panacode passes `"dark"`.
+     * Scheme used when nothing is stored yet. The desktop follows the system and the web starts dark.
      * A stored light, dark, or system choice still wins.
      */
     defaultColorScheme?: ColorScheme
+    initialSystemMode?: "light" | "dark"
     /** The window shows the theme: its colors, or until a registered theme arrives, those cached from the last run. */
     onThemeApplied?: (mode: "light" | "dark", scheme: ColorScheme) => void
   }) => {
     // An id no theme has yet stays selected until `settle`: a registered theme can arrive after startup.
     const storedScheme = read(STORAGE_KEYS.COLOR_SCHEME)
+
     const initial = createThemeState({
       themeId: read(STORAGE_KEYS.THEME_ID) || props.defaultTheme || DEFAULT_THEME_ID,
       scheme: storedScheme ? parseColorScheme(storedScheme) : (props.defaultColorScheme ?? "system"),
-      systemMode: getSystemMode(),
+      systemMode: props.initialSystemMode ?? getSystemMode(),
       defaultTheme: oc2Theme,
       bundled: knownThemes(),
     })

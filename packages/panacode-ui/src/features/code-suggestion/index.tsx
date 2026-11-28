@@ -48,6 +48,7 @@ export type CodeSuggestionLabels = {
   retry: string
   undoFile: string
   regenerate: string
+  collapse: string
   unchanged: (count: number) => string
   added: (count: number) => string
   stats: (added: number, removed: number) => string
@@ -72,6 +73,7 @@ export const defaultCodeSuggestionLabels: CodeSuggestionLabels = {
   retry: "Retry",
   undoFile: "Undo turn",
   regenerate: "Regenerate",
+  collapse: "Collapse context",
   unchanged: (count) => `${count} unchanged lines`,
   added: (count) => `${count} lines added`,
   stats: (added, removed) => `${added} lines added, ${removed} removed`,
@@ -90,6 +92,10 @@ export type CodeSuggestionProps = {
   error?: string
   /** Return false (or a promise of false) to keep the hunk pending, e.g. when writing the file failed. */
   onDecision?: (hunk: CodeSuggestionHunk, decision: CodeSuggestionDecision, code: string) => boolean | void | Promise<boolean | void>
+  onDecisions?: (ids: string[], decision: CodeSuggestionDecision, next: Decisions) => Promise<boolean> | boolean
+  feedback?: string
+  undoPending?: boolean
+  undoComplete?: string
   onResolve?: (result: { code: string; accepted: string[]; rejected: string[] }) => void
   onStop?: () => void
   onRegenerate?: () => void
@@ -111,7 +117,7 @@ type RowDecision = CodeSuggestionDecision | "pending"
 type Row =
   | { kind: "ctx" | "add" | "del"; key: string; text: string; decision?: RowDecision; num?: number; hunk?: string }
   | { kind: "bar"; key: string; hunk: Hunk; index: number }
-  | { kind: "fold"; key: string; count: number }
+  | { kind: "fold"; key: string; count: number; visible: number }
 type Tone = "busy" | "review" | "done" | "muted" | "error"
 
 const ROW_HEIGHT = 20
@@ -171,6 +177,7 @@ export function CodeSuggestion(props: CodeSuggestionProps) {
   const [leaving, setLeaving] = createSignal<Decisions>({})
   const [busy, setBusy] = createSignal(false)
   const [announcement, setAnnouncement] = createSignal("")
+  const [expanded, setExpanded] = createSignal<Record<string, number>>({})
   let root: HTMLDivElement | undefined
   let codeEl: HTMLDivElement | undefined
 
@@ -190,21 +197,23 @@ export function CodeSuggestion(props: CodeSuggestionProps) {
     if (decision === "rejected" && props.rejectBlocked) return
     const next: Decisions = { ...current }
     for (const id of fresh) next[id] = decision
-    const nextCode = applyDecisions(props.code.split("\n"), props.hunks, next)
     setBusy(true)
-    const results = await Promise.all(
-      fresh.map(async (id) => {
-        const hunk = hunks().find((item) => item.id === id)
-        if (!hunk) return true
-        try {
-          return (await props.onDecision?.(hunk.source, decision, nextCode)) !== false
-        } catch {
-          return false
+    let done: string[] = []
+    try {
+      if (props.onDecisions) {
+        if (await props.onDecisions(fresh, decision, next)) done = fresh
+      } else {
+        const nextCode = applyDecisions(props.code.split("\n"), props.hunks, next)
+        for (const id of fresh) {
+          const hunk = hunks().find((item) => item.id === id)
+          if (hunk && (await props.onDecision?.(hunk.source, decision, nextCode)) !== false) done.push(id)
         }
-      }),
-    )
-    setBusy(false)
-    const done = fresh.filter((_, index) => results[index])
+      }
+    } catch {
+      // The host reports its error. Only decisions already confirmed may settle.
+    } finally {
+      if (!done.length) setBusy(false)
+    }
     if (!done.length) return
     // Rows that disappear fold out first, then the decision lands.
     setLeaving((value) => ({ ...value, ...Object.fromEntries(done.map((id) => [id, decision])) }))
@@ -216,6 +225,7 @@ export function CodeSuggestion(props: CodeSuggestionProps) {
       })
       const settled: Decisions = { ...decisions(), ...Object.fromEntries(done.map((id) => [id, decision])) }
       setDecisions(settled)
+      setBusy(false)
       const verb = decision === "accepted" ? labels().accept : labels().reject
       const first = hunks().find((hunk) => hunk.id === done[0])
       setAnnouncement(done.length > 1 ? `${verb} ${done.length}` : `${verb}: ${first?.summary ?? ""}`)
@@ -248,8 +258,11 @@ export function CodeSuggestion(props: CodeSuggestionProps) {
         const tail = edge === "end" ? 0 : fold
         for (let i = 0; i < head; i++, cursor++) list.push({ kind: "ctx", key: `c${cursor}`, text: all[cursor] })
         const skip = until - tail - cursor
-        list.push({ kind: "fold", key: `f${cursor}`, count: skip })
-        cursor += skip
+        const key = `f${cursor}`
+        const visible = Math.min(expanded()[key] ?? 0, skip)
+        for (let n = 0; n < visible; n++, cursor++) list.push({ kind: "ctx", key: `c${cursor}`, text: all[cursor] })
+        list.push({ kind: "fold", key, count: skip - visible, visible })
+        cursor += skip - visible
       }
       for (; cursor < until; cursor++) list.push({ kind: "ctx", key: `c${cursor}`, text: all[cursor] })
     }
@@ -368,9 +381,9 @@ export function CodeSuggestion(props: CodeSuggestionProps) {
                 </span>
               )}
             </Show>
-            <span class="cs-file-name">{props.fileName}</span>
+            <span class="cs-file-name" dir="ltr">{props.fileName}</span>
             <Show when={props.filePath}>
-              <span class="cs-file-path">{props.filePath}</span>
+              <span class="cs-file-path" dir="ltr">{props.filePath}</span>
             </Show>
           </span>
           <span class="cs-stats">
@@ -386,6 +399,7 @@ export function CodeSuggestion(props: CodeSuggestionProps) {
         <div
           ref={codeEl}
           class="cs-code"
+          dir="ltr"
           tabIndex={0}
           role="region"
           aria-label={props.fileName}
@@ -433,15 +447,27 @@ export function CodeSuggestion(props: CodeSuggestionProps) {
                     }}
                   </Match>
                   <Match when={row.kind === "fold" && row}>
-                    {(fold) => (
-                      <div class="cs-row cs-fold-row" data-kind="ctx">
-                        <span class="cs-gutter" aria-hidden="true">
-                          <span class="cs-num">⋯</span>
-                          <span class="cs-sign" />
-                        </span>
-                        <span class="cs-text cs-fold-text">{labels().unchanged((fold() as Extract<Row, { kind: "fold" }>).count)}</span>
-                      </div>
-                    )}
+                    {(fold) => {
+                      const row = () => fold() as Extract<Row, { kind: "fold" }>
+                      const reveal = (visible: number) => {
+                        const key = row().key
+                        setExpanded((all) => ({ ...all, [key]: visible }))
+                        root?.querySelector<HTMLButtonElement>(`[data-fold="${key}"] button`)?.focus({ preventScroll: true })
+                      }
+                      return (
+                        <div class="cs-row cs-fold-row" data-fold={row().key}>
+                          <span class="cs-gutter" aria-hidden="true">⋯</span>
+                          <Show when={row().count}>
+                            <button type="button" aria-expanded={row().visible > 0} onClick={() => reveal(row().visible + 100)}>
+                              {labels().unchanged(row().count)}
+                            </button>
+                          </Show>
+                          <Show when={row().visible}>
+                            <button type="button" aria-expanded="true" onClick={() => reveal(0)}>{labels().collapse}</button>
+                          </Show>
+                        </div>
+                      )
+                    }}
                   </Match>
                   <Match when={row.kind !== "bar" && row.kind !== "fold" && row}>
                     {(line) => {
@@ -469,7 +495,7 @@ export function CodeSuggestion(props: CodeSuggestionProps) {
         </div>
       </div>
       <Show when={props.rejectBlocked && pendingIds().length > 0}>
-        <p class="cs-blocked-note">{props.rejectBlocked}</p>
+        <p class="cs-blocked-note" role="status">{props.rejectBlocked}</p>
       </Show>
       <div class="cs-footer">
         <div class="cs-status" aria-hidden="true">
@@ -512,7 +538,7 @@ export function CodeSuggestion(props: CodeSuggestionProps) {
                   when={!props.rejectBlocked}
                   fallback={
                     <Show when={props.onUndoFile}>
-                      <Button size="sm" variant="secondary" class="cs-foot-button" title={props.rejectBlocked} onClick={() => props.onUndoFile?.()}>
+                      <Button size="sm" variant="secondary" class="cs-foot-button" disabled={props.undoPending || !!props.undoComplete || busy()} aria-busy={props.undoPending || undefined} title={props.rejectBlocked} onClick={() => props.onUndoFile?.()}>
                         {icons.rotate()}
                         {labels().undoFile}
                       </Button>
@@ -556,8 +582,9 @@ export function CodeSuggestion(props: CodeSuggestionProps) {
           </Show>
         </div>
       </div>
+      <Show when={props.feedback}>{(message) => <p class="cs-feedback" role="alert">{message()}</p>}</Show>
       <p class="cs-sr-only" aria-live="polite" role="status">
-        {[announcement(), label()].filter(Boolean).join(". ")}
+        {props.undoComplete ?? [announcement(), label()].filter(Boolean).join(". ")}
       </p>
     </div>
   )

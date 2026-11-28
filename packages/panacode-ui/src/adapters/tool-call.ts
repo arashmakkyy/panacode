@@ -249,7 +249,8 @@ function isStopped(state: OpenCodeToolLike["state"]) {
 
 function isDenied(state: OpenCodeToolLike["state"]) {
   if (state.status !== "error") return false
-  return /permission|rejected|denied/i.test(`${state.error.type ?? ""} ${state.error.message}`) && /reject|denied/i.test(state.error.message)
+  return state.error.type === "permission.rejected" ||
+    (state.error.type === "permission" && /reject|denied/i.test(state.error.message))
 }
 
 export function toToolCallStatus(tool: OpenCodeToolLike, approval = false): ToolCallStatus {
@@ -300,6 +301,9 @@ export function fromOpenCodeTool(
     status,
     input: entries.length ? Object.fromEntries(entries.map(([key, value]) => [key, toValue(value)])) : undefined,
     output: status === "denied" ? undefined : toOutput(kind, contentText(state)),
+    // The preview is bounded. Copy must keep the original code, whitespace and long results.
+    copyInput: () => JSON.stringify(input, null, 2),
+    copyOutput: () => contentText(state) ?? "",
     message,
     durationMs,
   }

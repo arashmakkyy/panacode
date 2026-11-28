@@ -36,7 +36,7 @@ const surfaces = [
           time: { created: 1700000000000 - index - 1, updated: 1700000000000 - index - 1 },
         })),
       ])
-      await page.getByRole("banner").getByRole("button", { name: "Search sessions", exact: true }).click()
+      await page.getByRole("button", { name: "Search sessions", exact: true }).click()
       const dialog = page.getByRole("dialog")
       await dialog.getByRole("combobox").fill("Overflowing")
       await expect(dialog.getByRole("option")).toHaveCount(23)
@@ -51,13 +51,14 @@ const surfaces = [
     name: "a select",
     async open(page: Page) {
       const view = await openSettings(page, { name: "Menu scrollbars" })
-      await view.settings.locator('[data-action="settings-language"]').click()
+      await view.settings.getByRole("tab", { name: "Appearance", exact: true }).click()
+      await view.settings.locator('[data-action="settings-theme"]').click()
       const listbox = page.getByRole("listbox")
-      await expect(listbox.getByRole("option", { name: "English", exact: true })).toBeVisible()
+      await expect(listbox.getByRole("option", { name: "Panacode", exact: true })).toBeVisible()
 
       return {
         viewport: page.locator('[data-slot="select-v2-content"] [data-component="menu-scroll"] > [data-scrollable]'),
-        row: listbox.getByRole("option", { name: "English", exact: true }),
+        row: listbox.getByRole("option", { name: "Panacode", exact: true }),
       }
     },
   },

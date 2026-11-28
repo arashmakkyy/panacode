@@ -1966,6 +1966,7 @@ export type PermissionReplyInput = {
   readonly sessionID: Session.ID
   readonly requestID: Permission.ID
   readonly decision: Permission.Reply
+  readonly scope?: "request" | undefined
   readonly message?: string | undefined
 }
 export type PermissionReplyOutput = void

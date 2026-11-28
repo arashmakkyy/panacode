@@ -9,7 +9,7 @@ Firouzeh is Persian turquoise, the stone of protection and victory. Here it beco
 - `wordmark.svg`: Space Grotesk, outlined to paths, so no font is needed.
 - `lockup-dark-bg.svg`, `lockup-light-bg.svg`
 - `icon.svg`: Windows 11 tile master. `renders/icon-1024.png`
-- `tokens.css`: Arc theme contract (dark default, `[data-theme="light"]`). `tokens.json` holds the same values.
+- The current workbench palette lives in `brand.ts`. The shared controls in `controls.css` read the active workbench tokens. The turquoise values in the artwork below describe the Firouzeh mark.
 - `fonts.css` + `fonts/`: OFL fonts (Space Grotesk, Inter, JetBrains Mono, Noto Sans Arabic)
 - `splash.html`, `app-mock.html` (1440x900), `board.html`
 - `renders/`: mark-16/32/64/512, icon-1024, splash, app-mock (1x and 2x)
@@ -37,5 +37,5 @@ Display: Space Grotesk (wordmark, hero and splash only). UI: Inter. Code: JetBra
 - **Linear for data.** Progress and meters move linearly. Space (layout, drawers) eases. You never mix the two.
 
 ## Colour rule (Arc language)
-Neutrals carry the UI. The accent appears only on the mark, the send action, live state (caret, active session, progress, focus) and links.
-Risk and status use semantic tones (success, warning, danger). The primary approval CTA stays solid high-contrast neutral.
+Both schemes use the PanaAI dashboard’s Buy credit yellow (`#EFC15A`) with dark ink (`#241A07`) for primary actions. Hover and press use `#F6CD6C`. The composer has a neutral one-pixel edge and a short focus indicator inside the field.
+Risk and status use semantic tones (success, warning, danger).
