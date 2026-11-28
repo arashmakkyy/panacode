@@ -191,6 +191,10 @@ describe("model dialog flyout", () => {
     expect(placeFlyout(row, { left: 50, right: 500, top: 0, bottom: 600 }, false)).toEqual({ left: 280, top: 48 })
     expect(placeFlyout(row, { left: 0, right: 800, top: 0, bottom: 600 }, true)).toEqual({ left: 406, top: 48 })
     expect(correctFlyoutPosition({ left: 406, top: 48 }, { x: 456, y: 58 })).toEqual({ left: 356, top: 38 })
+
+    const bounds = { top: 8, bottom: 592, height: 310 }
+    expect(correctFlyoutPosition({ left: 60, top: 460 }, { x: 60, y: 460 }, bounds)).toEqual({ left: 60, top: 282 })
+    expect(correctFlyoutPosition({ left: 60, top: 460 }, { x: 70, y: 480 }, bounds)).toEqual({ left: 50, top: 262 })
   })
 
   test("the safe triangle spans from the apex to the flyout's near corners", () => {

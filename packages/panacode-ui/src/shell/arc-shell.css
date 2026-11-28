@@ -368,12 +368,24 @@
 /* ---------- model picker: Arc composer model menu (compact floating list, sized to its rows) ---------- */
 [data-brand="panacode"] [data-component="dialog-v2"]:has(.model-dialog) [data-slot="dialog-container"] {
   width: min(calc(100vw - 24px), 380px);
+  overflow: visible;
   height: auto;
   max-height: min(calc(100vh - 96px), 440px);
   border: 1px solid var(--border);
   border-radius: var(--radius-panel);
   background: var(--surface-raised);
   box-shadow: var(--shadow-floating);
+}
+
+/* The fixed model card is a sibling of the list. Only the rows should be clipped to the rounded panel. */
+[data-brand="panacode"] [data-component="dialog-v2"] [data-slot="dialog-container"] [data-slot="dialog-content"].model-dialog {
+  overflow: visible;
+  border-radius: inherit;
+}
+
+[data-brand="panacode"] .model-dialog [data-slot="dialog-body"] {
+  overflow: clip;
+  border-radius: inherit;
 }
 
 [data-brand="panacode"] .model-dialog [data-slot="dialog-body"],

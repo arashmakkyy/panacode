@@ -362,10 +362,16 @@ export function placeFlyout(row: FlyoutRect, layer: FlyoutRect | undefined, rtl:
  * A fixed element is placed against the viewport unless an ancestor contains it, as a component preview that holds
  * its dialogs does. Corrects by where it landed.
  */
-export function correctFlyoutPosition(target: FlyoutPosition, placed: FlyoutPoint): FlyoutPosition {
-  if (placed.x === target.left && placed.y === target.top) return target
+export function correctFlyoutPosition(
+  target: FlyoutPosition,
+  placed: FlyoutPoint,
+  bounds?: { top: number; bottom: number; height: number },
+): FlyoutPosition {
+  const top = bounds ? Math.max(bounds.top, Math.min(target.top, bounds.bottom - bounds.height)) : target.top
 
-  return { left: target.left * 2 - placed.x, top: target.top * 2 - placed.y }
+  if (placed.x === target.left && placed.y === top) return target
+
+  return { left: target.left * 2 - placed.x, top: target.top + top - placed.y }
 }
 
 /**

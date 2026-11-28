@@ -754,7 +754,13 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
     const placed = position ? flyoutRect() : undefined
 
     if (!position || !placed) return
-    const corrected = correctFlyoutPosition(position, { x: placed.left, y: placed.top })
+    const layer = scroller?.closest("[data-dialog-layer]")?.getBoundingClientRect()
+
+    const corrected = correctFlyoutPosition(position, { x: placed.left, y: placed.top }, {
+      top: (layer?.top ?? 0) + 8,
+      bottom: (layer?.bottom ?? window.innerHeight) - 8,
+      height: placed.height,
+    })
 
     if (corrected !== position) dispatch({ type: "placed", attempt: effect.attempt, position: corrected })
   }
