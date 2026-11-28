@@ -176,7 +176,11 @@ export function selectProviderFormView(state: ProviderActiveForm) {
   const step = state.step
   const field = step.field
 
+  const visible = state.fields.filter((item) => (item.type === "external" || !item.hidden) && formFieldActive(item, state.answer))
+
   const base = {
+    position: visible.indexOf(field) + 1,
+    total: visible.length,
     // Changes with every step, so each step mounts fresh inputs; never empty, so step 0 is not falsy.
     key: `${step.index}:${field.key}`,
     title: field.title ?? (field.type === "external" ? field.url : field.key),

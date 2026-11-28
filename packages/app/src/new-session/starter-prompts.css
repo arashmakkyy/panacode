@@ -1,0 +1,118 @@
+.starter-prompts {
+  container-type: inline-size;
+  min-width: 0;
+  margin-block: 6px 16px;
+}
+.starter-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.starter-toolbar [role="tablist"] {
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+}
+.starter-toolbar [role="tab"] {
+  min-height: 30px;
+  padding-inline: 10px;
+  flex-shrink: 0;
+}
+.starter-shuffle {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.starter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.starter-card {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 10px;
+  text-align: start;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+}
+.starter-card-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.starter-card strong {
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--foreground);
+}
+.starter-card-copy > span {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.starter-card-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+}
+@media (hover: hover) {
+  .starter-card:hover,
+  .starter-shuffle:hover {
+    background: var(--surface-muted);
+  }
+  .starter-card:hover {
+    border-color: var(--border-strong);
+  }
+}
+.starter-card:focus-visible,
+.starter-shuffle:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+@container (max-width: 560px) {
+  .starter-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .starter-card {
+    animation: starter-enter 160ms var(--ease-standard) backwards;
+  }
+  .starter-card:nth-child(2) {
+    animation-delay: 35ms;
+  }
+  .starter-card:nth-child(3) {
+    animation-delay: 70ms;
+  }
+  .starter-card:nth-child(4) {
+    animation-delay: 105ms;
+  }
+  @keyframes starter-enter {
+    from {
+      opacity: 0;
+      transform: translateY(2px);
+    }
+  }
+}

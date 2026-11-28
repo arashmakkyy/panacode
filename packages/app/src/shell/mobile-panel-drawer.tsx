@@ -1,5 +1,4 @@
-import { createEffect, on, Show, type JSX, type ParentProps } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createEffect, createSignal, For, on, Show, type JSX, type ParentProps } from "solid-js"
 import { Button } from "@opencode/ui/button"
 import { DrawerContext } from "@opencode/plugin/gui/host"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -21,23 +20,29 @@ export function MobilePanelDrawer(
   }>,
 ) {
   const language = useLanguage()
-  const [store, setStore] = createStore<{ view?: DrawerView }>({})
+  const [views, setViews] = createSignal<DrawerView[]>([])
+  const current = () => views().at(-1)
   createEffect(
     on(
       () => props.open,
       (open) => {
-        if (open) setStore("view", undefined)
+        if (open) setViews([])
       },
     ),
   )
 
+  let panel: HTMLDivElement | undefined
+
   const navigation = {
     close: () => props.onOpenChange(false),
-    open: (view: DrawerView) => setStore("view", view),
+    open: (view: DrawerView) => {
+      setViews((previous) => [...previous, view])
+      queueMicrotask(() => panel?.querySelector<HTMLButtonElement>('[data-panel-current="true"] [data-action="drawer-back"]')?.focus())
+    },
     back: () => {
-      const trigger = store.view?.trigger
-      setStore("view", undefined)
-      trigger?.focus()
+      const trigger = current()?.trigger
+      setViews((previous) => previous.slice(0, -1))
+      queueMicrotask(() => { if (trigger?.isConnected) trigger.focus() })
     },
   }
 
@@ -54,13 +59,19 @@ export function MobilePanelDrawer(
         closeOnOutsideFocus={false}
       >
         <MobileDrawerContent>
-          <div data-slot="mobile-panel" data-corvu-no-drag>
+          <div ref={panel} data-slot="mobile-panel" data-depth={views().length} data-corvu-no-drag
+            onKeyDown={(event) => {
+              if (event.defaultPrevented || event.key !== "Escape" || !current()) return
+              event.preventDefault()
+              event.stopPropagation()
+              navigation.back()
+            }}>
             <Show
               when={!props.hideHeader}
-              fallback={<MobileDrawerLabel class="sr-only">{store.view?.title ?? props.title}</MobileDrawerLabel>}
+              fallback={<MobileDrawerLabel class="sr-only">{current()?.title ?? props.title}</MobileDrawerLabel>}
             >
               <div data-slot="mobile-panel-header">
-                <MobileDrawerLabel>{store.view?.title ?? props.title}</MobileDrawerLabel>
+                <MobileDrawerLabel>{current()?.title ?? props.title}</MobileDrawerLabel>
                 <MobileDrawerClose
                   as={Button}
                   variant="ghost"
@@ -72,23 +83,16 @@ export function MobilePanelDrawer(
               </div>
             </Show>
             <div data-slot="mobile-panel-content">
-              <div hidden={!!store.view}>{props.children}</div>
-              <Show when={store.view}>
-                {(view) => (
-                  <>
-                    <Button
-                      variant="ghost"
-                      icon="arrow-left"
-                      class="mb-2 !justify-start"
-                      aria-label={language.t("common.goBack")}
-                      onClick={navigation.back}
-                    >
-                      {props.title}
-                    </Button>
-                    {view().content}
-                  </>
-                )}
-              </Show>
+              <div hidden={!!current()}>{props.children}</div>
+              <For each={views()}>{(view, i) => (
+                <div hidden={i() !== views().length - 1} data-panel-current={i() === views().length - 1}>
+                  <Button variant="ghost" icon="arrow-left" data-action="drawer-back"
+                    class="mb-2 !justify-start" aria-label={language.t("common.goBack")} onClick={navigation.back}>
+                    {views()[i() - 1]?.title ?? props.title}
+                  </Button>
+                  {view.content}
+                </div>
+              )}</For>
             </div>
           </div>
         </MobileDrawerContent>

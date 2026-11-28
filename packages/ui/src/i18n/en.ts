@@ -370,6 +370,8 @@ const source = {
   "ui.sources.count.other": "{{count}} sources",
   "ui.sources.none": "No sources",
   "ui.sources.title": "Sources",
+  "ui.sources.more": "+{{count}} more",
+  "ui.sources.fewer": "Show fewer",
   "ui.sources.searched": "Searched web",
   "ui.sources.searchFailed": "Search failed",
   "ui.sources.noResults": "No results",

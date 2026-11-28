@@ -175,6 +175,11 @@ export function PanacodeMcpPanel(props: { directory?: string }) {
     nameTaken: t("panacode.mcp.nameTaken"),
     invalidUrl: t("panacode.mcp.invalidUrl"),
     invalidCommand: t("panacode.mcp.invalidCommand"),
+    filterTitle: t("panacode.mcp.filters"),
+    filters: { all: t("panacode.mcp.all"), connected: t("panacode.mcp.status.connected"), other: t("panacode.mcp.other") },
+    noMatches: t("panacode.mcp.noMatches"),
+    removedCount: (count) => t("panacode.mcp.removedCount", { count }),
+    restored: (count) => language.plural("panacode.mcp.restored", count, { count }),
     invalidName: t("panacode.mcp.invalidName"),
     sheetNote: t("panacode.mcp.sheetNote"),
   })

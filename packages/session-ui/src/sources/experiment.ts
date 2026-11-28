@@ -10,7 +10,7 @@ const enabled = motionTuning.toggle("sources.enabled", {
   description: "Pages a turn searched and read",
   target: '[data-component="sources-chip"]',
   experiment: true,
-  value: false,
+  value: true,
 })
 
 // A site's own icon is fetched from that site, which tells it the page was looked at; letters stay on this device.

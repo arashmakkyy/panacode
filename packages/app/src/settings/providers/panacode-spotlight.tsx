@@ -48,7 +48,7 @@ export function PanaAISpotlight(props: {
       statusLabel={language.t(
         status() === "disconnected" ? "panacode.providers.panaai.notConnected" : "panacode.providers.panaai.connected",
       )}
-      detail={status() === "environment" ? "PANAAI_API_KEY" : props.sourceLabel}
+      detail={status() === "environment" ? undefined : props.sourceLabel}
       primary={
         status() === "disconnected"
           ? { label: language.t("panacode.providers.panaai.connect"), onClick: props.onConnect }
@@ -56,14 +56,6 @@ export function PanaAISpotlight(props: {
               label: language.t("panacode.providers.panaai.topUp"),
               onClick: () => platform.openExternal(`${PANAAI_DASHBOARD_URL}/purchase`),
             }
-      }
-      secondary={
-        status() === "disconnected"
-          ? {
-              label: language.t("panacode.providers.panaai.getKey"),
-              onClick: () => platform.openExternal(PANAAI_DASHBOARD_URL),
-            }
-          : undefined
       }
       footer={
         <Show when={props.connected || failed() || (props.catalog && props.catalog !== "idle") || props.models.length}>

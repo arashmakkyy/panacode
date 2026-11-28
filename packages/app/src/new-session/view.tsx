@@ -19,7 +19,6 @@ import { Composer } from "@/composer/composer"
 import { ComposerDropzone } from "@/composer/dropzone"
 import type { ComposerModel } from "@/composer/model"
 import {
-  PromptProjectAddButton,
   type PromptProject,
   type PromptProjectController,
 } from "@/new-session/project/selector"
@@ -43,6 +42,7 @@ import { NewSessionBranch } from "./workspace/selector"
 import { NewSessionBrickBreaker } from "./brick-breaker"
 import { NewSessionPinBoard } from "./pin-board"
 import { PanacodeNewSessionHero, PanacodeNewSessionSuggestions } from "./panacode-hero"
+import { ProjectWelcome } from "./project/welcome"
 import {
   createWordmarkState,
   selectBrickBreaker,
@@ -142,7 +142,7 @@ export function NewSessionView(props: {
                 </Show>
               </div>
               <Show when={props.project.empty()}>
-                <PromptProjectAddButton controller={props.project} />
+                <ProjectWelcome controller={props.project} />
               </Show>
               <Show when={!props.project.empty()}>
                 <PanacodeNewSessionSuggestions onPick={props.composer.appendSuggestion} />

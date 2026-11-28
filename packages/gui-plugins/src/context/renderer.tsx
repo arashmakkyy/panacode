@@ -1,10 +1,12 @@
 import { lazy, onCleanup, Show, Suspense } from "solid-js"
-import { Slot, usePanel, type Plugin } from "@opencode/plugin/gui"
+import { Style, Slot, usePanel, type Plugin } from "@opencode/plugin/gui"
 import { BuiltinPanel, onIdle, type BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import type definition from "./index"
+import windowStyle from "./window.css?inline"
 import { SessionContextUsage } from "./indicator"
 
 const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  ctx.add(Style, windowStyle)
   const SessionContextTab = lazy(() => import("./tab"))
   // Compile the tab while the app idles, so the first open renders at once.
   onCleanup(onIdle(() => void SessionContextTab.preload()))

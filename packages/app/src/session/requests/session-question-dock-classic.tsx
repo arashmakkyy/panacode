@@ -494,6 +494,7 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
               </div>
               <div data-slot="question-header-actions">
                 <Show when={total() > 1}>
+                  <span class="question-step-count" role="status">{language.t("panacode.form.step", { current: form.tab() + 1, total: total() })}</span>
                   <div data-slot="question-progress">
                     <For each={questions()}>
                       {(_, i) => (

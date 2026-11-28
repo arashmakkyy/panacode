@@ -3,7 +3,9 @@ import { writeClipboard } from "@opencode/ui/clipboard"
 import { createEffect, createMemo, createSignal, createUniqueId, For, Index, on, onCleanup, Show, untrack, type JSX } from "solid-js"
 import { Collapse } from "../../motion/presence"
 import { prefersReducedMotion } from "../../motion/reduced"
+import { JsonTree } from "./json-tree"
 import "./tool-call.css"
+import "./json-tree.css"
 
 /**
  * Solid port of the Arc "Tool call" block (recreate-arc-tool-call-component): one inline call row
@@ -60,6 +62,8 @@ export type ToolCallLabels = {
   deny: string
   retry: string
   notRun: string
+  filterJson: string
+  noJsonResults: string
   showLess: string
   showMore: (count: number, unit: "row" | "line") => string
   empty: Record<ToolCallStatus, string>
@@ -82,6 +86,8 @@ export const defaultToolCallLabels: ToolCallLabels = {
   deny: "Deny",
   retry: "Retry",
   notRun: "Not run",
+  filterJson: "Filter JSON",
+  noJsonResults: "No matching keys or values",
   showLess: "Show less",
   showMore: (count, unit) => `Show ${count} more ${count === 1 ? unit : `${unit}s`}`,
   empty: {
@@ -447,34 +453,7 @@ function TableView(props: { columns: string[]; rows: ToolCallCell[][]; labels: T
   )
 }
 
-const jsonToken = /("(?:\\.|[^"\\])*")(\s*:)?|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|\b(true|false)\b|\b(null)\b/g
-
-function tintJson(line: string): JSX.Element[] {
-  const parts: JSX.Element[] = []
-  let last = 0
-  jsonToken.lastIndex = 0
-  let match: RegExpExecArray | null
-  while ((match = jsonToken.exec(line))) {
-    if (match.index > last) parts.push(line.slice(last, match.index))
-    if (match[1] !== undefined) {
-      parts.push(<span class={match[2] ? "pc-tc-jsonKey" : "pc-tc-jsonString"}>{match[1]}</span>)
-      if (match[2]) parts.push(match[2])
-    } else if (match[3] !== undefined) parts.push(<span class="pc-tc-jsonNumber">{match[3]}</span>)
-    else if (match[4] !== undefined) parts.push(<span class="pc-tc-jsonBoolean">{match[4]}</span>)
-    else parts.push(<span class="pc-tc-jsonNull">{match[5]}</span>)
-    last = jsonToken.lastIndex
-  }
-  if (last < line.length) parts.push(line.slice(last))
-  return parts
-}
-
-function JsonView(props: { value: ToolCallValue; labels: ToolCallLabels }) {
-  const lines = createMemo(() => JSON.stringify(props.value, null, 2).split("\n"))
-  return <LinesView lines={lines()} tint labels={props.labels} />
-}
-
-/** Text output folds like JSON (Panacode: shell and tool text can be long). */
-function LinesView(props: { lines: string[]; tint?: boolean; labels: ToolCallLabels }) {
+function LinesView(props: { lines: string[]; labels: ToolCallLabels }) {
   const fold = useFold(() => props.lines.length, FOLD_LINES)
   return (
     <>
@@ -487,7 +466,7 @@ function LinesView(props: { lines: string[]; tint?: boolean; labels: ToolCallLab
             <For each={props.lines}>
               {(line, i) => (
                 <span class="pc-tc-line" aria-hidden={i() >= fold.shown() || undefined} inert={i() >= fold.shown() || undefined}>
-                  {props.tint ? tintJson(line) : line}
+                  {line}
                 </span>
               )}
             </For>
@@ -509,7 +488,7 @@ function OutputView(props: { output: ToolCallOutput; labels: ToolCallLabels }) {
     case "table":
       return <TableView columns={output.columns} rows={output.rows} labels={props.labels} />
     case "json":
-      return <JsonView value={output.value} labels={props.labels} />
+      return <JsonTree value={output.value} labels={props.labels} />
     case "text":
       return output.text.includes("\n") ? (
         <LinesView lines={output.text.replace(/\n$/, "").split("\n")} labels={props.labels} />
@@ -698,7 +677,11 @@ export function ToolCall(props: ToolCallProps) {
                         {([key, value]) => (
                           <div class="pc-tc-kvRow">
                             <dt>{key}</dt>
-                            <dd data-kind={valueKind(value)}>{valueText(value)}</dd>
+                            <dd data-kind={valueKind(value)}>
+                              <Show when={value !== null && typeof value === "object"} fallback={valueText(value)}>
+                                <JsonTree value={value} labels={labels()} />
+                              </Show>
+                            </dd>
                           </div>
                         )}
                       </For>

@@ -417,7 +417,7 @@ export function createHomeSessionsController(home: HomeController) {
     return conn && ctx ? { conn, ctx } : undefined
   }
 
-  function DeleteDialog(props: { server: ServerConnection.Key; session: SessionInfo }) {
+  function DeleteDialog(props: { server: ServerConnection.Key; session: SessionInfo; anchor?: DOMRect }) {
     const name = () => sessionTitle(props.session.title) ?? language.t("command.session.new")
     const [deleteState, setDeleteState] = createSignal(createSessionDeleteState(props.session.id))
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -497,23 +497,44 @@ export function createHomeSessionsController(home: HomeController) {
     const busy = () => selectSessionDeleteView(deleteState()).busy
 
     return (
-      <Dialog fit>
+      <Dialog fit class="session-delete-card" preventBackdropDismiss={busy()}>
+        <div aria-hidden="true" ref={(mark) => {
+          const box = mark.closest<HTMLElement>('[data-slot="dialog-container"]')
+          const anchor = props.anchor
+
+          if (!box || !anchor || window.innerWidth < 680 || anchor.width < 1 || anchor.width > window.innerWidth * .75) return
+
+          const position = () => {
+            const bounds = box.getBoundingClientRect()
+            const left = Math.max(12, Math.min(anchor.right - bounds.width, window.innerWidth - bounds.width - 12))
+            const top = anchor.bottom + bounds.height + 16 <= window.innerHeight ? anchor.bottom + 6 : Math.max(12, anchor.top - bounds.height - 6)
+            box.style.setProperty("--confirm-left", left + "px")
+            box.style.setProperty("--confirm-top", top + "px")
+            box.dataset.anchored = "true"
+          }
+
+          queueMicrotask(position)
+          window.addEventListener("resize", position)
+          onCleanup(() => window.removeEventListener("resize", position))
+        }} />
         <DialogHeader hideClose>
           <DialogTitleGroup
             title={language.t("session.delete.title")}
             description={language.t("session.delete.confirm", { name: name() })}
           />
         </DialogHeader>
+        <p class="session-delete-consequence">{language.t("panacode.session.deleteConsequence")}</p>
         <DialogFooter>
           <Button variant="ghost" autofocus disabled={busy()} onClick={() => dispatch({ type: "cancel.requested" })}>
             {language.t("common.cancel")}
           </Button>
           <Button
             variant="danger"
+            aria-busy={busy()}
             disabled={busy()}
             onClick={() => dispatch({ type: "confirm.requested", target: deleteTarget() })}
           >
-            {language.t("session.delete.button")}
+            {language.t(busy() ? "panacode.session.deleting" : "session.delete.button")}
           </Button>
         </DialogFooter>
       </Dialog>
@@ -606,8 +627,11 @@ export function createHomeSessionsController(home: HomeController) {
         exporter.export({ server, sessionID: session.id }),
       exporting: (server: ServerConnection.Key, session: SessionInfo) =>
         exporter.exporting({ server, sessionID: session.id }),
-      showDelete: (server: ServerConnection.Key, session: SessionInfo) =>
-        dialog.show(() => <DeleteDialog server={server} session={session} />),
+      showDelete: (server: ServerConnection.Key, session: SessionInfo) => {
+        const anchor = document.activeElement instanceof HTMLElement ? document.activeElement.getBoundingClientRect() : undefined
+
+        return dialog.show(() => <DeleteDialog server={server} session={session} anchor={anchor} />)
+      },
     },
     tab: {
       isOpen: (record: HomeSessionRecord) => {

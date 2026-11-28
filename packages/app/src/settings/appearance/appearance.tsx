@@ -1,5 +1,6 @@
 import { Component, Show } from "solid-js"
 import { Select } from "@opencode/ui/select"
+import { ZoomControl } from "./zoom-control"
 import { ThemeSwitch } from "@panacode/ui"
 import { TextInput } from "@opencode/ui/text-input"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -130,16 +131,7 @@ export const SettingsAppearance: Component = () => {
                 title={language.t("settings.appearance.row.zoom.title")}
                 description={language.t("settings.appearance.row.zoom.description")}
               >
-                <Select
-                  data-action="settings-zoom"
-                  options={appearance.zoom.options}
-                  current={appearance.zoom.current()}
-                  placement="bottom-end"
-                  gutter={6}
-                  value={(level) => String(level)}
-                  label={appearance.zoom.label}
-                  onSelect={(level) => level && appearance.zoom.select(level)}
-                />
+                <ZoomControl zoom={appearance.zoom} />
               </SettingsRow>
             </Show>
 

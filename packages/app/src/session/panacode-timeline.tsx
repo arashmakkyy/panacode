@@ -55,6 +55,8 @@ function useToolCopy() {
     notRun: t("panacode.tool.notRun"),
     showLess: t("panacode.tool.showLess"),
     showMore: (count, unit) => t(`panacode.tool.showMore.${unit}`, { count }),
+    filterJson: t("panacode.tool.filterJson"),
+    noJsonResults: t("panacode.tool.noJsonResults"),
     empty: {
       running: t("panacode.tool.empty.running"),
       success: t("panacode.tool.empty.success"),

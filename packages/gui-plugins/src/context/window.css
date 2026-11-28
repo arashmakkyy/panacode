@@ -1,0 +1,115 @@
+.context-window {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--foreground);
+  min-width: 0;
+}
+.context-window header {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px;
+}
+.context-window header h3 {
+  font-size: 14px;
+  font-weight: 600;
+}
+.context-window header span {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.context-window-count {
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+}
+.context-cells {
+  display: grid;
+  grid-template-columns: repeat(20, minmax(0, 1fr));
+  gap: 3px;
+}
+.context-cells i {
+  height: clamp(5px, 1.8cqw, 12px);
+  border-radius: 2px;
+  background: var(--context-tone, var(--surface-muted));
+}
+.context-window [data-tone="0"] {
+  --context-tone: var(--brand-highlight, #f5c347);
+}
+.context-window [data-tone="1"] {
+  --context-tone: #6ea2ef;
+}
+.context-window [data-tone="2"] {
+  --context-tone: #a88ad5;
+}
+.context-window [data-tone="3"] {
+  --context-tone: #58af9a;
+}
+.context-window [data-tone="4"] {
+  --context-tone: #de906c;
+}
+.context-window [data-dim="true"] {
+  opacity: 0.3;
+}
+.context-shares {
+  display: flex;
+  width: 100%;
+  gap: 1px;
+  height: 12px;
+  border-radius: 4px;
+  background: var(--surface-muted);
+  overflow: hidden;
+}
+.context-shares span {
+  flex-basis: 0;
+  background: var(--context-tone);
+}
+.context-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(135px, 100%), 1fr));
+  gap: 3px 10px;
+}
+.context-legend button {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  padding: 3px 4px;
+  min-height: 28px;
+  font-size: 11px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.context-legend button:hover {
+  background: var(--surface-muted);
+}
+.context-legend button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+}
+.context-legend button[aria-pressed="false"] i {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--text-muted);
+}
+.context-legend i {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 2px;
+  background: var(--context-tone);
+}
+.context-legend b {
+  margin-inline-start: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 550;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .context-window [data-tone] {
+    transition:
+      opacity 140ms ease,
+      flex-grow 180ms ease;
+  }
+}

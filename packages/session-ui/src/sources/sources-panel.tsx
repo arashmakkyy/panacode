@@ -25,6 +25,8 @@ import { SiteIcon } from "./site-icon"
 import type { SourceResult, SourceStep, TurnSources } from "./sources"
 import "./sources.css"
 
+export { SourceCards } from "./cards"
+
 /** A turn's searches and opened pages in the order they ran. `onOpen` opens a result's or page's URL. */
 export function SourcesPanel(props: { sources: TurnSources; icons: SiteIconMode; onOpen: (url: string) => void }) {
   return (

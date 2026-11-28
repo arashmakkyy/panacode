@@ -28,6 +28,7 @@ export function HomeSessions(props: {
           searchOpen={props.search.query.open()}
           searchLoading={props.search.result.loading()}
           searchResults={props.search.result.list()}
+          facets={props.search.facets}
           searchActive={props.search.result.active()}
           searchNoResultsLabel={props.search.result.noResultsLabel()}
           titleOpacity={props.scroll.header.titleOpacity}

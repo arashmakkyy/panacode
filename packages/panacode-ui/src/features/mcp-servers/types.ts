@@ -43,6 +43,11 @@ export interface McpServersLabels {
   retry: string
   remove: string
   removed: (name: string) => string
+  filterTitle: string
+  filters: Record<"all" | "connected" | "other", string>
+  noMatches: string
+  removedCount: (count: number) => string
+  restored: (count: number) => string
   undo: string
   toggle: (name: string) => string
   details: (name: string) => string
@@ -78,6 +83,11 @@ export const defaultMcpServersLabels: McpServersLabels = {
   retry: "Retry",
   remove: "Remove",
   removed: (name) => `Removed ${name}`,
+  filterTitle: "Filter connections",
+  filters: { all: "All", connected: "Connected", other: "Other" },
+  noMatches: "No matching connections",
+  removedCount: (count) => `Removed ${count} servers`,
+  restored: (count) => `Restored ${count} ${count === 1 ? "server" : "servers"}`,
   undo: "Undo",
   toggle: (name) => `Turn ${name} on or off`,
   details: (name) => `${name} details`,

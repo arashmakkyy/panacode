@@ -1,0 +1,58 @@
+.pc-json-tree {
+  display: grid;
+  gap: 4px;
+  color: var(--foreground);
+  font-size: 12px;
+}
+.pc-json-tree input {
+  min-width: 0;
+  width: 100%;
+  padding: 6px 10px;
+  font: inherit;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+}
+.pc-json-viewport {
+  max-height: 340px;
+  overflow: auto;
+  padding: 4px 8px;
+  scrollbar-width: thin;
+}
+.pc-json-leaf,
+.pc-json-node summary {
+  min-height: 21px;
+  line-height: 21px;
+  overflow-wrap: anywhere;
+}
+.pc-json-node summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.pc-json-node small {
+  color: var(--text-muted);
+  font-size: inherit;
+}
+.pc-json-children {
+  margin-inline-start: 6px;
+  padding-inline-start: 12px;
+  border-inline-start: 1px solid var(--border-subtle);
+}
+.pc-json-leaf b {
+  font-weight: 400;
+  white-space: pre-wrap;
+}
+.pc-json-leaf [data-kind="string"] {
+  color: var(--v2-state-fg-success, var(--foreground));
+}
+.pc-json-leaf :is([data-kind="boolean"], [data-kind="number"]) {
+  color: var(--accent);
+}
+.pc-json-more {
+  cursor: pointer;
+  color: var(--text-muted);
+  padding-block: 4px;
+}
+.pc-json-tree :is(button, input, summary):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}

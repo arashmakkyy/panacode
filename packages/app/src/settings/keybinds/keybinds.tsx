@@ -1,3 +1,4 @@
+import { ConfirmReset } from "./confirm-reset"
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -505,9 +506,7 @@ function SettingsKeybindsView(props: {
             <h2 class="settings-tab-title">{language.t("settings.shortcuts.title")}</h2>
             <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.shortcuts.description")}</span>
           </div>
-          <Button variant="ghost" onClick={props.onReset} disabled={!props.hasOverrides}>
-            {language.t("settings.shortcuts.reset.button")}
-          </Button>
+          <ConfirmReset disabled={!props.hasOverrides} onReset={props.onReset} />
         </div>
         <SettingsSearchField
           value={store.filter}

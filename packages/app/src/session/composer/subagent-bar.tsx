@@ -1,9 +1,10 @@
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { Keybind } from "@opencode/ui/keybind"
+import { modelDisplayName, PANAAI_PROVIDER_ID } from "@/providers/catalog/labels"
 import { Slash } from "@opencode/ui/slash"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
-import { createEffect, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
+import { createEffect, createSignal, createUniqueId, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { formatKeybind } from "@/shell/commands/command"
 import { formatElapsed } from "./activity-chips"
@@ -16,12 +17,15 @@ export function SubagentBar(props: {
   agent?: string
   model?: { provider?: string; name: string; variant?: string }
   status?: SubagentStatus
+  steps?: () => { name: string; status: string }[]
   started: number
   ended?: number
   onBack: () => void
 }) {
   const language = useLanguage()
   const [now, setNow] = createSignal(Date.now())
+  const [expanded, setExpanded] = createSignal(false)
+  const details = createUniqueId()
 
   // Only what is known shows, with one separator between neighbours.
   const parts = () => [
@@ -40,8 +44,18 @@ export function SubagentBar(props: {
 
   return (
     // The timeline scrolls on underneath, so the line keeps its surface and fades the text passing into it.
+    <div class="agent-status-block">
+      <Show when={expanded() && props.steps}>
+        {(steps) => <div id={details} class="agent-status-steps">
+          <strong>{language.t("panacode.agent.activity")}</strong>
+          <ol><For each={steps()()} fallback={<li>{language.t("panacode.agent.empty")}</li>}>
+            {(step) => <li><span>{step.name}</span><span>{step.status}</span></li>}
+          </For></ol>
+        </div>}
+      </Show>
     <div
       data-component="subagent-bar"
+      data-agent-status={props.status}
       class="relative flex h-8 w-full min-w-0 items-center gap-2 bg-v2-background-bg-base ps-3 pe-1.5 text-[12px] font-[440] leading-4 tracking-[-0.04px] whitespace-nowrap tabular-nums text-v2-text-text-faint before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-4 before:bg-[linear-gradient(to_top,var(--v2-background-bg-base),transparent)]"
     >
       <Show when={props.status}>
@@ -71,7 +85,10 @@ export function SubagentBar(props: {
               </Show>
               <Switch>
                 <Match when={part === "status" && props.status}>
-                  {(status) => <span class="shrink-0">{language.t(`session.child.status.${status()}`)}</span>}
+                  {(status) => <Show when={props.steps} fallback={<span class="subagent-status-label" role="status">{language.t(`session.child.status.${status()}`)}</span>}>
+                    <button type="button" class="subagent-status-label" aria-expanded={expanded()} aria-controls={expanded() ? details : undefined}
+                      onClick={() => setExpanded((value) => !value)}>{language.t(`session.child.status.${status()}`)} <Icon name="chevron-down" size="small" /></button>
+                  </Show>}
                 </Match>
                 <Match when={part === "elapsed"}>
                   <span class="shrink-0">{formatElapsed((props.ended ?? now()) - props.started, language.t)}</span>
@@ -82,12 +99,12 @@ export function SubagentBar(props: {
                 <Match when={part === "model" && props.model}>
                   {(model) => (
                     <span data-slot="subagent-model" class="flex min-w-0">
-                      <Show when={model().provider}>
+                      <Show when={model().provider && model().provider?.toLowerCase() !== PANAAI_PROVIDER_ID}>
                         <span class="shrink-0">{model().provider}</span>
                         <Slash gap={4} />
                         <span class="sr-only">{" / "}</span>
                       </Show>
-                      <span class="truncate">{model().name}</span>
+                      <span class="truncate">{modelDisplayName(model().provider?.toLowerCase() ?? "", model().name)}</span>
                       {/* Like the message metadata: the variant follows the name, dimmer, with no separator. */}
                       <Show when={model().variant !== "default" && model().variant}>
                         {(variant) => (
@@ -111,6 +128,7 @@ export function SubagentBar(props: {
           <Keybind keys={[formatKeybind("esc", language.t)]} variant="neutral" />
         </span>
       </Button>
+    </div>
     </div>
   )
 }

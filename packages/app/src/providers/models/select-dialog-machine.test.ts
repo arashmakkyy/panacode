@@ -184,11 +184,11 @@ describe("model dialog flyout", () => {
     const row = { left: 100, right: 400, top: 50, bottom: 80 }
 
     expect(placeFlyout(row, { left: 0, right: 800, top: 0, bottom: 600 }, false)).toEqual({ left: 406, top: 48 })
-    expect(placeFlyout({ ...row, left: 200 }, { left: 0, right: 500, top: 0, bottom: 600 }, false)).toEqual({
+    expect(placeFlyout({ ...row, left: 260 }, { left: 0, right: 500, top: 0, bottom: 600 }, false)).toEqual({
       left: 34,
       top: 48,
     })
-    expect(placeFlyout(row, { left: 50, right: 500, top: 0, bottom: 600 }, false)).toEqual({ left: 340, top: 48 })
+    expect(placeFlyout(row, { left: 50, right: 500, top: 0, bottom: 600 }, false)).toEqual({ left: 280, top: 48 })
     expect(placeFlyout(row, { left: 0, right: 800, top: 0, bottom: 600 }, true)).toEqual({ left: 406, top: 48 })
     expect(correctFlyoutPosition({ left: 406, top: 48 }, { x: 456, y: 58 })).toEqual({ left: 356, top: 38 })
   })

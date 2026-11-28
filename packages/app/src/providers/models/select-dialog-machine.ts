@@ -9,7 +9,7 @@ export const FLYOUT_AIM_TIMEOUT_MS = 300
 /** How long after a flyout closes that the next row's flyout still opens at once. */
 export const FLYOUT_WARM_MS = 300
 
-export const FLYOUT_WIDTH_PX = 160
+export const FLYOUT_WIDTH_PX = 220
 
 export const FLYOUT_GAP_PX = 6
 

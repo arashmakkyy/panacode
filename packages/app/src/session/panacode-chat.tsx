@@ -1,5 +1,7 @@
+import { modelDisplayName } from "@/providers/catalog/labels"
 import { usePlatform } from "@/runtime/platform/platform"
 import { PacedMarkdown } from "@opencode/session-ui/message-part"
+import { SourceCards } from "@opencode/session-ui/sources/panel"
 import { createMemo, Show } from "solid-js"
 import {
   setTimelineOverrides,
@@ -138,7 +140,7 @@ function PanacodeReplyFooter(props: TextFooterProps) {
         }),
   )
 
-  const meta = () => [props.message.model.id, duration(), speed()].filter(Boolean).join(" · ")
+  const meta = () => [modelDisplayName(props.message.model.providerID, props.message.model.id), duration(), speed()].filter(Boolean).join(" · ")
 
   return (
     <div class="pc-ac-footer" data-panacode-last-turn={props.onRetry ? "" : undefined}>
@@ -148,6 +150,7 @@ function PanacodeReplyFooter(props: TextFooterProps) {
       <Show when={tools().length}>
         <ChatTools tools={tools()} labels={text.labels()} />
       </Show>
+      <Show when={props.sources}>{(sources) => <SourceCards sources={sources()} open={platform.openExternal} />}</Show>
       <ChatReplyActions
         nativeCopy={platform.writeClipboardText}
         copyText={props.text}

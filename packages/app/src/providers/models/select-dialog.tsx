@@ -627,6 +627,7 @@ function ChatgptPlanFooter() {
 }
 
 export function DialogSelectModel(props: { provider?: string; model?: ModelState }) {
+  const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 })
   const dialog = useDialog()
   const language = useLanguage()
 
@@ -967,6 +968,11 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
             <Badge class="shrink-0">{language.t("model.tag.latest")}</Badge>
           </Show>
         </span>
+        <Show when={item().limit.context > 0}>
+          <span data-slot="model-context-chip" aria-hidden="true" title={language.t("model.tooltip.context", { limit: item().limit.context.toLocaleString(language.intl()) })}>
+            {language.t("panacode.model.contextShort", { count: compact.format(item().limit.context) })}
+          </span>
+        </Show>
         <Show when={usage(item())}>{(value) => <ModelUsageTag usage={value()} />}</Show>
         <Show when={active()}>
           <span data-slot="model-dialog-variant">
@@ -1110,8 +1116,8 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
               {/* The full name, "Workspace / Provider", where a workspace badge tells the connections apart. */}
               <ModelDetails
                 model={item()}
+                comparison={controller.all().find((model) => modelKey(model) === controller.current())}
                 provider={labels.workspace(item().provider) ? item().provider.name : labels.name(item().provider)}
-                compact
                 standalone
                 usage={usage(item())}
               />

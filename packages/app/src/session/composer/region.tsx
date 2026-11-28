@@ -570,6 +570,10 @@ export function ActiveSessionComposerRegion(props: {
               agent={info().agent}
               model={subagentModel()}
               status={subagentStatus()}
+              steps={() => props.session.history.messages().flatMap((message) =>
+                message.type === "assistant" ? message.content.flatMap((part) => part.type === "tool"
+                  ? [{ name: part.name, status: part.state.status }]
+                  : []) : []).slice(-6)}
               started={info().time.created}
               ended={subagentStatus() === "running" ? undefined : (info().time.idle ?? info().time.updated)}
               onBack={props.model.region.openParent}

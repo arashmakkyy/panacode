@@ -15,6 +15,7 @@ import type { SessionMessageInfo } from "@opencode/client/promise"
 import { lastAssistantWithUsage } from "@opencode/client/solid"
 import { createKeyed, usePlugin, type MountedSession } from "@opencode/plugin/gui"
 import { catalogModel, syncCatalog } from "./catalog"
+import { ContextWindow } from "./window"
 import { fetchSessionExport, sessionExportFilename } from "./export"
 import { createSessionContextFormatter } from "./format"
 import {
@@ -405,6 +406,18 @@ export default function SessionContextTab(props: { session: MountedSession }) {
       }
     >
       <div data-slot="session-usage-content" class="px-4 pt-4 pb-6 flex flex-col gap-6 md:px-6 md:pb-10 md:gap-10">
+        <Show when={context()}>{(current) => (
+          <ContextWindow title={ctx.t("window.title")} model={current().modelLabel} total={current().total}
+            limit={current().limit} number={formatter().number} breakdown={ctx.t("window.breakdown")}
+            summary={current().limit ? ctx.t("window.used", { used: formatter().number(current().total), limit: formatter().number(current().limit) }) : ctx.t("window.tokens", { count: formatter().number(current().total) })}
+            segments={[
+              { label: ctx.t("window.input"), value: current().tokens.input },
+              { label: ctx.t("window.output"), value: current().tokens.output },
+              { label: ctx.t("window.reasoning"), value: current().tokens.reasoning },
+              { label: ctx.t("window.cacheRead"), value: current().tokens.cache.read },
+              { label: ctx.t("window.cacheWrite"), value: current().tokens.cache.write },
+            ]} />
+        )}</Show>
         <div class="grid grid-cols-1 @[32rem]:grid-cols-2 gap-4">
           <For each={stats}>
             {(stat) => <Show when={stat.value()}>{(value) => <Stat label={ctx.t(stat.label)} value={value()} />}</Show>}

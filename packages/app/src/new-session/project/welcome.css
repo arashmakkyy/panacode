@@ -1,0 +1,96 @@
+.project-welcome {
+  position: relative;
+  display: grid;
+  grid-template-columns: 60px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface);
+}
+.project-welcome-art {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 12px;
+  background: var(--surface-muted);
+  color: var(--brand-highlight);
+}
+.project-welcome-art svg {
+  width: 48px;
+}
+.project-welcome-art path {
+  opacity: 0;
+  transform-origin: center;
+  transform: scale(0.88);
+}
+.project-welcome-art path[data-visible="true"] {
+  opacity: 1;
+  transform: none;
+}
+.project-welcome-body,
+.project-welcome-body > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.project-welcome-body strong {
+  font-size: 14px;
+  font-weight: 560;
+}
+.project-welcome-body span span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.project-welcome-body [data-action="prompt-project"] {
+  color: var(--foreground);
+  justify-self: start;
+  padding-inline: 0;
+}
+.project-welcome-steps {
+  display: flex;
+  align-items: center;
+}
+.project-welcome-steps button {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 30px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.project-welcome-steps button:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+.project-welcome-steps i {
+  width: 5px;
+  height: 5px;
+  border-radius: 10px;
+  background: var(--text-muted);
+}
+.project-welcome-steps [aria-current="step"] i {
+  width: 12px;
+  background: var(--brand-highlight);
+}
+@container (max-width: 540px) {
+  .project-welcome {
+    grid-template-columns: 48px 1fr;
+  }
+  .project-welcome-art {
+    width: 48px;
+    height: 48px;
+  }
+  .project-welcome-steps {
+    grid-column: 2;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .project-welcome-art path {
+    transition:
+      transform 0.26s ease,
+      opacity 0.18s ease;
+  }
+}

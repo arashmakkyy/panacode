@@ -162,8 +162,12 @@ export function suggestMcpName(transport: McpTransport, value: string) {
 export function McpServers(props: McpServersProps) {
   const labels = () => ({ ...defaultMcpServersLabels, ...props.labels })
   const [expanded, setExpanded] = createSignal<ReadonlySet<string>>(new Set())
-  const [removal, setRemoval] = createSignal<{ server: McpServerView; key: number }>()
-  const [held, setHeld] = createSignal(false)
+  const [removal, setRemoval] = createSignal<{ servers: McpServerView[]; key: number }>()
+  const [hovered, setHovered] = createSignal(false)
+  const [focused, setFocused] = createSignal(false)
+  const held = () => hovered() || focused()
+  const [filter, setFilter] = createSignal<"all" | "connected" | "other">("all")
+  const filters = ["all", "connected", "other"] as const
   const [sheet, setSheet] = createSignal(false)
   const [announce, setAnnounce] = createSignal("")
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -179,7 +183,7 @@ export function McpServers(props: McpServersProps) {
   let key = 0
   const rows = new Map<string, HTMLElement>()
 
-  const visible = createMemo(() => props.servers.filter((server) => server.id !== removal()?.server.id))
+  const visible = createMemo(() => props.servers.filter((server) => !removal()?.servers.some((removed) => removed.id === server.id)))
   const connected = createMemo(() => visible().filter((server) => server.status === "connected").length)
   const resources = createMemo(() =>
     visible()
@@ -187,40 +191,62 @@ export function McpServers(props: McpServersProps) {
       .reduce((sum, server) => sum + server.resources.length, 0),
   )
 
+  const filtered = createMemo(() => visible().filter((server) =>
+    filter() === "all" || (filter() === "connected") === (server.status === "connected")))
+  const countFor = (value: typeof filters[number]) =>
+    value === "all" ? visible().length : value === "connected" ? connected() : visible().length - connected()
+  const removedLabel = (servers: McpServerView[]) => servers.length === 1 ? labels().removed(servers[0].name) : labels().removedCount(servers.length)
+  let remaining = UNDO_MS
+  let started = 0
+  let previousKey = 0
   const finish = () => {
     clearTimeout(timer)
     const current = removal()
-    if (!current) return
     setRemoval(undefined)
-    props.onRemove?.(current.server.id)
+    current?.servers.forEach((server) => props.onRemove?.(server.id))
   }
-  const arm = () => {
+  createEffect(on([held, () => removal()?.key], ([paused, batch]) => {
     clearTimeout(timer)
-    if (removal() && !held()) timer = setTimeout(finish, UNDO_MS)
-  }
-  createEffect(on([held, () => removal()?.key], arm))
+    if (!batch) return
+    const now = performance.now()
+    if (batch !== previousKey) remaining = UNDO_MS
+    else if (started) remaining = Math.max(0, remaining - (now - started))
+    previousKey = batch
+    started = paused ? 0 : now
+    if (!paused) timer = setTimeout(finish, remaining)
+  }))
   onCleanup(() => {
     clearTimeout(timer)
-    // Leaving the page commits a pending removal rather than dropping it.
-    const current = removal()
-    if (current) props.onRemove?.(current.server.id)
+    removal()?.servers.forEach((server) => props.onRemove?.(server.id))
   })
 
   const remove = (server: McpServerView) => {
-    if (removal()) finish()
-    setHeld(false)
-    setRemoval({ server, key: ++key })
-    setAnnounce(labels().removed(server.name))
+    const group = [...(removal()?.servers ?? []), server]
+    setHovered(false)
+    setFocused(false)
+    setRemoval({ servers: group, key: ++key })
+    setAnnounce(removedLabel(group))
   }
   const undo = () => {
     const current = removal()
     clearTimeout(timer)
     setRemoval(undefined)
     if (current) {
-      setAnnounce("")
-      queueMicrotask(() => rows.get(current.server.id)?.querySelector<HTMLElement>(".pc-mcp-rowMain")?.focus())
+      setAnnounce(labels().restored(current.servers.length))
+      queueMicrotask(() => rows.get(current.servers.at(-1)!.id)?.querySelector<HTMLElement>(".pc-mcp-rowMain")?.focus())
     }
   }
+  const undoKey = (event: KeyboardEvent) => {
+    if (!removal() || event.defaultPrevented || event.shiftKey || event.altKey || !(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "z") return
+    if (event.target instanceof Element && event.target.closest('input, textarea, [contenteditable=true]')) return
+    event.preventDefault()
+    undo()
+  }
+  createEffect(() => {
+    if (!removal()) return
+    window.addEventListener("keydown", undoKey)
+    onCleanup(() => window.removeEventListener("keydown", undoKey))
+  })
 
   const toggleOpen = (id: string) =>
     setExpanded((all) => {
@@ -265,8 +291,16 @@ export function McpServers(props: McpServersProps) {
           </div>
         </Show>
 
+        <Show when={visible().length}>
+          <div class="pc-mcp-filters" role="group" aria-label={labels().filterTitle}>
+            <For each={filters}>{(value) => <button type="button" aria-pressed={filter() === value} onClick={() => setFilter(value)}>
+              {labels().filters[value]} <span>{countFor(value)}</span>
+            </button>}</For>
+          </div>
+          <Show when={!filtered().length}><p class="pc-mcp-emptyText" role="status">{labels().noMatches}</p></Show>
+        </Show>
         <ul class="pc-mcp-list">
-          <For each={visible()}>
+          <For each={filtered()}>
             {(server) => (
               <ServerRow
                 server={server}
@@ -309,18 +343,18 @@ export function McpServers(props: McpServersProps) {
           {(current) => (
             <div
               class="pc-mcp-undo"
-              onPointerEnter={() => setHeld(true)}
-              onPointerLeave={() => setHeld(false)}
-              onFocusIn={() => setHeld(true)}
-              onFocusOut={() => setHeld(false)}
+              onPointerEnter={() => setHovered(true)}
+              onPointerLeave={() => setHovered(false)}
+              onFocusIn={() => setFocused(true)}
+              onFocusOut={(event) => setFocused(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))}
             >
-              <McpMark brand={current().server.brand} size={16} class="pc-mcp-undoMark" />
-              <p>{labels().removed(current().server.name)}</p>
+              <McpMark brand={current().servers.at(-1)?.brand} size={16} class="pc-mcp-undoMark" />
+              <p>{removedLabel(current().servers)}</p>
               <button type="button" class="pc-mcp-ghost" onClick={undo}>
                 <Lucide size={15}>{icons.undo()}</Lucide>
                 {labels().undo}
               </button>
-              <span class="pc-mcp-undoTimer" classList={{ "is-held": held() }} style={{ "animation-duration": `${UNDO_MS}ms` }} />
+              <For each={[current().key]}>{() => <span class="pc-mcp-undoTimer" classList={{ "is-held": held() }} style={{ "animation-duration": `${UNDO_MS}ms` }} />}</For>
             </div>
           )}
         </Show>

@@ -109,7 +109,7 @@ export function SessionContextUsage(props: {
         style={{
           "--progress-circle-background": "var(--v2-background-bg-layer-04)",
           "--progress-circle-background-overlay": "var(--v2-overlay-simple-overlay-pressed, transparent)",
-          "--progress-circle-progress": "var(--v2-icon-icon-base, var(--icon-base))",
+          "--progress-circle-progress": "var(--brand-highlight, var(--v2-icon-icon-base))",
         }}
       />
     </div>

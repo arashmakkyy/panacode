@@ -613,7 +613,13 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
     return (
       // Keyed by step, so each step mounts fresh inputs that take focus.
       <Show when={form()?.key} keyed>
-        <div data-component="provider-connect-form" class="flex flex-col items-start gap-2 px-2 pt-2">
+        <div data-component="provider-connect-form" data-stage={form()?.kind} class="flex flex-col items-start gap-2 px-2 pt-2">
+          <Show when={form() && form()!.total > 1}>
+            <div class="connector-steps" role="group" aria-label={language.t("panacode.form.step", { current: form()!.position, total: form()!.total })}>
+              <For each={Array.from({ length: form()!.total }, (_, i) => i + 1)}>{(n) => <i data-complete={n <= form()!.position} aria-hidden="true" />}</For>
+              <small>{language.t("panacode.form.step", { current: form()!.position, total: form()!.total })}</small>
+            </div>
+          </Show>
           <Show when={!text()}>
             <div class="flex w-full flex-col gap-1">
               <div class="text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base">

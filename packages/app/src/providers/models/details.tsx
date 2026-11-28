@@ -23,6 +23,7 @@ const inputIcons: Record<Input, IconName> = {
 export function ModelDetails(props: {
   model: ModelInfo
   provider: string
+  comparison?: ModelInfo
   compact?: boolean
   standalone?: boolean
   /** What the member's Console budgets leave for the model. */
@@ -46,13 +47,19 @@ export function ModelDetails(props: {
     <Show
       when={props.compact}
       fallback={
-        <div class="w-[188px] max-w-[calc(100vw-24px)] font-[440] text-v2-text-text-muted">
+        <div data-component="model-card" class="w-full max-w-[calc(100vw-24px)] font-[440] text-v2-text-text-muted">
           <div class="border-b-[0.5px] border-v2-border-border-base py-0.5">
             <div class="flex h-6 min-w-0 items-center gap-1.5 px-2">
               <ProviderModelIcon provider={props.model.provider} class="!size-3.5 shrink-0" />
               <bdi class="min-w-0 truncate font-[530]">{props.model.name}</bdi>
             </div>
           </div>
+          <Show when={props.standalone}>
+            <div class="model-card-summary">
+              <bdi>{language.t("model.details.summary", { provider: props.provider, context: new Intl.NumberFormat(language.intl(), { notation: "compact", maximumFractionDigits: 0, roundingMode: "trunc" }).format(props.model.limit.context) })}</bdi>
+              <Show when={summary()}>{(value) => <div>{value()}</div>}</Show>
+            </div>
+          </Show>
           <div class="flex flex-col gap-1.5 py-1">
             <dl>
               <div class="flex h-6 min-w-0 items-center gap-2 px-2">
@@ -69,6 +76,12 @@ export function ModelDetails(props: {
                 </dt>
                 <dd class="shrink-0">{props.model.limit.context.toLocaleString(language.intl())}</dd>
               </div>
+              <Show when={props.model.limit.output > 0}>
+                <div class="flex h-6 min-w-0 items-center gap-2 px-2">
+                  <dt class="flex-1 text-v2-text-text-faint">{language.t("panacode.model.maxOutput")}</dt>
+                  <dd>{props.model.limit.output.toLocaleString(language.intl())}</dd>
+                </div>
+              </Show>
             </dl>
             <Show when={props.usage}>
               {(usage) => (
@@ -143,6 +156,18 @@ export function ModelDetails(props: {
                 </div>
               </Show>
             </dl>
+            <Show when={props.comparison && (props.comparison.id !== props.model.id || props.comparison.provider.id !== props.model.provider.id) && props.comparison}>
+              {(other) => <details class="model-comparison">
+                <summary>{language.t("panacode.model.compare")}</summary>
+                <table><thead><tr>
+                  <th>{language.t("panacode.model.model")}</th><th>{language.t("panacode.model.context")}</th><th>{language.t("panacode.model.maxOutput")}</th>
+                </tr></thead><tbody>
+                  <For each={[props.model, other()]}>{(model) => <tr><th scope="row">{model.name}</th>
+                    <td>{model.limit.context.toLocaleString(language.intl())}</td><td>{model.limit.output?.toLocaleString(language.intl()) ?? "—"}</td></tr>}
+                  </For>
+                </tbody></table>
+              </details>}
+            </Show>
           </div>
         </div>
       }

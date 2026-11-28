@@ -1,9 +1,10 @@
-import { createEffect, onMount } from "solid-js"
+import { createEffect, onMount, Show } from "solid-js"
+import { Icon } from "@opencode/ui/icon"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLanguage } from "@/runtime/i18n/language"
 
-export function SettingsSearchEmpty(props: { query: string }) {
+export function SettingsSearchEmpty(props: { query: string; onClear?: () => void }) {
   const language = useLanguage()
   const [state, setState] = createStore({ query: props.query })
   let container: HTMLDivElement | undefined
@@ -65,6 +66,8 @@ export function SettingsSearchEmpty(props: { query: string }) {
 
   return (
     <>
+      <div class="settings-search-empty-state">
+      <span class="settings-search-empty-icon" aria-hidden="true"><Icon name="magnifying-glass" /></span>
       <div
         ref={container}
         class="settings-search-empty"
@@ -78,6 +81,8 @@ export function SettingsSearchEmpty(props: { query: string }) {
             </span>
           ),
         })}
+      </div>
+      <Show when={props.query && props.onClear}><button type="button" onClick={() => props.onClear?.()}>{language.t("panacode.search.clear")}</button></Show>
       </div>
       <span class="settings-search-empty-measure" aria-hidden="true">
         <span ref={measure} dir="auto" />

@@ -70,7 +70,9 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     )
   }
 
-  const results = createMemo(() => {
+  const [selectedProjects, setSelectedProjects] = createSignal<readonly string[]>([])
+
+  const matched = createMemo(() => {
     const value = query().toLowerCase()
 
     if (!value) return []
@@ -85,6 +87,27 @@ export function createHomeSessionSearchController(home: HomeController, sessions
 
     return [exact, ...records]
   })
+
+  const projects = createMemo(() => {
+    const counts = new Map<string, { key: string; name: string; count: number }>()
+
+    for (const record of matched()) {
+      const key = record.project.worktree
+      const project = counts.get(key)
+
+      if (project) project.count++
+      else counts.set(key, { key, name: record.projectName, count: 1 })
+    }
+
+    return [...counts.values()]
+  })
+
+  const results = createMemo(() => selectedProjects().length
+    ? matched().filter((record) => selectedProjects().includes(record.project.worktree))
+    : matched())
+
+  const toggleProject = (key: string) => setSelectedProjects((old) =>
+    old.includes(key) ? old.filter((project) => project !== key) : [...old, key])
 
   const active = createMemo(() => {
     const records = results()
@@ -115,6 +138,7 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     const selection = home.selection.value()
     const scope = `${selection.server ?? ""}\0${selection.directory ?? ""}`
     const connected = home.server.focusedContext()?.sdk.connection.status() === "connected"
+    setSelectedProjects([])
     dispatch({ type: "scope.changed", scope, connected })
   })
 
@@ -168,9 +192,13 @@ export function createHomeSessionSearchController(home: HomeController, sessions
       open,
       focus,
       blur,
-      input: (value: string) => dispatch({ type: "input.changed", value }),
+      input: (value: string) => {
+        setSelectedProjects([])
+        dispatch({ type: "input.changed", value })
+      },
       close,
     },
+    facets: { projects, selected: selectedProjects, toggle: toggleProject },
     result: {
       loading: () => sessions.data.loading() || selectSearchLookingUp(searchState()),
       list: results,

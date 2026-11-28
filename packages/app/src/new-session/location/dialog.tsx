@@ -460,7 +460,19 @@ function NewSessionLocationDialog(props: {
   const back = () => dispatch({ type: "back" })
 
   const handleKeyDown = (event: KeyboardEvent) => {
+    if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && /^[1-9]$/.test(event.key)) {
+      const project = entries().filter((entry) => entry.type === "project")[Number(event.key) - 1]
+
+      if (project) {
+        event.preventDefault()
+        event.stopPropagation()
+        choose(project)
+
+        return
+      }
+    }
     // SAFETY: this handler is only attached to the search TextInput's <input>, so currentTarget is that element.
+
     const target = event.currentTarget as HTMLInputElement
     const active = activeEntry()
 
@@ -572,6 +584,7 @@ function NewSessionLocationDialog(props: {
                         role="option"
                         aria-selected={activeEntry()?.id === entry.id}
                         data-active={activeEntry()?.id === entry.id ? "" : undefined}
+                        aria-current={entry.type === "project" && props.project.isSelected(entry.project) ? "location" : undefined}
                         onMouseMove={(event) => {
                           // Ignore hover from a static cursor when keyboard scrolling moves rows underneath it.
                           if (event.movementX === 0 && event.movementY === 0) return
@@ -586,6 +599,7 @@ function NewSessionLocationDialog(props: {
                             {(item) => (
                               <ProjectRow
                                 project={item().project}
+                                selected={props.project.isSelected(item().project)}
                                 path={item().project.worktree}
                                 onDrill={drillable(item().project) ? () => drill(item().project) : undefined}
                                 drillLabel={language.t("session.new.location.worktrees")}
@@ -713,6 +727,7 @@ function NewSessionLocationDialog(props: {
 }
 
 function ProjectRow(props: {
+  selected?: boolean
   project: PromptProject
   branch?: string
   path: string
@@ -732,6 +747,7 @@ function ProjectRow(props: {
         <div class="command-palette-row-text">
           <span class="new-session-location-name">
             <span class="command-palette-title palette-menu-title">{displayName(props.project)}</span>
+            <Show when={props.selected}><Icon class="project-current-indicator" name="check" size="small" /></Show>
             <ServerTag server={props.project.server} />
             <Show when={props.branch}>
               {(branch) => (

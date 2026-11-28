@@ -1,3 +1,5 @@
+import type { HomeSessionSearchController } from "./search"
+import { AnimatedNumber } from "@opencode/ui/animated-number"
 import type { SessionInfo } from "@opencode/client/promise"
 import { Key } from "@solid-primitives/keyed"
 import { createEffect, createMemo, createSignal, For, Index, Match, onCleanup, Show, Switch, untrack } from "solid-js"
@@ -83,6 +85,7 @@ export type HomeSessionsViewProps = {
   searchPlaceholder: string
   searchOpen: boolean
   searchLoading: boolean
+  facets?: HomeSessionSearchController["facets"]
   searchResults: HomeSessionRecord[]
   searchActive: string
   searchNoResultsLabel: string
@@ -427,6 +430,16 @@ function HomeSessionSearch(
             }}
           >
             <div class="flex flex-col pt-9">
+              <Show when={props.facets && props.facets.projects().length > 1 && props.facets}>
+                {(facets) => <div class="home-search-projects" role="group" aria-label={props.language.t("panacode.search.projects")}>
+                  <For each={facets().projects()}>{(project) =>
+                    <button type="button" title={project.key} aria-pressed={facets().selected().includes(project.key)}
+                      onClick={() => facets().toggle(project.key)}>
+                      <bdi>{project.name}</bdi><span>{project.count}</span>
+                    </button>
+                  }</For>
+                </div>}
+              </Show>
               <div id={HOME_SESSION_SEARCH_RESULTS_ID} role="listbox" class="flex flex-col gap-4 pt-4">
                 <Show
                   when={!props.searchLoading}
@@ -456,7 +469,7 @@ function HomeSessionSearch(
                           text-v2-text-text-muted [font-weight:440]
                         `}
                       >
-                        {props.language.t("home.sessions.search.sessions")}
+                        {props.language.t("home.sessions.search.sessions")} <AnimatedNumber value={props.searchResults.length} />
                       </p>
                       <MenuScroll class="max-h-[min(20rem,40dvh)]" viewportRef={props.onSetSearchList}>
                         <div class="flex flex-col gap-px pb-2">
