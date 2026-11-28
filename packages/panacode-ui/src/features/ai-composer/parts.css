@@ -2,10 +2,12 @@
 
 /* ------------------------------------------------------------ send / stop */
 .pc-aic-send {
-  --pc-aic-size: 26px;
+  --pc-aic-face-size: 26px;
+  --pc-aic-ring-size: 18px;
   display: grid;
-  width: var(--pc-aic-size);
-  height: var(--pc-aic-size);
+  /* Reserve one target for both actions. The touch toolbar enlarges it to 44px. */
+  width: 32px;
+  height: 32px;
   flex: none;
   place-items: center;
   padding: 0;
@@ -15,12 +17,15 @@
   color: var(--text-muted);
   cursor: default;
 }
-/* The touch toolbar enlarges the button's hit target. Its visible face stays centered at the same size. */
+.pc-aic-send[data-state="generating"] {
+  --pc-aic-face-size: 28px;
+  --pc-aic-ring-size: var(--pc-aic-face-size);
+}
 .pc-aic-send [data-slot="composer-submit-face"] {
   display: grid;
   place-items: center;
-  width: var(--pc-aic-size);
-  height: var(--pc-aic-size);
+  width: var(--pc-aic-face-size);
+  height: var(--pc-aic-face-size);
   box-sizing: border-box;
   border-radius: inherit;
   border: 1px solid var(--border);
@@ -50,7 +55,7 @@
 }
 .pc-aic-send:is([data-state="generating"], [data-held]) [data-slot="composer-submit-face"] {
   color: var(--foreground);
-  border-color: transparent;
+  border: 0;
   background: transparent;
   box-shadow: none;
 }
@@ -66,9 +71,9 @@
   height: 16px;
 }
 .pc-aic-stopGlyph {
-  width: 7px;
-  height: 7px;
-  border-radius: 1.5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
   background: currentColor;
 }
 @media (forced-colors: active) {
@@ -78,8 +83,8 @@
   }
 }
 .pc-aic-sendRing {
-  width: 18px;
-  height: 18px;
+  width: var(--pc-aic-ring-size);
+  height: var(--pc-aic-ring-size);
   transform: rotate(-90deg);
   fill: none;
   stroke-width: 1.5;

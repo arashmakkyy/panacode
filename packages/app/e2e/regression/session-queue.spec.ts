@@ -324,7 +324,9 @@ test("a blank Enter leaves the running session alone while Stop still interrupts
   const stop = view.composer.getByRole("button", { name: "Stop", exact: true })
 
   await expect(stop).toBeVisible()
-  await expect(stop.locator("svg")).toHaveCSS("width", "18px")
+  await expect(stop).toHaveCSS("width", "32px")
+  await expect(stop.locator("svg")).toHaveCSS("width", "28px")
+  await expect(stop.locator(".pc-aic-stopGlyph")).toHaveCSS("width", "10px")
   await view.input.click()
   await view.input.press("Enter")
   await view.input.press("ControlOrMeta+Enter")
@@ -350,6 +352,9 @@ test.describe("touch keyboard", () => {
     const view = await openQueue(page, mock, "steer")
     const bar = page.locator('[data-slot="composer-touch-bar"]')
     const stop = bar.getByRole("button", { name: "Stop", exact: true })
+
+    await expect(stop).toHaveCSS("width", "44px")
+    await expect(stop.locator("svg")).toHaveCSS("width", "28px")
 
     const interrupted = page.waitForRequest((request) =>
       new URL(request.url()).pathname.endsWith(`/${sessionID}/interrupt`),
