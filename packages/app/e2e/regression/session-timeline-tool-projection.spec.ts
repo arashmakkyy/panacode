@@ -310,6 +310,25 @@ test("denied clipboard access offers full selectable reply and tool output", asy
   await expect(field).toHaveCount(0)
 })
 
+test("structured tool output exposes later rows and searchable nested values", async ({ page }) => {
+  const output = Array.from({ length: 62 }, (_, i) => i === 61 ? { meta: { name: "last-tag" } } : i)
+  await setupTimeline(page, { messages: [userMessage(), assistantMessage([
+    toolPart("prt_paged_json", "read", "completed", { filePath: "results.json" }, { output: JSON.stringify(output) }),
+    textPart("prt_paged_answer", "The data is ready."),
+  ])] })
+
+  await page.getByRole("button", { name: "Used 1 tool", exact: true }).click()
+  const tool = page.locator('[data-timeline-part-id="prt_paged_json"]')
+  await tool.getByRole("button", { name: /results\.json/ }).click()
+  const more = tool.getByRole("button", { name: "Show 12 more rows" })
+  await more.click()
+  await expect(more).toHaveCount(0)
+  const filter = tool.getByRole("searchbox", { name: "Filter JSON" })
+  await filter.fill("last-tag")
+  await expect(tool.locator(".pc-json-leaf")).toContainText("$[61].meta.name")
+  await expect(tool.locator(".pc-json-leaf")).toContainText('"last-tag"')
+})
+
 test("source cards keep citations, real passages and overflow in the answer", async ({ page }) => {
   const refs = ["one", "two", "three", "four"].map((name) => ({
     name,

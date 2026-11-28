@@ -55,6 +55,19 @@ describe("fromOpenCodeTool", () => {
     expect(call.copyOutput!()).toBe(text)
   })
 
+  test("the JSON viewer can page and search the complete structured input and result", () => {
+    const rows = Array.from({ length: 62 }, (_, index) => index)
+    const nested = { a: { b: { c: { d: { e: { text: "value".repeat(150) } } } } } }
+    const body = { rows, nested }
+    const call = fromOpenCodeTool({
+      id: "tool_json", name: "example", time: { created: 1 },
+      state: { status: "completed", input: body, content: [{ type: "text", text: JSON.stringify(body) }] },
+    }, { mark })
+
+    expect(call.input).toEqual(body)
+    expect(call.output).toEqual({ type: "json", value: body })
+  })
+
   test("a rejected permission is denied and keeps no output", () => {
     const call = fromOpenCodeTool(
       {

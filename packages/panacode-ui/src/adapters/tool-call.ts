@@ -206,15 +206,18 @@ export function toolSubject(kind: ToolKind, input: Record<string, unknown>, root
 
 const MAX_VALUE = 600
 
-function toValue(value: unknown, depth = 0): ToolCallValue {
+function toValue(value: unknown): ToolCallValue {
   if (value === null || value === undefined) return null
   if (typeof value === "string") return value.length > MAX_VALUE ? `${value.slice(0, MAX_VALUE)}…` : value
   if (typeof value === "number" || typeof value === "boolean") return value
-  if (depth > 4) return "…"
-  if (Array.isArray(value)) return value.slice(0, 50).map((item) => toValue(item, depth + 1))
-  if (typeof value === "object")
-    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, toValue(v, depth + 1)]))
-  return String(value)
+  if (typeof value !== "object") return String(value)
+
+  // The viewer pages containers as they open. Preserve every entry in a structured tool argument.
+  try {
+    return JSON.parse(JSON.stringify(value))
+  } catch {
+    return String(value)
+  }
 }
 
 function contentText(state: OpenCodeToolLike["state"]) {
@@ -233,7 +236,7 @@ function toOutput(kind: ToolKind, text: string | undefined): ToolCallOutput | un
   }
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
     try {
-      return { type: "json", value: toValue(JSON.parse(trimmed)) }
+      return { type: "json", value: JSON.parse(trimmed) }
     } catch {
       /* plain text */
     }
